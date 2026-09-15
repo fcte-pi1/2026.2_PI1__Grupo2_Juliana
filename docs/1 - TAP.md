@@ -20,14 +20,11 @@
 
   
 
-  - **Specific (específico):** Planejar e construir um autômato no estilo Micromouse que possua dimensões máximas de 16,5 cm de largura ou comprimento. O projeto deverá ser capaz de resolver três labirintos de tamanhos 4x4; 8x4 ;12x4 células (com cada célula sendo de 18 cm medindo 5 cm de altura) de configuração sortida. Os labirintos navegáveis pelo Micromouse serão ambientes de paredes brancas e chão preto. O projeto deverá partir de uma posição x do labirinto (dentro de um beco sem saída) e encontrar a saída de forma totalmente autônoma.  
-
-Além disso, o projeto deverá possuir uma divisão de monitoramento, sendo um software que exiba os dados de telemetria do robô para suas corridas, como tempo de conclusão, consumo médio e trajeto percorrido. 
-
+  - **Specific (específico):** Planejar e construir um autômato no estilo Micromouse que possua dimensões máximas de 16,5 cm de largura ou comprimento. O projeto deverá ser capaz de resolver três labirintos de tamanhos 4x4; 8x4 ;12x4 células (com cada célula sendo de 18 cm medindo 5 cm de altura) de configuração sortida. Os labirintos navegáveis pelo Micromouse serão ambientes de paredes brancas e chão preto. O projeto deverá partir de uma posição x do labirinto (dentro de um beco sem saída) e encontrar a saída de forma totalmente autônoma. Além disso, o projeto deverá possuir uma divisão de monitoramento, sendo um software que exiba os dados de telemetria do robô para suas corridas, como tempo de conclusão, consumo médio e trajeto percorrido. 
   - **Measurable (mensurável):** O desempenho do projeto será quantificado por meio de indicadores objetivos definidos pela disciplina: número de tentativas até a resolução de cada labirinto (convertido em nota de 0 a 10) e presença ou não de exibição de telemetria em tempo real no sistema web. A partir desses indicadores, a equipe define como meta interna resolver os três labirintos na primeira tentativa e entregar o sistema web de monitoramento (trajetória, consumo, velocidade, tempo de conclusão) plenamente funcional, garantindo assim a maior pontuação possível dentro do critério de avaliação estabelecido .
   - **Agreed (acordado):** Os objetivos e requisitos do projeto serão estabelecidos e desenvolvidos de forma alinhada entre os integrantes da equipe e a orientadora, Professora Juliana P. Rodrigues, considerando as especificações e restrições definidas para o projeto e as regras aplicáveis às competições acadêmicas de Micromouse. Esse alinhamento será mantido ao longo do semestre por meio das reuniões realizadas durante as aulas práticas, que contemplam momentos de revisão, retrospectiva e planejamento. Essas reuniões permitirão acompanhar a execução das atividades, discutir o andamento do projeto e realizar os ajustes necessários no planejamento.
   - **Realistic (realista):** O projeto é exequível dentro do prazo estabelecido e da capacidade técnica da equipe multidisciplinar, composta por estudantes de Engenharia Automotiva, de Software e de Energia. Do ponto de vista financeiro, a viabilidade é garantida por um orçamento total estimado em R$876,41, que, ao ser rateado entre os 1 membros da equipe, resulta em um investimento de aproximadamente R$ 54,77 por integrante, valor que ainda pode ser reduzido por meio de apoios e patrocínios internos como o aproveitamento de materiais e sobras de equipes de competição, a cessão de componentes por colegas e a utilização da infraestrutura e equipamentos já disponíveis na universidade. Essas estratégias mantêm os custos em um patamar sustentável para o desenvolvimento estudantil.  No que diz respeito ao tempo, a conclusão dentro do prazo estipulado é viabilizada pelo cronograma elaborado em fases sequenciais, pela divisão de tarefas conforme a habilidade dos integrantes e pelo acompanhamento do andamento pelo GitHub, estruturação que facilita a mitigação antecipada de gargalos. 
-  - **Time Bound (Limitado no tempo):**O projeto tem início em 10/08/2026 e deve ser concluído até 04/12/2026, passando pelas etapas de projeto conceitual (estruturas, energia, hardware e software), testes por subsistema e testes de integração, culminando na apresentação final com a resolução autônoma dos três labirintos e o sistema web de telemetria integrado e funcional até essa data. 
+  - **Time Bound (Limitado no tempo):** O projeto tem início em 10/08/2026 e deve ser concluído até 04/12/2026, passando pelas etapas de projeto conceitual (estruturas, energia, hardware e software), testes por subsistema e testes de integração, culminando na apresentação final com a resolução autônoma dos três labirintos e o sistema web de telemetria integrado e funcional até essa data. 
 
   
 
@@ -84,19 +81,20 @@ Dessa forma, o problema abordado pelo projeto envolve a integração de diferent
 | :--- | :--- | :--- | :--- | :--- |
 | Ana Beatriz | 241025130 | Engenharia Automotiva | anabeatriz2013cs@gmail.com  | Time de Estruturas |
 | Arthur Vinicius Morais de Lima  | 242015764  | Engenharia de Software  | arthurhc3@gmail.com  | Time de Eletrônica  |
-| Cecília Costa Rebelo Cunha  | 232001415  | Engenharia de Software  | cecilia.cunha2004@gmail.com  | Time de Software (Gerente Geral)  |
+| Cecília Costa Rebelo Cunha  | 232001415  | Engenharia de Software  | cecilia.cunha2004@gmail.com  | Time de Software - Front-end (Gerente Geral)  |
 | Daniel Ferreira Nunes  | 211061565  | Engenharia de software  | danielferreiranunes2003@gmail.com  | Time de Estruturas  |
 | Davi dos Santos Brito Nobre  | 211062929  | Engenharia de Software  | davinobre.ik@gmail.com  | Time de Energia  |
 | Diego Godoi Rodrigues  | 251019806  | Engenharia de Software  | godoir.diego@gmail.com  | Time de Eletrônica  |
 | Eduardo Ferreira de Aquino  | 211030710  | Engenharia de Software  | fxr.ed03@gmail.com  | Time de Eletrônica  |
 | Eduardo Orsomarso Oliveira  | 232001970  | Engenharia de Energia  | eduardo.orsomarso@gmail.com  | Time de Energia  |
-| Geovana Duarte de Carvalho  | 251021241  | Engenharia de Software  | geovanaduarteunb@gmail.com  | Time de Software  |
+| Geovana Duarte de Carvalho  | 251021241  | Engenharia de Software  | geovanaduarteunb@gmail.com  | Time de Software - Back-end  |
 | Gustavo Costa de Jesus  | 211061814  | Engenharia de software  | gucosta1719@gmail.com  | Time de Estruturas (Sub-gerente)  |
-| José Eduardo Vieira do Prado  | 221008202  | Engenharia de Software  | jevrprado@gmail.com  | Time de Software  |
-| Letícia de Cássia Hladczuk Rodrigues  | 221039209  | Engenharia de Software  | leticia.cassia.hr@gmail.com  | Time de Software  |
-| Lucca Medeiros Silva  | 222031528  | Engenharia de Software  | dev.luccameds@gmail.com  | Time de Software  |
-| Luis Guilherme de Almeida Costa  | 251037401  | Engenharia de Software  | failho42@gmail.com  | Time de Eletrônica(Sub-Gerente)  |
-| Marcelo de Araújo Lopes  | 211062179  | Engenharia de Software  | matielloaraujolopes@gmail.com  | Time de Software (Sub-Gerente)  |
+| José Eduardo Vieira do Prado  | 221008202  | Engenharia de Software  | jevrprado@gmail.com  | Time de Software - Front-end  |
+| Letícia de Cássia Hladczuk Rodrigues  | 221039209  | Engenharia de Software  | leticia.cassia.hr@gmail.com  | Time de Software - Back-end  |
+| Lucca Medeiros Silva  | 222031528  | Engenharia de Software  | dev.luccameds@gmail.com  | Time de Software - Back-end |
+| Luis Guilherme de Almeida Costa  | 251037401  | Engenharia de Software  | failho42@gmail.com  | Time de Eletrônica (Sub-Gerente)  |
+| Marcella Sousa Anderle  | 221035040  | Engenharia de Software  | marcellasanderle@gmail.com  | Time de Software - Back-end |
+| Marcelo de Araújo Lopes  | 211062179  | Engenharia de Software  | matielloaraujolopes@gmail.com  | Time de Software - Front-end (Sub-Gerente) |
 | Maria Luana Soares Lopes  | 241011448  | Engenharia de Software  | marialuana.sl962@gmail.com  | Time de Eletrônica  |
 
 
@@ -137,6 +135,21 @@ Dessa forma, o problema abordado pelo projeto envolve a integração de diferent
 | Testes por Subsistema | Software | 90 h |
 | Testes de Integração | Todos | 190 h |
 | **Total:** | **-** | **810 h** |
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
