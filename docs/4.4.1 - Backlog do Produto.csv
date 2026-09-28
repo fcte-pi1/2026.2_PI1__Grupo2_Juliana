@@ -1,0 +1,41 @@
+ID,Nome do Requisito,Descricao,Prioridade
+RF01-S,Deteccao de Paredes,Detectar paredes nas quatro direcoes da celula atual a partir da leitura dos sensores,Must have
+RF02-S,Registro de Celula e Orientacao,Manter registro da celula e da orientacao atuais ao longo de todo o percurso,Must have
+RF03-S,Movimentacao Celula a Celula,Movimentar-se celula a celula de forma alinhada sem colisao com as paredes,Must have
+RF04-S,Identificacao do Objetivo,Identificar autonomamente a chegada ao objetivo e encerrar a corrida,Must have
+RF05-S,Transmissao de Telemetria,Formatar e enviar os dados de execucao do micromouse via protocolo de comunicacao,Must have
+RF06-S,Exibicao de Telemetria em Tempo Real,Exibir no sistema web dados do percurso bateria velocidade e status,Must have
+RF07-S,Persistencia dos Dados Finais,Armazenar em banco de dados os dados da corrida ao final de cada tentativa,Must have
+RF08-S,Consulta por Labirinto,Permitir consultar os dados armazenados filtrando por um labirinto especifico,Must have
+RF09-S,Consulta Geral,Permitir consultar os dados de todos os labirintos de uma vez,Should have
+RF10-S,Controle de Tentativas,Registrar e contabilizar o numero de tentativas por labirinto,Must have
+RF11-S,Algoritmo de Mapeamento,Construir o mapa do labirinto dinamicamente durante a execucao,Must have
+RF12-S,Calculo de Menor Caminho,Processar o mapa acumulado para calcular a rota mais curta,Must have
+RF13-S,Modo automatico,Realizar percurso otimizado utilizando o menor caminho previamente calculado,Should have
+RF14-S,Filtro de Ruido nos Sensores,Aplicar tratamento digital aos dados brutos para mitigar leituras falsas,Must have
+RF15-S,Controle em Malha Fechada PID,Controlar motores utilizando PID para alinhamento,Must have
+RF16-S,Recuperacao de Erros,Detectar e corrigir desvios de alinhamento ou pequenas colisoes,Should have
+RF17-S,Calibracao Inicial,Executar rotina de calibracao de sensores e encoders ao inicializar,Should have
+RF18-S,Exportacao de Relatorios,Permitir exportar relatorios em PDF ou CSV,Could have
+RF19-S,Indicadores de Status,Exibir alertas sobre bateria ou perda de conexao,Must have
+RF20-S,Log de Eventos,Registrar historico de logs para depuracao,Should have
+RF21-S,Autenticacao,Restringir acesso mediante login,Could have
+RF22-S,Atualizacao OTA,Suportar atualizacao de software sem fio,Could have
+RF23-S,Partida em Beco,Iniciar a execucao a partir de um beco sem saida,Must have
+RF24-S,Validacao de Pacotes,Validar a integridade dos pacotes de telemetria recebidos,Must have
+RF25-S,Armazenamento Local,Armazenar telemetria na memoria local durante quedas de conexao,Must have
+RNF01-S,Tempo de Resposta do Algoritmo,O ciclo completo de leitura de sensores decisao e envio de comando aos motores deve ser concluido em no maximo 50 ms,Must Have
+RNF02-S,Confiabilidade de Navegacao,O robo deve concluir no minimo 90% das execucoes de teste sem colisao,Must Have
+RNF03-S,Uso Eficiente de Memoria,O firmware deve utilizar no maximo 80% da RAM e da Flash disponiveis no microcontrolador,Must Have
+RNF04-S,Disponibilidade do Sistema Web,O sistema web deve permanecer operante durante 100% da janela de execucao,Must Have
+RNF05-S,Usabilidade da Interface,Um avaliador sem treinamento previo deve identificar o status da corrida em ate 5 segundos,Should Have
+RNF06-S,Latencia de Telemetria,A latencia entre a captura do dado no micromouse e sua exibicao na interface deve ser de no maximo 500 ms,Must Have
+RNF07-S,Integridade dos Dados Armazenados,100% das corridas concluidas devem estar integras na consulta posterior com verificacao por checksum,Must Have
+RNF08-S,Manutenibilidade,O codigo deve ser modular documentado e versionado seguindo estrutura src/firmware src/backend e src/frontend,Must Have
+RNF09-S,Portabilidade do Codigo,Estrutura de software independente de plataforma especifica para facilitar reuso,Should Have
+RNF10-S,Testabilidade,Arquitetura que permite execucao de testes unitarios automatizados nos algoritmos principais,Should Have
+RNF11-S,Design Responsivo,A interface web deve ser legivel e funcional,Should Have
+RNF12-S,Tolerancia a Falhas na Comunicacao,O sistema deve detectar a queda da conexao reconectar e retransmitir os pacotes,Must Have
+RNF13-S,Concorrencia e Escala de Conexoes,O servidor web deve suportar ate 5 clientes conectados simultaneamente sem degradacao,Could Have
+RNF14-S,Seguranca na Comunicacao,Protecao basica dos pacotes de dados transmitidos entre o robo e o servidor web,Could Have
+RNF15-S,Independencia de Conexao na Navegacao,A perda de conexao com o servidor nao pode interromper ou alterar a navegacao do robo,Must Have
