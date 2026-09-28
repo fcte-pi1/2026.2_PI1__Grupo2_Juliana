@@ -1,11 +1,11 @@
 ID,Nome do Requisito,Descricao,Prioridade
-RF01-S,Deteccao de Paredes,Detectar paredes nas quatro direcoes da celula atual a partir da leitura dos sensores,Must have
+RF01-S,Deteccao de Paredes,Detectar paredes nas quatro direcoes da celula atual: frente e laterais pela leitura dos 3 sensores de distancia e parede traseira por giro de 180 graus na celula de partida ou por inferencia nas demais celulas,Must have
 RF02-S,Registro de Celula e Orientacao,Manter registro da celula e da orientacao atuais ao longo de todo o percurso,Must have
 RF03-S,Movimentacao Celula a Celula,Movimentar-se celula a celula de forma alinhada sem colisao com as paredes,Must have
 RF04-S,Identificacao do Objetivo,Identificar autonomamente a chegada ao objetivo e encerrar a corrida,Must have
 RF05-S,Transmissao de Telemetria,Formatar e enviar os dados de execucao do micromouse via protocolo de comunicacao,Must have
 RF06-S,Exibicao de Telemetria em Tempo Real,Exibir no sistema web dados do percurso bateria velocidade e status,Must have
-RF07-S,Persistencia dos Dados Finais,Armazenar em banco de dados os dados da corrida ao final de cada tentativa,Must have
+RF07-S,Persistencia dos Dados Finais,Armazenar em banco de dados os dados da corrida ao final de cada tentativa (concluida; abortada ou interrompida) com o respectivo status final,Must have
 RF08-S,Consulta por Labirinto,Permitir consultar os dados armazenados filtrando por um labirinto especifico,Must have
 RF09-S,Consulta Geral,Permitir consultar os dados de todos os labirintos de uma vez,Should have
 RF10-S,Controle de Tentativas,Registrar e contabilizar o numero de tentativas por labirinto,Must have
@@ -30,7 +30,7 @@ RNF03-S,Uso Eficiente de Memoria,O firmware deve utilizar no maximo 80% da RAM e
 RNF04-S,Disponibilidade do Sistema Web,O sistema web deve permanecer operante durante 100% da janela de execucao,Must Have
 RNF05-S,Usabilidade da Interface,Um avaliador sem treinamento previo deve identificar o status da corrida em ate 5 segundos,Should Have
 RNF06-S,Latencia de Telemetria,A latencia entre a captura do dado no micromouse e sua exibicao na interface deve ser de no maximo 500 ms,Must Have
-RNF07-S,Integridade dos Dados Armazenados,100% das corridas concluidas devem estar integras na consulta posterior com verificacao por checksum,Must Have
+RNF07-S,Integridade dos Dados Armazenados,100% das corridas registradas (concluidas; abortadas ou interrompidas) devem estar integras na consulta posterior com verificacao por checksum,Must Have
 RNF08-S,Manutenibilidade,O codigo deve ser modular documentado e versionado seguindo estrutura src/firmware src/backend e src/frontend,Must Have
 RNF09-S,Portabilidade do Codigo,Estrutura de software independente de plataforma especifica para facilitar reuso,Should Have
 RNF10-S,Testabilidade,Arquitetura que permite execucao de testes unitarios automatizados nos algoritmos principais,Should Have
