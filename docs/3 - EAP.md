@@ -13,7 +13,7 @@ A estrutura foi desenhada focando estritamente nas entregas e pacotes de trabalh
 
 *(O diagrama abaixo ilustra a divisão do escopo em 5 entregas principais e seus respectivos pacotes de trabalho)*
 
-![Estrutura Analítica do Projeto - Micromouse](imagem-eap.jpg)
+![Estrutura Analítica do Projeto - Micromouse](./figs/geral/imagem-eap.jpg)
 
 ---
 
