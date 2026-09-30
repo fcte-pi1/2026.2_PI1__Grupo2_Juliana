@@ -32,6 +32,9 @@ Dessa forma, o cálculo final do custo de mão de obra para os 17 membros da equ
 | Carregador Imax B3 Pro | 1 | 51,11 | — |
 | Módulo Step-Down MP1584 | 2 | 19,60 | — |
 | Botões Tacteis | 10 | 18,40 | — |
+| Resistores 330Ohms | 10 | 11,70 | — |
+| Capacitor Cerâmico 100nf 50v | 2 | 15,60 | — |
+| Capacitor Eletrolítico 220uf 16v | 10 | 12,08 | — |
 | Placa ilhada (perfboard) e fios jumpers | 1 | 39,33 | — |
 | Barras de 8 pinos fêmea empilhável | 10 | 18,80 | — |
 | Placa de acrílico 10×10 cm, 3 mm | 3 | 33,00 | — |
@@ -40,4 +43,4 @@ Dessa forma, o cálculo final do custo de mão de obra para os 17 membros da equ
 | Espaçador nylon M-F M3 30+6 mm | 4 | 5,60 | — |
 | Espaçador nylon M-F M3 15+6 mm | 10 | 7,29 | — |
 | Abraçadeira enforca-gato | 100 | 19,00 | — |
-| <span style="color: blue;">**TOTAL**</span> |  | **90.821,96** | — |
+| <span style="color: blue;">**TOTAL**</span> |  | **90.870.44** | — |
