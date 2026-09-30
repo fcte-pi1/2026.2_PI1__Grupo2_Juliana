@@ -1,13 +1,17 @@
 # Orçamento
 
- Obs.: o custo da mão de obra considera o valor da hora de um estudante da UnB.
+**Obs.:** O custo da mão de obra considera o valor proporcional da hora de um estudante da Universidade de Brasília (UnB).
 
- De acordo com a correção monetária dos dados da fonte [1], o custo por aluno anualmente é de R$ 52.991,29. Tendo em vista os 40 créditos, cada crédito vale R$ 1.324,78. Um matéria de 40 créditos portanto equivale a R$ 5.299,12 por semestre. Considerando que o semestre 2026.2 tem 18 semanas, o custo por aluno vai para 294,39 por semana.  
- 17 alunos × 18 semanas × R$ 294,39
+De acordo com a correção monetária dos dados da fonte [1], o custo médio anual de um aluno em universidades federais é de R$ 52.991,29. Considerando uma carga horária padrão de 40 créditos anuais, cada crédito equivale a R$ 1.324,78. 
 
-- Fontes:
-- [1]: https://www.poder360.com.br/poder-economia/alunos-de-universidades-federais-tem-custo-medio-anual-de-r-52-533/ Acessado em 30/09/2026
-- [2]: https://www3.bcb.gov.br/CALCIDADAO/publico/corrigirPorIndice.do?method=corrigirPorIndice Acessado em 30/09/2026
+Como a disciplina exige uma dedicação equivalente a 4 créditos, o custo por aluno é de R$ 5.299,12 por semestre. Considerando que o semestre letivo 2026.2 possui 18 semanas, o custo estimado por aluno é de R$ 294,39 semanais. 
+
+Dessa forma, o cálculo final do custo de mão de obra para os 17 membros da equipe é de:
+`17 alunos × 18 semanas × R$ 294,39 = R$ 90.083,34`
+
+**Fontes:**
+*   [1] [Alunos de universidades federais têm custo médio anual (Poder360)](https://www.poder360.com.br/poder-economia/alunos-de-universidades-federais-tem-custo-medio-anual-de-r-52-533/) - Acessado em 30/09/2026.
+*   [2] [Calculadora do Cidadão (Banco Central do Brasil)](https://www3.bcb.gov.br/CALCIDADAO/publico/corrigirPorIndice.do?method=corrigirPorIndice) - Acessado em 30/09/2026.
 
 | **Item de Custo** | **Qtde.** | **Previsto (R$)** | **Realizado (R$)** |
 |---|---:|---:|---:|
