@@ -43,4 +43,4 @@ Dessa forma, o cálculo final do custo de mão de obra para os 17 membros da equ
 | Espaçador nylon M-F M3 30+6 mm | 4 | 5,60 | — |
 | Espaçador nylon M-F M3 15+6 mm | 10 | 7,29 | — |
 | Abraçadeira enforca-gato | 100 | 19,00 | — |
-| <span style="color: blue;">**TOTAL**</span> |  | **90.870.44** | — |
+| <span style="color: blue;">**TOTAL**</span> |  | **90.879.44** | — |
