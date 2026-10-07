@@ -1,19 +1,26 @@
-# _Backend_
+# Backend
 
-Esta pasta deverá armazenar arquivos referentes a:
+Servidor de telemetria do Micromouse em Python com [FastAPI](https://fastapi.tiangolo.com/).
 
-- Código-fonte da API REST: rotas, controladores, modelos e lógica de negócio.
-- Arquivos de configuração do servidor: `app.py`, `server.js`, `main.go` etc., dependendo da linguagem/framework utilizado ([Flask](https://flask.palletsprojects.com/), [FastAPI](https://fastapi.tiangolo.com/), [Express](https://expressjs.com/), [Django](https://www.djangoproject.com/) etc.).
-- Arquivos de definição de dependências: `requirements.txt` ou `pyproject.toml` (Python), `package.json` (Node.js), `pom.xml` (Java/Maven) etc.
-- Scripts de migração e esquemas de banco de dados: arquivos `.sql`, scripts de migração ([Alembic](https://alembic.sqlalchemy.org/), [Sequelize](https://sequelize.org/) etc.) e seeds de dados para desenvolvimento.
-- Arquivos de configuração de ambiente: `.env.example` com as variáveis de ambiente necessárias (nunca o `.env` real).
-- Arquivos de containerização: `Dockerfile` e `docker-compose.yml`, caso o serviço seja executado em contêiner.
+## Requisitos
+- Python 3.13
 
-Evite incluir:
+## Instalação
+```bash
+cd src/backend
+python -m venv .venv
+# Windows: .venv\Scripts\activate | Linux/macOS: source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
 
-- Credenciais e segredos: arquivos `.env`, chaves de API, senhas, tokens de acesso ou qualquer dado sensível **nunca** devem ser versionados.
-- Artefatos de build: diretórios como `__pycache__/`, `dist/`, `build/`, `.eggs/` devem ser gerados localmente e ignorados via `.gitignore`.
-- Dependências instaladas: pastas como `node_modules/` ou ambientes virtuais Python (`venv/`, `.env/`) não devem ser incluídos no repositório.
-- Arquivos temporários/específicos do sistema operacional: arquivos gerados automaticamente pelo sistema ou pelo gerenciador de arquivos (ex.: `*~`, `.DS_Store`, `Thumbs.db`).
-> [!WARNING]
-> **Não acrescente arquivos referentes ao _frontend_ nesta pasta.** Eles deverão ser armazenados na pasta [frontend](https://github.com/fcte-pi1/template/tree/main/src/frontend) deste repositório.
+## Rodar
+```bash
+uvicorn app.main:app --reload
+```
+A API sobe em http://localhost:8000 (documentação em http://localhost:8000/docs).
+
+## Testar
+```bash
+pytest
+```
+Os testes ficam em `tests/` e a cobertura do pacote `app` é mostrada ao final. O mesmo comando roda no GitHub Actions em todo Pull Request.
