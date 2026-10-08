@@ -342,3 +342,15 @@ TSWLatexianTemp*
 .DS_Store
 Thumbs.db
 
+
+# Backend Python (conforme src/backend/README.md do template)
+.env
+.env/
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+dist/
+build/
+.eggs/
+*~
