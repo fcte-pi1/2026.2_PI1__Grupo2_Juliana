@@ -8,6 +8,22 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: micromouse
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: micromouse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U micromouse -d micromouse"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://micromouse:ci@localhost:5432/micromouse
     defaults:
       run:
         working-directory: src/backend
@@ -19,6 +35,7 @@ jobs:
           cache: pip
           cache-dependency-path: src/backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
+      - run: alembic upgrade head
       - run: pytest
 
   frontend:
