@@ -343,14 +343,18 @@ TSWLatexianTemp*
 Thumbs.db
 
 
-# Backend Python (conforme src/backend/README.md do template)
+# Software (src/)
 .env
 .env/
 venv/
 .venv/
 __pycache__/
 .pytest_cache/
+.coverage
+coverage/
+node_modules/
 dist/
 build/
 .eggs/
+.pio/
 *~
