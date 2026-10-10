@@ -345,6 +345,8 @@ Thumbs.db
 
 # Software (src/)
 .env
+.env/
+venv/
 .venv/
 __pycache__/
 .pytest_cache/
@@ -352,4 +354,7 @@ __pycache__/
 coverage/
 node_modules/
 dist/
+build/
+.eggs/
 .pio/
+*~
