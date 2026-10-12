@@ -3,13 +3,18 @@
 Imita o robô: gera um labirinto aleatório, percorre do canto (0, 0) até o canto
 oposto e envia a corrida ao servidor por WebSocket seguindo o contrato de
 telemetria (docs/4.4.7). Usado para desenvolver e testar o sistema web sem o robô
-(CT-S01 a CT-S06).
+(CT-S01 a CT-S06 e CT-S17).
+
+Antes de rodar, crie a corrida no sistema web: o backend só aceita mensagens de
+uma corrida `em_andamento` e descarta as demais como `corrida desconhecida`, sem ack.
 
 Exemplos:
     python simulador.py                                  # corrida normal (CT-S01, CT-S02, CT-S04)
     python simulador.py --corromper checksum,campo,faixa # pacotes inválidos (CT-S03)
-    python simulador.py --bateria-critica                # tensão cai para 6,4 V e volta (CT-S05)
+    python simulador.py --bateria-critica                # tensão cai para 6,8 V e volta (CT-S05)
+    python simulador.py --bateria-esgotada               # tensão cai abaixo de 6,6 V e o robô para (corrida abandonada)
     python simulador.py --queda 5                        # conexão cai por 5 s (CT-S06)
+    python simulador.py --paredes-todas                  # 16 células do 4x4 com paredes = 4·y + x (CT-S17)
 
 Convenção de coordenadas: x cresce para Leste e y cresce para Norte.
 """
@@ -25,7 +30,7 @@ PERIODO_MS = 200  # telemetria a 5 Hz
 TICKS_POR_CELULA = 5  # ~1 s por célula (0,18 m/s com giros)
 ACK_TICKS = 10  # 2 s sem ack -> reenvia
 TENTATIVAS = 3
-CRITICA_V, REARME_V = 7.0, 7.2
+CRITICA_V, REARME_V, PARADA_V = 7.0, 7.2, 6.6  # aviso, rearme do aviso e parada do robô
 
 # direção -> (dx, dy, bit da parede)
 DIRECOES = {"N": (0, 1, 1), "L": (1, 0, 2), "S": (0, -1, 4), "O": (-1, 0, 8)}
@@ -81,19 +86,31 @@ def direcao(a, b):
     return next(d for d, (dx, dy, _) in DIRECOES.items() if (a[0] + dx, a[1] + dy) == b)
 
 
-def gerar_corrida(largura, altura, corrida, rng, bateria_critica=False):
-    """Mensagens da corrida agrupadas por tick de 200 ms (sem `seq`, que é do transporte)."""
+def gerar_corrida(largura, altura, corrida, rng, bateria_critica=False, bateria_esgotada=False):
+    """Mensagens da corrida agrupadas por tick de 200 ms (sem `seq`, que é do transporte).
+
+    bateria_critica: 6,8 V por 3 s (só aviso). bateria_esgotada: 6,8 V por 1 s e depois
+    6,5 V até o robô parar e abandonar a corrida.
+    """
     paredes, rota = gerar_labirinto(largura, altura, rng)
     total = len(rota) * TICKS_POR_CELULA
-    queda_v = range(total // 3, total // 3 + 15) if bateria_critica else range(0)
+    inicio_queda = total // 3
     cab = {"v": 1, "corrida": corrida}
-    ticks, abaixo_desde, armado = [], None, True
+    ticks, abaixo_desde, parada_desde, armado = [], None, None, True
 
     for tick in range(total):
         i = tick // TICKS_POR_CELULA
         tempo_ms = tick * PERIODO_MS
-        ultimo = tick == total - 1
-        tensao = 6.40 if tick in queda_v else round(8.40 - 0.004 * tick + rng.uniform(-0.01, 0.01), 2)
+        if bateria_critica and inicio_queda <= tick < inicio_queda + 15:
+            tensao = 6.80
+        elif bateria_esgotada and tick >= inicio_queda:
+            tensao = 6.80 if tick <= inicio_queda + 5 else 6.50  # o aviso sai ainda em 6,8 V
+        else:
+            tensao = round(8.40 - 0.004 * tick + rng.uniform(-0.01, 0.01), 2)
+        # parada: < 6,6 V por 1 s -> o robô trava os motores e abandona a corrida
+        parada_desde = (tempo_ms if parada_desde is None else parada_desde) if tensao < PARADA_V else None
+        parou = parada_desde is not None and tempo_ms - parada_desde >= 1000
+        ultimo = tick == total - 1 or parou
         orientacao = direcao(rota[i], rota[i + 1]) if i + 1 < len(rota) else direcao(rota[i - 1], rota[i]) if i else "N"
         msgs = []
         if tick == 0:
@@ -116,10 +133,33 @@ def gerar_corrida(largura, altura, corrida, rng, bateria_critica=False):
         else:
             abaixo_desde = None
             armado = armado or tensao > REARME_V
+        if parou:
+            msgs.append({**cab, "t": "evt", "tempo_ms": tempo_ms, "evento": "fim", "resultado": "abandonada",
+                         "motivo": "bateria_critica", "consumo_medio_ma": round(rng.uniform(380, 440), 1)})
+            ticks.append(msgs)
+            break
         if ultimo:
             msgs.append({**cab, "t": "evt", "tempo_ms": tempo_ms, "evento": "fim", "resultado": "concluida",
                          "tempo_conc_s": tempo_ms / 1000, "consumo_medio_ma": round(rng.uniform(380, 440), 1)})
         ticks.append(msgs)
+    return ticks
+
+
+def gerar_paredes_todas(corrida):
+    """CT-S17: um pacote em cada célula do 4x4 com paredes = 4·y + x (todas as máscaras de 0 a 15).
+
+    Termina com `fim` abandonada (motivo `manual`) para não deixar a corrida em andamento.
+    """
+    cab = {"v": 1, "corrida": corrida}
+    ticks = [[{**cab, "t": "evt", "tempo_ms": 0, "evento": "inicio", "tensao_bateria": 8.40}]]
+    for n in range(16):
+        x, y = n % 4, n // 4
+        ticks[-1].append({**cab, "t": "tel", "tempo_ms": n * PERIODO_MS, "pos_x": x, "pos_y": y,
+                          "orientacao": "N", "paredes": 4 * y + x, "velocidade": 0.0, "tensao_bateria": 8.40,
+                          "valor_flood": None, "estado": "explorando"})
+        ticks.append([])
+    ticks[-1].append({**cab, "t": "evt", "tempo_ms": 16 * PERIODO_MS, "evento": "fim", "resultado": "abandonada",
+                      "motivo": "manual", "consumo_medio_ma": 0.0})
     return ticks
 
 
@@ -129,15 +169,23 @@ async def transmitir(url, ticks, intervalo=PERIODO_MS / 1000, corromper_tipos=()
     corrompidos = dict(zip(range(3, 3 * len(corromper_tipos) + 1, 3), corromper_tipos))  # n-ésimo tel -> tipo
     queda = range(len(ticks) // 2, len(ticks) // 2 + round(queda_s * 1000 / PERIODO_MS)) if queda_s else range(0)
     ws, conectando, leitor, ja_conectou, offline_desde, seq, n_tel, tick = None, None, None, False, 0, 0, 0, 0
+    acks = 0
 
     async def ler_acks(conexao):
+        nonlocal acks
         try:
             async for texto in conexao:
                 js, _, crc = texto.rpartition("|")
                 if crc != f"{binascii.crc_hqx(js.encode(), 0xFFFF):04X}":
                     continue
-                ack = json.loads(js)
-                if ack.get("t") == "ack" and pendentes.pop(ack["seq"], None):
+                try:  # resposta malformada não pode parar a leitura dos próximos acks
+                    ack = json.loads(js)
+                    confirmado = ack.get("t") == "ack" and pendentes.pop(ack["seq"], None)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    print(f"?? resposta inválida ignorada: {texto}")
+                    continue
+                if confirmado:
+                    acks += 1
                     print(f"<- ack seq={ack['seq']}")
         except websockets.ConnectionClosed:
             pass
@@ -217,6 +265,8 @@ async def transmitir(url, ticks, intervalo=PERIODO_MS / 1000, corromper_tipos=()
         await leitor
     if pendentes:
         print(f"xx {len(pendentes)} mensagens sem ack: seq {sorted(pendentes)}")
+    if seq and not acks:
+        print("xx nenhum ack recebido: confira se a corrida foi criada no sistema web (corrida desconhecida)")
     return seq
 
 
@@ -234,14 +284,22 @@ def main():
     p.add_argument("--intervalo", type=float, default=PERIODO_MS / 1000, help="segundos reais por tick de 200 ms")
     p.add_argument("--corromper", type=lambda s: s.split(","), default=[],
                    help="envia o 3º, 6º, 9º... pacote tel inválido: checksum, campo, faixa")
-    p.add_argument("--bateria-critica", action="store_true", help="tensão cai para 6,4 V por 3 s no 1º terço da corrida")
     p.add_argument("--queda", type=float, default=0, metavar="SEGUNDOS", help="derruba a conexão no meio da corrida")
+    cenario = p.add_mutually_exclusive_group()
+    cenario.add_argument("--bateria-critica", action="store_true", help="tensão cai para 6,8 V (só aviso) por 3 s no 1º terço da corrida")
+    cenario.add_argument("--bateria-esgotada", action="store_true",
+                         help="tensão cai abaixo de 6,6 V no 1º terço; o robô para e envia fim abandonada")
+    cenario.add_argument("--paredes-todas", action="store_true",
+                         help="16 pacotes no 4x4 com paredes = 4·y + x (CT-S17); ignora --labirinto")
     a = p.parse_args()
     for tipo in a.corromper:
         if tipo not in ("checksum", "campo", "faixa"):
             p.error(f"--corromper: tipo desconhecido {tipo!r}")
 
-    ticks = gerar_corrida(*a.labirinto, a.corrida, random.Random(a.semente), a.bateria_critica)
+    if a.paredes_todas:
+        ticks = gerar_paredes_todas(a.corrida)
+    else:
+        ticks = gerar_corrida(*a.labirinto, a.corrida, random.Random(a.semente), a.bateria_critica, a.bateria_esgotada)
     asyncio.run(transmitir(a.url, ticks, a.intervalo, a.corromper, a.queda))
 
 

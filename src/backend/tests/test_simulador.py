@@ -5,7 +5,7 @@ import random
 
 import websockets
 
-from simulador import DIRECOES, corromper, gerar_corrida, gerar_labirinto, quadro, transmitir
+from simulador import DIRECOES, corromper, gerar_corrida, gerar_labirinto, gerar_paredes_todas, quadro, transmitir
 
 
 def test_quadro_igual_aos_exemplos_do_contrato():
@@ -42,7 +42,7 @@ def test_corrida_e_bateria_critica():
 
     msgs = [m for t in gerar_corrida(4, 4, 7, random.Random(2), bateria_critica=True) for m in t]
     criticas = [m for m in msgs if m.get("evento") == "bateria_critica"]
-    assert len(criticas) == 1 and criticas[0]["tensao_bateria"] < 7.0
+    assert len(criticas) == 1 and 6.6 < criticas[0]["tensao_bateria"] < 7.0  # aviso, acima da parada
     assert max(m["tensao_bateria"] for m in msgs if m["t"] == "tel" and m["tempo_ms"] > criticas[0]["tempo_ms"]) > 8
 
 
@@ -71,3 +71,52 @@ def test_transmissao_com_corrupcao_e_queda():
     reconexao = [m for m in recebidos.values() if m.get("evento") == "reconexao"]
     assert len(reconexao) == 1 and reconexao[0]["offline_ms"] >= 1000 and reconexao[0]["pendentes"] >= 5
     assert any(m.get("evento") == "fim" for m in recebidos.values())
+
+
+def test_bateria_esgotada_para_o_robo():
+    completa = [m for t in gerar_corrida(8, 8, 7, random.Random(2)) for m in t]
+    msgs = [m for t in gerar_corrida(8, 8, 7, random.Random(2), bateria_esgotada=True) for m in t]
+    aviso = next(m for m in msgs if m.get("evento") == "bateria_critica")
+    fim, ultima_tel = msgs[-1], [m for m in msgs if m["t"] == "tel"][-1]
+    assert fim["evento"] == "fim" and fim["resultado"] == "abandonada" and fim["motivo"] == "bateria_critica"
+    assert "tempo_conc_s" not in fim and len(msgs) < len(completa)
+    assert aviso["tempo_ms"] < fim["tempo_ms"] and aviso["tensao_bateria"] > 6.6  # aviso antes da parada
+    assert ultima_tel["tensao_bateria"] < 6.6 and ultima_tel["estado"] == "parado" and ultima_tel["velocidade"] == 0
+
+
+def test_paredes_todas_cobre_as_16_mascaras():
+    msgs = [m for t in gerar_paredes_todas(7) for m in t]
+    tels = [m for m in msgs if m["t"] == "tel"]
+    assert msgs[0]["evento"] == "inicio" and msgs[-1]["evento"] == "fim"
+    assert sorted(m["paredes"] for m in tels) == list(range(16))
+    assert all(m["paredes"] == 4 * m["pos_y"] + m["pos_x"] for m in tels)
+
+
+def rodar_servidor(servidor, ticks):
+    async def rodar():
+        async with websockets.serve(servidor, "127.0.0.1", 0) as srv:
+            url = f"ws://127.0.0.1:{srv.sockets[0].getsockname()[1]}"
+            return await transmitir(url, ticks, 0.005)
+    return asyncio.run(rodar())
+
+
+def test_resposta_malformada_nao_para_os_acks(capsys):
+    async def servidor(ws):
+        async for texto in ws:
+            msg = json.loads(texto.rpartition("|")[0])
+            for lixo in ("nao e json", '{"t":"ack"}', "[1,2]"):  # CRC certo, conteúdo inválido
+                await ws.send(f"{lixo}|{binascii.crc_hqx(lixo.encode(), 0xFFFF):04X}")
+            await ws.send(quadro({"t": "ack", "corrida": msg["corrida"], "seq": msg["seq"]}))
+
+    rodar_servidor(servidor, gerar_paredes_todas(7))
+    saida = capsys.readouterr().out
+    assert "resposta inválida ignorada" in saida and "sem ack" not in saida and "nenhum ack" not in saida
+
+
+def test_avisa_quando_nenhum_ack_chega(capsys):
+    async def servidor(ws):  # backend que descarta tudo (corrida desconhecida)
+        async for _ in ws:
+            pass
+
+    rodar_servidor(servidor, gerar_paredes_todas(7))
+    assert "nenhum ack recebido" in capsys.readouterr().out
