@@ -342,3 +342,19 @@ TSWLatexianTemp*
 .DS_Store
 Thumbs.db
 
+
+# Software (src/)
+.env
+.env/
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+coverage/
+node_modules/
+dist/
+build/
+.eggs/
+.pio/
+*~
