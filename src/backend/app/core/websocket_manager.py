@@ -32,7 +32,7 @@ class ConnectionManager:
         logger.info("Cliente desconectado do painel. Total ativos: %d", len(self.active_connections))
 
     async def broadcast(self, message: dict[str, Any] | str) -> None:
-        """Transmite uma mensagem para todos os clientes conectados simultaneamente."""
+        """Transmite uma mensagem para todos os clientes conectados simultaneamente (RNF13-S)."""
         text = json.dumps(message) if isinstance(message, dict) else message
         async with self._lock:
             connections = list(self.active_connections)
@@ -40,13 +40,16 @@ class ConnectionManager:
         if not connections:
             return
 
-        dead_connections = []
-        for connection in connections:
+        async def _send(conn: WebSocket) -> WebSocket | None:
             try:
-                await connection.send_text(text)
+                await conn.send_text(text)
+                return None
             except Exception as e:
                 logger.warning("Falha ao enviar para cliente do painel: %s", e)
-                dead_connections.append(connection)
+                return conn
+
+        results = await asyncio.gather(*(_send(c) for c in connections), return_exceptions=True)
+        dead_connections = [res for res in results if isinstance(res, WebSocket)]
 
         if dead_connections:
             async with self._lock:

@@ -2,11 +2,10 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.websocket_manager import manager
-from app.db.session import get_db
+from app.db.session import session_scope
 from app.services.telemetry_service import telemetry_service
 
 logger = logging.getLogger("telemetry_router")
@@ -15,16 +14,19 @@ router = APIRouter(tags=["telemetria"])
 
 
 @router.websocket("/ws/telemetria")
-async def websocket_telemetria(websocket: WebSocket, db: Session = Depends(get_db)) -> None:
+async def websocket_telemetria(websocket: WebSocket) -> None:
     """Endpoint WebSocket para recepção de pacotes do robô e envio de ACKs."""
     await websocket.accept()
     logger.info("Conexão WebSocket estabelecida em /ws/telemetria")
     try:
         while True:
             text_frame = await websocket.receive_text()
-            ack = await telemetry_service.process_frame(text_frame, db)
-            if ack:
-                await websocket.send_text(ack)
+            with session_scope() as db:
+                ack, broadcast_data = await telemetry_service.process_frame(text_frame, db)
+                if ack:
+                    await websocket.send_text(ack)
+                if broadcast_data:
+                    await manager.broadcast(broadcast_data)
     except WebSocketDisconnect:
         logger.info("Conexão WebSocket finalizada em /ws/telemetria")
     except Exception as e:
