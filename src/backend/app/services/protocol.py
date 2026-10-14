@@ -47,11 +47,7 @@ def _reject_constant(val: str) -> Any:
     raise ValueError(f"Constante JSON invalida: {val}")
 
 
-def validate_frame(
-    raw_text: str,
-    largura_celula: int | None = None,
-    altura_celula: int | None = None,
-) -> ValidationResult:
+def validate_frame(raw_text: str) -> ValidationResult:
     """Valida o quadro de telemetria contra os passos 1 a 6 do Contrato 4.4.7."""
     if not isinstance(raw_text, str) or "|" not in raw_text:
         return ValidationResult(valid=False, error="formato invalido")
@@ -119,14 +115,12 @@ def validate_frame(
                 return ValidationResult(valid=False, error=f"campo ausente: {campo}")
 
         # pos_x e pos_y
-        for coord, limite, nome in [("pos_x", largura_celula, "pos_x"), ("pos_y", altura_celula, "pos_y")]:
+        for coord in ("pos_x", "pos_y"):
             val = data[coord]
             if not isinstance(val, int) or isinstance(val, bool):
-                return ValidationResult(valid=False, error=f"tipo invalido: {nome}")
+                return ValidationResult(valid=False, error=f"tipo invalido: {coord}")
             if val < 0:
-                return ValidationResult(valid=False, error=f"fora do intervalo: {nome}={val}")
-            if limite is not None and val >= limite:
-                return ValidationResult(valid=False, error=f"fora do intervalo: {nome}={val}")
+                return ValidationResult(valid=False, error=f"fora do intervalo: {coord}={val}")
 
         # orientacao
         if not isinstance(data["orientacao"], str):
