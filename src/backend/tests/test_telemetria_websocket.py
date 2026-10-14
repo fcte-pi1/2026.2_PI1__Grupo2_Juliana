@@ -19,7 +19,7 @@ from app.services.telemetry_service import telemetry_service
 def db_session(conexao, monkeypatch):
     """Sessão SQLAlchemy vinculada à mesma transação do fixture conexao."""
     telemetry_service.reset()
-    sess = Session(bind=conexao)
+    sess = Session(bind=conexao, join_transaction_mode="create_savepoint")
 
     @contextmanager
     def fake_session_scope():
@@ -110,7 +110,7 @@ def test_ws_telemetria_pacote_corrompido_descartado_e_registrado_em_log(db_sessi
         assert ack.startswith('{"t":"ack","corrida":1,"seq":2}|')
 
     # Verifica se o erro foi registrado no log
-    log = db_session.scalar(select(LogEvento).where(LogEvento.tipo == "erro"))
+    log = db_session.scalar(select(LogEvento).where(LogEvento.tipo == "erro").order_by(LogEvento.id.desc()))
     assert log is not None
     assert "checksum invalido" in log.mensagem
     assert log.origem == "backend"
