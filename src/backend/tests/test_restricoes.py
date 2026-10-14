@@ -84,8 +84,7 @@ def test_tentativa_repetida_no_mesmo_labirinto_e_rejeitada(conexao, id_corrida, 
         "uq_corrida_id_labirinto_num_tentativa",
         lambda: conexao.execute(
             text(
-                "INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa, status) "
-                "VALUES (:l, 'pytest', 1, 'abandonada')"
+                "INSERT INTO corrida (id_labirinto, num_tentativa, status) VALUES (:l, 1, 'abandonada')"
             ),
             {"l": id_labirinto},
         ),
@@ -97,7 +96,7 @@ def test_so_uma_corrida_em_andamento_por_vez(conexao, id_corrida, id_labirinto):
 
     def nova_corrida():
         conexao.execute(
-            text("INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa) VALUES (:l, 'pytest', 2)"),
+            text("INSERT INTO corrida (id_labirinto, num_tentativa) VALUES (:l, 2)"),
             {"l": id_labirinto},
         )
 

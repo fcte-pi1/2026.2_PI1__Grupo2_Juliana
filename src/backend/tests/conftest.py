@@ -44,13 +44,7 @@ def id_labirinto(conexao):
 
 @pytest.fixture
 def id_corrida(conexao, id_labirinto):
-    conexao.execute(
-        text("INSERT INTO usuario (matricula, nome, senha_hash) VALUES ('pytest', 'Usuário de Teste', 'x')")
-    )
     return conexao.execute(
-        text(
-            "INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa) "
-            "VALUES (:id_labirinto, 'pytest', 1) RETURNING id"
-        ),
+        text("INSERT INTO corrida (id_labirinto, num_tentativa) VALUES (:id_labirinto, 1) RETURNING id"),
         {"id_labirinto": id_labirinto},
     ).scalar_one()
