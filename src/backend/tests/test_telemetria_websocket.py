@@ -237,6 +237,43 @@ def test_ws_telemetria_reenvio_fim_recebe_ack_e_nao_duplica(db_session, id_corri
     assert len(erros) == 0
 
 
+def test_ws_telemetria_reenvio_inicio_recebe_ack_e_nao_duplica(db_session, id_corrida, monkeypatch):
+    """Testa que o reenvio de evento inicio recebe ACK e não duplica log nem broadcast."""
+    broadcasts = []
+
+    async def fake_broadcast(msg):
+        broadcasts.append(msg)
+
+    monkeypatch.setattr(manager, "broadcast", fake_broadcast)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        inicio = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 0, "tempo_ms": 0,
+            "evento": "inicio", "tensao_bateria": 8.25
+        }
+        # Envio 1
+        ws.send_text(format_frame(inicio))
+        ack1 = ws.receive_text()
+        assert ack1.startswith('{"t":"ack","corrida":1,"seq":0}|')
+
+        # Reenvio de início (ex.: ACK perdido pelo robô)
+        ws.send_text(format_frame(inicio))
+        ack2 = ws.receive_text()
+        assert ack2.startswith('{"t":"ack","corrida":1,"seq":0}|')
+
+    # Broadcast deve ter ocorrido exatamente uma vez
+    inicios_broadcast = [b for b in broadcasts if b.get("evento") == "inicio"]
+    assert len(inicios_broadcast) == 1
+
+    # Log de início deve ser registrado apenas uma vez no banco
+    logs_inicio = db_session.scalars(
+        select(LogEvento).where(LogEvento.id_corrida == id_corrida).where(LogEvento.tipo == "info")
+    ).all()
+    assert len(logs_inicio) == 1
+    assert "evento inicio" in logs_inicio[0].mensagem
+
+
 def test_ws_telemetria_evento_fim_abandonada_registra_aviso(db_session, id_corrida):
     """Testa que evento de fim com resultado 'abandonada' grava status abandonada e log tipo 'aviso'."""
     client = TestClient(app)
@@ -318,3 +355,47 @@ async def test_connection_manager_broadcast_multiplos_clientes():
     # Testa desconexão
     await cm.disconnect(clientes[0])
     assert cm.total_clients == 4
+
+
+def test_ws_telemetria_trata_excecao_com_traceback(db_session, monkeypatch):
+    """Testa que exceções inesperadas no WebSocket registram traceback via logger.exception."""
+    excecoes_registradas = []
+
+    def fake_exception(msg, *args, **kwargs):
+        excecoes_registradas.append(msg)
+
+    monkeypatch.setattr("app.routers.telemetry.logger.exception", fake_exception)
+
+    async def fake_process_frame(*args, **kwargs):
+        raise RuntimeError("falha simulada")
+
+    monkeypatch.setattr(telemetry_service, "process_frame", fake_process_frame)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        ws.send_text("qualquer_coisa")
+
+    assert "Erro inesperado no WebSocket de telemetria" in excecoes_registradas
+
+
+def test_ws_painel_trata_excecao_com_traceback(monkeypatch):
+    """Testa que erro inesperado no WebSocket do painel registra traceback via logger.exception."""
+    from starlette.websockets import WebSocket
+
+    excecoes_registradas = []
+
+    def fake_exception(msg, *args, **kwargs):
+        excecoes_registradas.append(msg)
+
+    monkeypatch.setattr("app.routers.telemetry.logger.exception", fake_exception)
+
+    async def fake_receive_text(self):
+        raise RuntimeError("erro painel simulado")
+
+    monkeypatch.setattr(WebSocket, "receive_text", fake_receive_text)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/painel"):
+        pass
+
+    assert "Erro no WebSocket do painel" in excecoes_registradas
