@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     SmallInteger,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,22 +55,34 @@ class Corrida(Base):
     """Uma tentativa do robô em um labirinto, com os dados finais (RF07-S, RF10-S).
 
     O UNIQUE (id_labirinto, num_tentativa) também serve de índice para a consulta por labirinto.
+    O índice único parcial uq_corrida_uma_em_andamento permite só uma corrida em_andamento por vez,
+    para a telemetria do robô ser associada a uma única corrida (4.4.7, seção 5).
     """
 
     __tablename__ = "corrida"
     __table_args__ = (
         UniqueConstraint("id_labirinto", "num_tentativa"),
         CheckConstraint("num_tentativa > 0", name="num_tentativa_positivo"),
+        CheckConstraint("num_corrida_robo > 0", name="num_corrida_robo_positivo"),
         CheckConstraint("status IN ('em_andamento', 'concluida', 'abandonada')", name="status_valido"),
         CheckConstraint("status <> 'concluida' OR tempo_conc_s IS NOT NULL", name="concluida_tem_tempo"),
         CheckConstraint("tempo_conc_s >= 0", name="tempo_conc_nao_negativo"),
         CheckConstraint("consumo_medio_ma >= 0", name="consumo_nao_negativo"),
+        Index(
+            "uq_corrida_uma_em_andamento",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'em_andamento'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     id_labirinto: Mapped[int] = mapped_column(ForeignKey("labirinto.id", ondelete="RESTRICT"))
     id_usuario: Mapped[str] = mapped_column(String(20), ForeignKey("usuario.matricula", ondelete="RESTRICT"))
     num_tentativa: Mapped[int] = mapped_column(SmallInteger)
+    # Campo `corrida` do Contrato de Telemetria (4.4.7), gravado no evento `inicio`.
+    # Associa as mensagens do robô a esta corrida, mesmo depois de um reinício do backend.
+    num_corrida_robo: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), server_default="em_andamento")
     iniciado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     tempo_conc_s: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
