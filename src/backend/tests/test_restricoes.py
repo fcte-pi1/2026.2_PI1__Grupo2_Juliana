@@ -108,6 +108,24 @@ def test_status_invalido_e_rejeitado(conexao, id_corrida):
     )
 
 
+def test_corrida_comeca_sem_num_corrida_robo_e_recebe_no_inicio(conexao, id_corrida):
+    """A corrida é criada no sistema web antes do robô largar; o número chega no evento `inicio` (4.4.7)."""
+    assert contar(conexao, "SELECT count(*) FROM corrida WHERE id = :c AND num_corrida_robo IS NULL", c=id_corrida) == 1
+    conexao.execute(text("UPDATE corrida SET num_corrida_robo = 7 WHERE id = :c"), {"c": id_corrida})
+    assert contar(conexao, "SELECT count(*) FROM corrida WHERE id = :c AND num_corrida_robo = 7", c=id_corrida) == 1
+
+
+@pytest.mark.parametrize("valor", [0, -1])
+def test_num_corrida_robo_nao_positivo_e_rejeitado(conexao, id_corrida, valor):
+    deve_rejeitar(
+        conexao,
+        "ck_corrida_num_corrida_robo_positivo",
+        lambda: conexao.execute(
+            text("UPDATE corrida SET num_corrida_robo = :v WHERE id = :c"), {"v": valor, "c": id_corrida}
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("tipo", "origem", "restricao"),
     [

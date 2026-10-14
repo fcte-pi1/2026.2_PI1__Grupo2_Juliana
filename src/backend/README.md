@@ -75,4 +75,5 @@ pytest                            # testa as restrições de integridade
 | `app/db/models.py` | Tabelas `usuario`, `labirinto`, `corrida`, `leitura_telemetria` e `log_evento` |
 | `migrations/versions/0001_*` | Criação das tabelas e restrições |
 | `migrations/versions/0002_*` | Dados iniciais: labirintos 4x4, 8x4 e 12x4 |
+| `migrations/versions/0003_*` | Coluna `num_corrida_robo` em `corrida` (associação com o Contrato de Telemetria, 4.4.7) |
 | `tests/` | Testes das restrições de integridade (RNF07-S) |

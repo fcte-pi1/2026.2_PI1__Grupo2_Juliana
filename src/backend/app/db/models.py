@@ -59,6 +59,7 @@ class Corrida(Base):
     __table_args__ = (
         UniqueConstraint("id_labirinto", "num_tentativa"),
         CheckConstraint("num_tentativa > 0", name="num_tentativa_positivo"),
+        CheckConstraint("num_corrida_robo > 0", name="num_corrida_robo_positivo"),
         CheckConstraint("status IN ('em_andamento', 'concluida', 'abandonada')", name="status_valido"),
         CheckConstraint("status <> 'concluida' OR tempo_conc_s IS NOT NULL", name="concluida_tem_tempo"),
         CheckConstraint("tempo_conc_s >= 0", name="tempo_conc_nao_negativo"),
@@ -69,6 +70,9 @@ class Corrida(Base):
     id_labirinto: Mapped[int] = mapped_column(ForeignKey("labirinto.id", ondelete="RESTRICT"))
     id_usuario: Mapped[str] = mapped_column(String(20), ForeignKey("usuario.matricula", ondelete="RESTRICT"))
     num_tentativa: Mapped[int] = mapped_column(SmallInteger)
+    # Campo `corrida` do Contrato de Telemetria (4.4.7), gravado no evento `inicio`.
+    # Associa as mensagens do robô a esta corrida, mesmo depois de um reinício do backend.
+    num_corrida_robo: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), server_default="em_andamento")
     iniciado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     tempo_conc_s: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
