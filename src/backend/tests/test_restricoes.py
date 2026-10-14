@@ -78,14 +78,34 @@ def test_leitura_repetida_e_rejeitada(conexao, id_corrida):
 
 
 def test_tentativa_repetida_no_mesmo_labirinto_e_rejeitada(conexao, id_corrida, id_labirinto):
+    # status 'abandonada' para testar só a tentativa repetida, sem esbarrar na regra de uma corrida em andamento
     deve_rejeitar(
         conexao,
         "uq_corrida_id_labirinto_num_tentativa",
         lambda: conexao.execute(
-            text("INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa) VALUES (:l, 'pytest', 1)"),
+            text(
+                "INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa, status) "
+                "VALUES (:l, 'pytest', 1, 'abandonada')"
+            ),
             {"l": id_labirinto},
         ),
     )
+
+
+def test_so_uma_corrida_em_andamento_por_vez(conexao, id_corrida, id_labirinto):
+    """Evita que a telemetria do robô seja associada à corrida errada (4.4.7, seção 5)."""
+
+    def nova_corrida():
+        conexao.execute(
+            text("INSERT INTO corrida (id_labirinto, id_usuario, num_tentativa) VALUES (:l, 'pytest', 2)"),
+            {"l": id_labirinto},
+        )
+
+    deve_rejeitar(conexao, "uq_corrida_uma_em_andamento", nova_corrida)
+
+    conexao.execute(text("UPDATE corrida SET status = 'abandonada' WHERE id = :c"), {"c": id_corrida})
+    nova_corrida()
+    assert contar(conexao, "SELECT count(*) FROM corrida WHERE status = 'em_andamento'") == 1
 
 
 def test_corrida_concluida_exige_tempo_de_conclusao(conexao, id_corrida):

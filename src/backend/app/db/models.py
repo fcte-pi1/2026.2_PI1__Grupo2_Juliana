@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     SmallInteger,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +55,8 @@ class Corrida(Base):
     """Uma tentativa do robô em um labirinto, com os dados finais (RF07-S, RF10-S).
 
     O UNIQUE (id_labirinto, num_tentativa) também serve de índice para a consulta por labirinto.
+    O índice único parcial uq_corrida_uma_em_andamento permite só uma corrida em_andamento por vez,
+    para a telemetria do robô ser associada a uma única corrida (4.4.7, seção 5).
     """
 
     __tablename__ = "corrida"
@@ -64,6 +68,12 @@ class Corrida(Base):
         CheckConstraint("status <> 'concluida' OR tempo_conc_s IS NOT NULL", name="concluida_tem_tempo"),
         CheckConstraint("tempo_conc_s >= 0", name="tempo_conc_nao_negativo"),
         CheckConstraint("consumo_medio_ma >= 0", name="consumo_nao_negativo"),
+        Index(
+            "uq_corrida_uma_em_andamento",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'em_andamento'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
