@@ -25,6 +25,8 @@ pytest
 ```
 Os testes ficam em `tests/` e a cobertura do pacote `app` é mostrada ao final. O mesmo comando roda no GitHub Actions em todo Pull Request.
 
+> **Atenção (Banco local):** Devido à restrição que permite apenas uma corrida `em_andamento` por vez (índice `uq_corrida_uma_em_andamento`), certifique-se de que não haja corridas abertas no seu banco local (deixadas por execuções manuais ou pelo simulador) antes de rodar o `pytest`, caso contrário os testes de restrição falharão. Se necessário, encerre-as ou limpe o banco antes da execução.
+
 ## Como rodar o banco de dados
 
 O banco é um PostgreSQL 16 rodando em Docker. As tabelas seguem o Dicionário de Dados da [4.4.4 - Persistência de Dados](../../docs/4.4.4%20-%20Persistencia%20de%20Dados.md) e são criadas pelas migrações do Alembic.
@@ -75,4 +77,6 @@ pytest                            # testa as restrições de integridade
 | `app/db/models.py` | Tabelas `usuario`, `labirinto`, `corrida`, `leitura_telemetria` e `log_evento` |
 | `migrations/versions/0001_*` | Criação das tabelas e restrições |
 | `migrations/versions/0002_*` | Dados iniciais: labirintos 4x4, 8x4 e 12x4 |
+| `migrations/versions/0003_*` | Coluna `num_corrida_robo` em `corrida` (associação com o Contrato de Telemetria, 4.4.7) |
+| `migrations/versions/0004_*` | Índice que permite só uma corrida `em_andamento` por vez |
 | `tests/` | Testes das restrições de integridade (RNF07-S) |
