@@ -29,8 +29,8 @@ async def websocket_telemetria(websocket: WebSocket) -> None:
                     await manager.broadcast(broadcast_data)
     except WebSocketDisconnect:
         logger.info("Conexão WebSocket finalizada em /ws/telemetria")
-    except Exception as e:
-        logger.error("Erro inesperado no WebSocket de telemetria: %s", e)
+    except Exception:
+        logger.exception("Erro inesperado no WebSocket de telemetria")
 
 
 @router.websocket("/ws/painel")
@@ -43,6 +43,6 @@ async def websocket_painel(websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
-    except Exception as e:
-        logger.error("Erro no WebSocket do painel: %s", e)
+    except Exception:
+        logger.exception("Erro no WebSocket do painel")
         await manager.disconnect(websocket)
