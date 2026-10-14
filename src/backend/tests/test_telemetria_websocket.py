@@ -1,27 +1,32 @@
 """Testes de integração para os endpoints WebSocket de telemetria e painel."""
 
+from contextlib import contextmanager
 from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.websocket_manager import manager
 from app.db.models import Corrida, LeituraTelemetria, LogEvento
-from app.db.session import get_db
 from app.main import app
 from app.services.protocol import format_frame
 from app.services.telemetry_service import telemetry_service
 
 
 @pytest.fixture
-def db_session(conexao):
+def db_session(conexao, monkeypatch):
     """Sessão SQLAlchemy vinculada à mesma transação do fixture conexao."""
     telemetry_service.reset()
     sess = Session(bind=conexao)
-    app.dependency_overrides[get_db] = lambda: sess
+
+    @contextmanager
+    def fake_session_scope():
+        yield sess
+
+    monkeypatch.setattr("app.routers.telemetry.session_scope", fake_session_scope)
     yield sess
-    app.dependency_overrides.pop(get_db, None)
     sess.close()
     telemetry_service.reset()
 
@@ -157,6 +162,137 @@ def test_ws_telemetria_faz_broadcast_para_o_manager(db_session, id_corrida, monk
     assert broadcasts[0]["evento"] == "inicio"
     assert broadcasts[1]["estado"] == "explorando"
     assert broadcasts[1]["pos_x"] == 1
+
+
+def test_ws_telemetria_tel_duplicada_recebe_ack_mas_nao_faz_broadcast(db_session, id_corrida, monkeypatch):
+    """Testa que reenvios de leitura de telemetria recebem ACK mas não gravam nem retransmitem."""
+    broadcasts = []
+
+    async def fake_broadcast(msg):
+        broadcasts.append(msg)
+
+    monkeypatch.setattr(manager, "broadcast", fake_broadcast)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        inicio = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 0, "tempo_ms": 0,
+            "evento": "inicio", "tensao_bateria": 8.25
+        }
+        ws.send_text(format_frame(inicio))
+        ws.receive_text()
+
+        tel = {
+            "v": 1, "t": "tel", "corrida": 1, "seq": 1, "tempo_ms": 200,
+            "pos_x": 0, "pos_y": 0, "orientacao": "N", "paredes": 11,
+            "velocidade": 0.250, "tensao_bateria": 8.20, "estado": "explorando"
+        }
+        # Envio 1
+        ws.send_text(format_frame(tel))
+        ack1 = ws.receive_text()
+        assert ack1.startswith('{"t":"ack","corrida":1,"seq":1}|')
+
+        # Envio 2 (reenvio com mesmo tempo_ms)
+        ws.send_text(format_frame(tel))
+        ack2 = ws.receive_text()
+        assert ack2.startswith('{"t":"ack","corrida":1,"seq":1}|')
+
+    # Apenas 1 broadcast de tel deve ter ocorrido (mais o do início)
+    tels_broadcast = [b for b in broadcasts if b.get("t") == "tel"]
+    assert len(tels_broadcast) == 1
+
+    # Apenas 1 registro gravado no banco
+    qtd = db_session.scalar(select(func.count()).select_from(LeituraTelemetria).where(LeituraTelemetria.id_corrida == id_corrida))
+    assert qtd == 1
+
+
+def test_ws_telemetria_reenvio_fim_recebe_ack_e_nao_duplica(db_session, id_corrida):
+    """Testa que o reenvio de evento fim recebe ACK mesmo após a corrida ter sido concluída."""
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        inicio = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 0, "tempo_ms": 0,
+            "evento": "inicio", "tensao_bateria": 8.25
+        }
+        ws.send_text(format_frame(inicio))
+        ws.receive_text()
+
+        fim = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 1, "tempo_ms": 5000,
+            "evento": "fim", "resultado": "concluida", "tempo_conc_s": 5.0,
+            "consumo_medio_ma": 400.0
+        }
+        # Envio 1 do fim
+        ws.send_text(format_frame(fim))
+        ack1 = ws.receive_text()
+        assert ack1.startswith('{"t":"ack","corrida":1,"seq":1}|')
+
+        # Reenvio do fim (ex.: ack perdido)
+        ws.send_text(format_frame(fim))
+        ack2 = ws.receive_text()
+        assert ack2.startswith('{"t":"ack","corrida":1,"seq":1}|')
+
+    # Confirma que não houve registro de erro "corrida desconhecida"
+    erros = db_session.scalars(select(LogEvento).where(LogEvento.tipo == "erro")).all()
+    assert len(erros) == 0
+
+
+def test_ws_telemetria_evento_fim_abandonada_registra_aviso(db_session, id_corrida):
+    """Testa que evento de fim com resultado 'abandonada' grava status abandonada e log tipo 'aviso'."""
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        inicio = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 0, "tempo_ms": 0,
+            "evento": "inicio", "tensao_bateria": 8.25
+        }
+        ws.send_text(format_frame(inicio))
+        ws.receive_text()
+
+        fim = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 1, "tempo_ms": 3000,
+            "evento": "fim", "resultado": "abandonada", "motivo": "bateria_critica",
+            "consumo_medio_ma": 390.0
+        }
+        ws.send_text(format_frame(fim))
+        ack = ws.receive_text()
+        assert ack.startswith('{"t":"ack","corrida":1,"seq":1}|')
+
+    corrida = db_session.get(Corrida, id_corrida)
+    assert corrida.status == "abandonada"
+
+    log = db_session.scalar(select(LogEvento).where(LogEvento.tipo == "aviso"))
+    assert log is not None
+    assert "bateria_critica" in log.mensagem
+
+
+def test_ws_telemetria_limite_labirinto_descartado_com_log(db_session, id_corrida):
+    """Testa que coordenadas que extrapolam o labirinto são descartadas sem ACK e gravadas em log."""
+    client = TestClient(app)
+    with client.websocket_connect("/ws/telemetria") as ws:
+        inicio = {
+            "v": 1, "t": "evt", "corrida": 1, "seq": 0, "tempo_ms": 0,
+            "evento": "inicio", "tensao_bateria": 8.25
+        }
+        ws.send_text(format_frame(inicio))
+        ws.receive_text()
+
+        # Labirinto de teste tem largura=4, altura=4 (coordenadas válidas 0..3)
+        tel_fora = {
+            "v": 1, "t": "tel", "corrida": 1, "seq": 1, "tempo_ms": 200,
+            "pos_x": 4, "pos_y": 0, "orientacao": "N", "paredes": 1,
+            "velocidade": 0.2, "tensao_bateria": 8.0, "estado": "explorando"
+        }
+        ws.send_text(format_frame(tel_fora))
+
+        # Envia próximo pacote válido para confirmar que a conexão continua aberta
+        tel_valido = {**tel_fora, "seq": 2, "tempo_ms": 400, "pos_x": 1}
+        ws.send_text(format_frame(tel_valido))
+        ack = ws.receive_text()
+        assert ack.startswith('{"t":"ack","corrida":1,"seq":2}|')
+
+    log = db_session.scalar(select(LogEvento).where(LogEvento.mensagem == "fora do intervalo: pos_x=4"))
+    assert log is not None
+    assert log.tipo == "erro"
 
 
 @pytest.mark.anyio
