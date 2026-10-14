@@ -136,8 +136,6 @@ class TelemetryService:
     def _obter_corrida(self, db: Session, num_corrida_robo: int, evento: str | None) -> tuple[Corrida | None, bool]:
         """Busca a corrida e retorna (corrida, ja_encerrada) conforme a seção 5 do Contrato."""
         if evento == "inicio":
-            # Limpa cache de eventos de corridas anteriores ao iniciar uma nova
-            self.processed_events.clear()
             corrida = db.scalar(
                 select(Corrida)
                 .where(Corrida.status == "em_andamento")
@@ -147,6 +145,8 @@ class TelemetryService:
                 )
             )
             if corrida and corrida.num_corrida_robo is None:
+                # Limpa cache de eventos de corridas anteriores apenas na primeira associação
+                self.processed_events.clear()
                 corrida.num_corrida_robo = num_corrida_robo
                 db.commit()
             return corrida, False
