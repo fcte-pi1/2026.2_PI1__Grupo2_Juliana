@@ -24,17 +24,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
-class Usuario(Base):
-    """Operador que acessa o sistema web e inicia as corridas (RF21-S)."""
-
-    __tablename__ = "usuario"
-
-    matricula: Mapped[str] = mapped_column(String(20), primary_key=True)
-    nome: Mapped[str] = mapped_column(String(100))
-    senha_hash: Mapped[str] = mapped_column(String(255))
-    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
 class Labirinto(Base):
     """Configuração de labirinto em que o robô corre (RF08-S, RF09-S)."""
 
@@ -78,7 +67,6 @@ class Corrida(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     id_labirinto: Mapped[int] = mapped_column(ForeignKey("labirinto.id", ondelete="RESTRICT"))
-    id_usuario: Mapped[str] = mapped_column(String(20), ForeignKey("usuario.matricula", ondelete="RESTRICT"))
     num_tentativa: Mapped[int] = mapped_column(SmallInteger)
     # Campo `corrida` do Contrato de Telemetria (4.4.7), gravado no evento `inicio`.
     # Associa as mensagens do robô a esta corrida, mesmo depois de um reinício do backend.
