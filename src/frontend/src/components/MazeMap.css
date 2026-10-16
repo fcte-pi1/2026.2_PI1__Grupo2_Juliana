@@ -5,6 +5,9 @@
   --maze-wall: #354f5c;
   --maze-robot: #117e8c;
   --maze-text: #526977;
+  --maze-trail: #2563eb;
+  --maze-goal: #fef3c7;
+  --maze-goal-border: #b45309;
 
   box-sizing: border-box;
   width: 100%;
@@ -43,6 +46,21 @@
   stroke: var(--maze-wall);
   stroke-width: 2.5;
   stroke-linecap: round;
+}
+
+.maze-map .maze-map__goal {
+  fill: var(--maze-goal);
+  stroke: var(--maze-goal-border);
+  stroke-width: 2;
+}
+
+.maze-map .maze-map__trail {
+  fill: none;
+  stroke: var(--maze-trail);
+  stroke-width: 3;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .maze-map .maze-map__robot circle {
@@ -95,4 +113,41 @@
   height: 0;
   border: 0;
   border-top: 3px solid var(--maze-wall);
+}
+
+.maze-map .maze-map__key--trail {
+  height: 0;
+  border: 0;
+  border-top: 3px dashed var(--maze-trail);
+}
+
+.maze-map .maze-map__key--goal {
+  background: var(--maze-goal);
+  border-color: var(--maze-goal-border);
+}
+
+/* Mantém o mapa dentro do card mesmo com as 12 colunas do TAP. */
+.painel-layout:has(.maze-map) > .conteudo-principal {
+  min-width: 0;
+}
+
+.card-mapa-labirinto {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.card-mapa-labirinto .container-maze-map {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .painel-layout:has(.maze-map) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 620px) {
+  .card-mapa-labirinto .card-mapa-corpo {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
