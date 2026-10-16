@@ -2,10 +2,20 @@
 
 #include <string.h>
 
-void Labirinto::iniciar(uint8_t largura, uint8_t altura)
+// Um lado tem 4 células e o outro 4, 8 ou 12.
+static bool tamanhoDoRoteiro(uint8_t largura, uint8_t altura)
 {
-    largura_ = (largura == 0 || largura > MAX_LARG) ? MAX_LARG : largura;
-    altura_ = (altura == 0 || altura > MAX_ALT) ? MAX_ALT : altura;
+    uint8_t menor = largura < altura ? largura : altura;
+    uint8_t maior = largura < altura ? altura : largura;
+    return menor == 4 && (maior == 4 || maior == 8 || maior == 12);
+}
+
+bool Labirinto::iniciar(uint8_t largura, uint8_t altura)
+{
+    if (!tamanhoDoRoteiro(largura, altura))
+        return false;
+    largura_ = largura;
+    altura_ = altura;
     memset(paredes_, 0, sizeof(paredes_));
     memset(visitada_, 0, sizeof(visitada_));
 
@@ -26,6 +36,7 @@ void Labirinto::iniciar(uint8_t largura, uint8_t altura)
     marcarVisitada(0, 0);
     objetivoX_ = largura_ - 1;
     objetivoY_ = altura_ - 1;
+    return true;
 }
 
 void Labirinto::marcarParede(uint8_t x, uint8_t y, Direcao d) { gravar(x, y, d, true); }
@@ -53,12 +64,18 @@ uint8_t Labirinto::paredesDe(uint8_t x, uint8_t y) const
     return paredes_[x][y] & 0x0F;
 }
 
+bool Labirinto::podeAvancar() const { return !temParede(x_, y_, orientacao_); }
+
+// Sair do labirinto é fisicamente impossível: se acontecer, a pose já perdeu a
+// sincronia com o robô, e quem chama precisa tratar.
 bool Labirinto::avancar()
 {
-    if (temParede(x_, y_, orientacao_))
+    int nx = x_ + dx(orientacao_);
+    int ny = y_ + dy(orientacao_);
+    if (!dentro(nx, ny))
         return false;
-    x_ += dx(orientacao_);
-    y_ += dy(orientacao_);
+    x_ = nx;
+    y_ = ny;
     marcarVisitada(x_, y_);
     return true;
 }

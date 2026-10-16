@@ -68,6 +68,40 @@ void test_bordas_fechadas_nos_labirintos_do_roteiro()
     conferirBordas(12, 4);
 }
 
+void test_aceita_os_tamanhos_do_roteiro()
+{
+    Labirinto lab;
+    TEST_ASSERT_TRUE(lab.iniciar(4, 4));
+    TEST_ASSERT_TRUE(lab.iniciar(8, 4));
+    TEST_ASSERT_TRUE(lab.iniciar(12, 4));
+    TEST_ASSERT_TRUE(lab.iniciar(4, 8));
+    TEST_ASSERT_TRUE(lab.iniciar(4, 12));
+}
+
+void test_recusa_tamanho_fora_do_roteiro()
+{
+    Labirinto lab;
+    TEST_ASSERT_FALSE(lab.iniciar(0, 4));
+    TEST_ASSERT_FALSE(lab.iniciar(20, 4));
+    TEST_ASSERT_FALSE(lab.iniciar(5, 7));
+    TEST_ASSERT_FALSE(lab.iniciar(8, 8));
+    TEST_ASSERT_FALSE(lab.iniciar(16, 16));
+}
+
+void test_tamanho_recusado_nao_altera_o_mapa()
+{
+    Labirinto lab;
+    lab.iniciar(8, 4);
+    lab.marcarParede(1, 1, LESTE);
+    lab.avancar();
+    TEST_ASSERT_FALSE(lab.iniciar(5, 7));
+    TEST_ASSERT_EQUAL_UINT8(8, lab.largura());
+    TEST_ASSERT_EQUAL_UINT8(4, lab.altura());
+    TEST_ASSERT_TRUE(lab.temParede(1, 1, LESTE));
+    TEST_ASSERT_EQUAL_UINT8(1, lab.y());
+    TEST_ASSERT_TRUE(lab.ehObjetivo(7, 3));
+}
+
 void test_interior_comeca_aberto_e_desconhecido()
 {
     Labirinto lab;
@@ -143,14 +177,27 @@ void test_avancar_atualiza_celula_e_marca_visitada()
     TEST_ASSERT_TRUE(lab.visitada(0, 1));
 }
 
-void test_avanco_bloqueado_por_parede_nao_move()
+void test_parede_na_frente_impede_avanco()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_TRUE(lab.podeAvancar());
+    lab.marcarParede(0, 0, NORTE);
+    TEST_ASSERT_FALSE(lab.podeAvancar());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
+}
+
+// Parede falsa do filtro: o motor andou mesmo assim e a pose acompanha.
+void test_avancar_registra_mesmo_com_parede_no_mapa()
 {
     Labirinto lab;
     lab.iniciar(4, 4);
     lab.marcarParede(0, 0, NORTE);
-    TEST_ASSERT_FALSE(lab.avancar());
+    TEST_ASSERT_TRUE(lab.avancar());
     TEST_ASSERT_EQUAL_UINT8(0, lab.x());
-    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
+    TEST_ASSERT_EQUAL_UINT8(1, lab.y());
+    TEST_ASSERT_TRUE(lab.visitada(0, 1));
 }
 
 void test_avanco_bloqueado_pela_borda()
@@ -158,7 +205,10 @@ void test_avanco_bloqueado_pela_borda()
     Labirinto lab;
     lab.iniciar(4, 4);
     lab.girar(OESTE);
+    TEST_ASSERT_FALSE(lab.podeAvancar());
     TEST_ASSERT_FALSE(lab.avancar());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
 }
 
 void test_girar_troca_a_orientacao()
@@ -236,7 +286,7 @@ void test_nao_encerra_antes_do_objetivo()
     lab.girar(LESTE);
     lab.avancar(); 
     TEST_ASSERT_FALSE(lab.noObjetivo());
-    TEST_ASSERT_FALSE(lab.avancar());
+    TEST_ASSERT_FALSE(lab.podeAvancar());
 
     lab.girar(OESTE);
     lab.avancar(); 
@@ -296,6 +346,9 @@ int main()
     RUN_TEST(test_deslocamento);
     RUN_TEST(test_letra_do_contrato);
     RUN_TEST(test_bordas_fechadas_nos_labirintos_do_roteiro);
+    RUN_TEST(test_aceita_os_tamanhos_do_roteiro);
+    RUN_TEST(test_recusa_tamanho_fora_do_roteiro);
+    RUN_TEST(test_tamanho_recusado_nao_altera_o_mapa);
     RUN_TEST(test_interior_comeca_aberto_e_desconhecido);
     RUN_TEST(test_parede_gravada_dos_dois_lados);
     RUN_TEST(test_marcar_aberta_fica_conhecida_sem_parede);
@@ -304,7 +357,8 @@ int main()
     RUN_TEST(test_mascara_do_contrato);
     RUN_TEST(test_comeca_na_largada_virado_para_o_norte);
     RUN_TEST(test_avancar_atualiza_celula_e_marca_visitada);
-    RUN_TEST(test_avanco_bloqueado_por_parede_nao_move);
+    RUN_TEST(test_parede_na_frente_impede_avanco);
+    RUN_TEST(test_avancar_registra_mesmo_com_parede_no_mapa);
     RUN_TEST(test_avanco_bloqueado_pela_borda);
     RUN_TEST(test_girar_troca_a_orientacao);
     RUN_TEST(test_percurso_registra_celula_e_orientacao);
