@@ -282,6 +282,11 @@ void test_iniciar_volta_o_objetivo_para_o_canto_oposto()
     TEST_ASSERT_TRUE(lab.ehObjetivo(7, 3));
 }
 
+void test_tamanho_fixo_do_labirinto()
+{
+    TEST_ASSERT_TRUE(sizeof(Labirinto) <= 1024);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -310,6 +315,7 @@ int main()
     RUN_TEST(test_definir_objetivo_troca_a_celula);
     RUN_TEST(test_objetivo_fora_do_labirinto_e_recusado);
     RUN_TEST(test_iniciar_volta_o_objetivo_para_o_canto_oposto);
+    RUN_TEST(test_tamanho_fixo_do_labirinto);
 
     return UNITY_END();
 }
