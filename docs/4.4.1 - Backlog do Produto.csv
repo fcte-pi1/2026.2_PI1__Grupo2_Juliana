@@ -19,7 +19,7 @@ RF17-S,Calibracao Inicial,Executar rotina de calibracao de sensores e encoders a
 RF18-S,Exportacao de Relatorios,Permitir exportar relatorios em PDF ou CSV,Could have
 RF19-S,Indicadores de Status,Exibir alertas sobre bateria ou perda de conexao,Must have
 RF20-S,Log de Eventos,Registrar historico de logs para depuracao,Should have
-RF21-S,Autenticacao,Restringir acesso mediante login,Could have
+RF21-S,Autenticacao,Restringir acesso mediante login,Could have (fora do escopo deste ciclo)
 RF22-S,Atualizacao OTA,Suportar atualizacao de software sem fio,Could have
 RF23-S,Partida em Beco,Iniciar a execucao a partir de um beco sem saida,Must have
 RF24-S,Validacao de Pacotes,Validar a integridade dos pacotes de telemetria recebidos,Must have
