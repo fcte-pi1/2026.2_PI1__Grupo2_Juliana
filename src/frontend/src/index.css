@@ -275,6 +275,19 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-conteudo-bateria-topo {
+  width: 100%;
+}
+
+.barra-progresso-topo {
+  flex: none;
+  width: 100%;
+  height: 8px;
+  margin: 6px 0 4px;
 }
 
 .card-topo-rotulo {
@@ -363,18 +376,15 @@ body {
   border-radius: 50%;
 }
 
-.icone-legenda.trajeto {
-  background-color: var(--cor-azul);
-  height: 3px;
-}
-
-.icone-legenda.objetivo {
-  background-color: var(--cor-ambar);
-}
-
 .icone-legenda.explorada {
   background-color: var(--cor-azul-claro);
   border: 1px solid #93c5fd;
+}
+
+.icone-legenda.parede {
+  background-color: var(--cor-texto-principal);
+  height: 4px;
+  border-radius: 2px;
 }
 
 .card-mapa-corpo {
@@ -848,12 +858,28 @@ body {
   background-color: var(--cor-vermelho);
 }
 
+.ponto-inline.ambar {
+  background-color: var(--cor-ambar);
+}
+
+.ponto-inline.neutro {
+  background-color: #94a3b8;
+}
+
 .texto-verde {
   color: var(--cor-verde);
 }
 
 .texto-vermelho {
   color: var(--cor-vermelho);
+}
+
+.texto-ambar {
+  color: var(--cor-ambar);
+}
+
+.texto-secundario-forte {
+  color: var(--cor-texto-secundario);
 }
 
 .texto-petroleo {

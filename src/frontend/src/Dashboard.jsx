@@ -6,7 +6,16 @@ const LIMIAR_REARME_BATERIA_V = 7.2
 const TENSAO_MIN_V = 6.4
 const TENSAO_MAX_V = 8.4
 const TIMEOUT_OFFLINE_MS = 3000
-const LIMITE_LATENCIA_MS = 500
+
+const LABIRINTOS_OFICIAIS = [
+  { largura: 4, altura: 4 },
+  { largura: 8, altura: 4 },
+  { largura: 4, altura: 8 },
+  { largura: 12, altura: 4 },
+  { largura: 4, altura: 12 },
+]
+
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
 const NOMES_ORIENTACAO = {
   N: { nome: 'Norte', seta: '↑' },
@@ -39,6 +48,34 @@ const TEXTOS_ESTADO_EXECUCAO = {
 }
 
 /**
+ * Verifica se o par (largura, altura) corresponde a um dos 3 labirintos oficiais: 4x4, 8x4 ou 12x4.
+ */
+function ehLabirintoOficial(largura, altura) {
+  return LABIRINTOS_OFICIAIS.some((dim) => dim.largura === largura && dim.altura === altura)
+}
+
+/**
+ * Extrai dimensões do labirinto do pacote/evento caso correspondam a um dos 3 tamanhos oficiais (4x4, 8x4, 12x4).
+ */
+function resolverDimensoesLabirinto(dados, dimensoesAtuais) {
+  if (typeof dados.largura === 'number' && typeof dados.altura === 'number') {
+    if (ehLabirintoOficial(dados.largura, dados.altura)) {
+      return { largura: dados.largura, altura: dados.altura }
+    }
+  }
+  if (typeof dados.labirinto === 'string') {
+    const partes = dados.labirinto
+      .toLowerCase()
+      .split('x')
+      .map((p) => Number.parseInt(p.trim(), 10))
+    if (partes.length === 2 && ehLabirintoOficial(partes[0], partes[1])) {
+      return { largura: partes[0], altura: partes[1] }
+    }
+  }
+  return dimensoesAtuais
+}
+
+/**
  * Calcula o checksum CRC-16/CCITT-FALSE (polinômio 0x1021, inicial 0xFFFF,
  * sem reflexão, XOR final 0) sobre os bytes UTF-8 do texto JSON,
  * exatamente conforme a seção 4 do Contrato de Telemetria (4.4.7) e simulador.py.
@@ -53,14 +90,6 @@ function calcularCrc16Ccitt(texto) {
     }
   }
   return crc.toString(16).toUpperCase().padStart(4, '0')
-}
-
-/**
- * Formata um quadro no padrão <JSON>|<CRC> para envio de confirmação (ack).
- */
-function formatarQuadroAck(corrida, seq) {
-  const json = JSON.stringify({ t: 'ack', corrida, seq })
-  return `${json}|${calcularCrc16Ccitt(json)}`
 }
 
 /**
@@ -79,7 +108,6 @@ function interpretarFrameTelemetria(textoBruto) {
   }
 
   let trechoJson = texto
-  let temCrc = false
 
   const indiceSeparador = texto.lastIndexOf('|')
   if (indiceSeparador !== -1) {
@@ -95,7 +123,6 @@ function interpretarFrameTelemetria(textoBruto) {
         motivo: `checksum invalido (recebido ${sufixoCrc.toUpperCase()}, calculado ${crcCalculado})`,
       }
     }
-    temCrc = true
   }
 
   let dados
@@ -142,7 +169,7 @@ function interpretarFrameTelemetria(textoBruto) {
     }
   }
 
-  return { valido: true, dados, temCrc }
+  return { valido: true, dados }
 }
 
 /**
@@ -199,6 +226,20 @@ function formatarHorario(timestampMs) {
 }
 
 /**
+ * Formata a data de um timestamp no padrão "DD mmm AAAA" ou "--" quando ausente.
+ */
+function formatarDataCurta(timestampMs) {
+  if (!timestampMs) {
+    return '--'
+  }
+  const data = new Date(timestampMs)
+  const dia = String(data.getDate()).padStart(2, '0')
+  const mes = MESES_CURTOS[data.getMonth()]
+  const ano = data.getFullYear()
+  return `${dia} ${mes} ${ano}`
+}
+
+/**
  * Cria a estrutura de células pronta tanto para iteração como Array
  * quanto para indexação por coordenada "x,y" pelo componente MazeMap.jsx.
  */
@@ -218,9 +259,7 @@ export default function Dashboard({
   wsUrl = import.meta.env?.VITE_WS_URL || 'ws://localhost:8000/ws/painel',
   larguraInicial = 4,
   alturaInicial = 4,
-  MapComponent = null,
 }) {
-  const ComponenteMapa = MapComponent || MazeMap
   const [abaAtiva, setAbaAtiva] = useState('monitoramento')
   const [conectadoWs, setConectadoWs] = useState(false)
   const [roboOnline, setRoboOnline] = useState(false)
@@ -233,17 +272,18 @@ export default function Dashboard({
   const [consumoMedioMa, setConsumoMedioMa] = useState(null)
 
   const [roboPos, setRoboPos] = useState({
-    x: 0,
-    y: 0,
     pos_x: 0,
     pos_y: 0,
     orientacao: 'N',
+    x: 0,
+    y: 0,
   })
   const [mapaCelulas, setMapaCelulas] = useState({})
-  const [dimensoesLabirinto, setDimensoesLabirinto] = useState({
-    largura: larguraInicial,
-    altura: alturaInicial,
-  })
+  const [dimensoesLabirinto, setDimensoesLabirinto] = useState(() =>
+    ehLabirintoOficial(larguraInicial, alturaInicial)
+      ? { largura: larguraInicial, altura: alturaInicial }
+      : { largura: 4, altura: 4 },
+  )
 
   const [tensaoBateria, setTensaoBateria] = useState(8.4)
   const [tensaoInicial, setTensaoInicial] = useState(null)
@@ -254,9 +294,12 @@ export default function Dashboard({
   const [qtdLeiturasTel, setQtdLeiturasTel] = useState(0)
 
   const [valorFlood, setValorFlood] = useState(null)
+  const [recalculosRota, setRecalculosRota] = useState(null)
+  const [frequenciaHz, setFrequenciaHz] = useState(null)
+  const [limiteTempoMs, setLimiteTempoMs] = useState(null)
   const [estadoExecucao, setEstadoExecucao] = useState('parado')
 
-  const [latenciaMs, setLatenciaMs] = useState(0)
+  const [latenciaMs, setLatenciaMs] = useState(null)
   const [ultimoPacoteEm, setUltimoPacoteEm] = useState(null)
   const [segundosDesdeUltimoPacote, setSegundosDesdeUltimoPacote] = useState(0)
   const [eventosRecentes, setEventosRecentes] = useState([
@@ -268,9 +311,9 @@ export default function Dashboard({
     },
   ])
 
-  const largadaEstimadaRef = useRef(null)
-  const corridaAtivaRef = useRef(null)
   const ultimoPacoteRef = useRef(null)
+  const roboOnlineRef = useRef(false)
+  const celulasVistasRef = useRef(new Set())
 
   // Prepara a prop celulas compatível com Array e mapa indexado para o MazeMap.jsx
   const celulas = useMemo(() => construirPropCelulas(mapaCelulas), [mapaCelulas])
@@ -281,24 +324,22 @@ export default function Dashboard({
       if (!ultimoPacoteRef.current) {
         return
       }
-      const decorridoMs = Date.now() - ultimoPacoteRef.current
+      const agora = Date.now()
+      const decorridoMs = agora - ultimoPacoteRef.current
       setSegundosDesdeUltimoPacote(Number((decorridoMs / 1000).toFixed(1)))
 
-      if (decorridoMs >= TIMEOUT_OFFLINE_MS) {
-        setRoboOnline((estavaOnline) => {
-          if (estavaOnline) {
-            setEventosRecentes((anteriores) => [
-              {
-                id: `offline-${Date.now()}`,
-                horario: formatarHorario(Date.now()),
-                titulo: 'Conexão perdida — mais de 3 s sem telemetria',
-                tipo: 'erro',
-              },
-              ...anteriores.slice(0, 5),
-            ])
-          }
-          return false
-        })
+      if (decorridoMs >= TIMEOUT_OFFLINE_MS && roboOnlineRef.current) {
+        roboOnlineRef.current = false
+        setRoboOnline(false)
+        setEventosRecentes((anteriores) => [
+          {
+            id: `offline-${agora}`,
+            horario: formatarHorario(agora),
+            titulo: 'Conexão perdida — mais de 3 s sem telemetria',
+            tipo: 'erro',
+          },
+          ...anteriores.slice(0, 5),
+        ])
       }
     }, 200)
 
@@ -330,25 +371,11 @@ export default function Dashboard({
         return
       }
 
-      const { dados, temCrc } = resultado
+      const { dados } = resultado
 
-      // Caso receba diretamente do simulador no formato <JSON>|<CRC>, responde com ACK
-      if (
-        temCrc &&
-        socket &&
-        socket.readyState === 1 &&
-        typeof dados.corrida === 'number' &&
-        typeof dados.seq === 'number'
-      ) {
-        try {
-          socket.send(formatarQuadroAck(dados.corrida, dados.seq))
-        } catch {
-          // Ignora falha de envio caso o socket seja apenas leitura
-        }
-      }
-
-      // Atualiza marcadores de conexão e cálculo de latência (Seção 6 do Contrato 4.4.7)
+      // Atualiza marcadores de conexão (painel é apenas leitura; não envia ACK)
       ultimoPacoteRef.current = recebidoEm
+      roboOnlineRef.current = true
       setUltimoPacoteEm(recebidoEm)
       setSegundosDesdeUltimoPacote(0)
       setRoboOnline(true)
@@ -357,21 +384,32 @@ export default function Dashboard({
         setCorridaAtual(dados.corrida)
       }
 
-      const estimativaLargada = recebidoEm - dados.tempo_ms
-      if (
-        largadaEstimadaRef.current === null ||
-        corridaAtivaRef.current !== dados.corrida ||
-        estimativaLargada < largadaEstimadaRef.current
-      ) {
-        largadaEstimadaRef.current = estimativaLargada
-        corridaAtivaRef.current = dados.corrida
+      setDimensoesLabirinto((atual) => resolverDimensoesLabirinto(dados, atual))
+
+      if (typeof dados.recalculos === 'number' && !Number.isNaN(dados.recalculos)) {
+        setRecalculosRota(dados.recalculos)
+      }
+      if (typeof dados.frequencia_hz === 'number' && !Number.isNaN(dados.frequencia_hz)) {
+        setFrequenciaHz(dados.frequencia_hz)
+      }
+      if (typeof dados.limite_tempo_ms === 'number' && !Number.isNaN(dados.limite_tempo_ms)) {
+        setLimiteTempoMs(dados.limite_tempo_ms)
       }
 
-      const latenciaCalculada = Math.max(
-        0,
-        Math.min(LIMITE_LATENCIA_MS, Math.round(recebidoEm - (largadaEstimadaRef.current + dados.tempo_ms))),
-      )
-      setLatenciaMs(latenciaCalculada)
+      // Cálculo de latência apenas quando o pacote traz o timestamp real do servidor
+      const timestampServidor =
+        typeof dados.timestamp_servidor_ms === 'number' && !Number.isNaN(dados.timestamp_servidor_ms)
+          ? dados.timestamp_servidor_ms
+          : typeof dados.enviado_em_ms === 'number' && !Number.isNaN(dados.enviado_em_ms)
+            ? dados.enviado_em_ms
+            : null
+
+      if (timestampServidor !== null) {
+        setLatenciaMs(Math.max(0, Math.round(recebidoEm - timestampServidor)))
+      } else {
+        setLatenciaMs(null)
+      }
+
       setTempoMs(dados.tempo_ms)
 
       if (typeof dados.tensao_bateria === 'number') {
@@ -379,7 +417,7 @@ export default function Dashboard({
         setTensaoInicial((anterior) => (anterior === null ? dados.tensao_bateria : anterior))
         if (dados.tensao_bateria < LIMIAR_BATERIA_CRITICA_V) {
           setBateriaCriticaAtiva(true)
-        } else if (dados.tensao_bateria >= LIMIAR_REARME_BATERIA_V || dados.tensao_bateria >= LIMIAR_BATERIA_CRITICA_V) {
+        } else if (dados.tensao_bateria >= LIMIAR_REARME_BATERIA_V) {
           setBateriaCriticaAtiva(false)
         }
       }
@@ -393,46 +431,39 @@ export default function Dashboard({
         setValorFlood(dados.valor_flood ?? null)
 
         const novaPos = {
-          x: dados.pos_x,
-          y: dados.pos_y,
           pos_x: dados.pos_x,
           pos_y: dados.pos_y,
           orientacao: dados.orientacao,
+          x: dados.pos_x,
+          y: dados.pos_y,
         }
         setRoboPos(novaPos)
 
-        setDimensoesLabirinto((dim) => ({
-          largura: Math.max(dim.largura, dados.pos_x + 1),
-          altura: Math.max(dim.altura, dados.pos_y + 1),
-        }))
-
         const chaveCelula = `${dados.pos_x},${dados.pos_y}`
         const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
+        const jaVista = celulasVistasRef.current.has(chaveCelula)
+        celulasVistasRef.current.add(chaveCelula)
 
-        setMapaCelulas((mapaAnterior) => {
-          const jaExistia = Boolean(mapaAnterior[chaveCelula])
-          const novoMapa = {
-            ...mapaAnterior,
-            [chaveCelula]: {
-              x: dados.pos_x,
-              y: dados.pos_y,
-              pos_x: dados.pos_x,
-              pos_y: dados.pos_y,
-              paredes: dados.paredes,
-              valor_flood: dados.valor_flood ?? null,
-              orientacao: dados.orientacao,
-              visitada: true,
-            },
-          }
-          if (!jaExistia) {
-            registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
-          }
-          return novoMapa
-        })
+        if (!jaVista) {
+          registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
+        }
+
+        setMapaCelulas((mapaAnterior) => ({
+          ...mapaAnterior,
+          [chaveCelula]: {
+            pos_x: dados.pos_x,
+            pos_y: dados.pos_y,
+            paredes: dados.paredes,
+            valor_flood: dados.valor_flood ?? null,
+            orientacao: dados.orientacao,
+            visitada: true,
+            x: dados.pos_x,
+            y: dados.pos_y,
+          },
+        }))
       } else if (dados.t === 'evt') {
         if (dados.evento === 'inicio') {
-          largadaEstimadaRef.current = recebidoEm - dados.tempo_ms
-          corridaAtivaRef.current = dados.corrida
+          celulasVistasRef.current.clear()
           setStatusCorrida('em_execucao')
           setMotivoFim(null)
           setTempoConclusaoS(null)
@@ -440,6 +471,7 @@ export default function Dashboard({
           setMapaCelulas({})
           setSomaVelocidades(0)
           setQtdLeiturasTel(0)
+          setRecalculosRota(null)
           setEstadoExecucao('explorando')
           if (typeof dados.tensao_bateria === 'number') {
             setTensaoInicial(dados.tensao_bateria)
@@ -549,7 +581,20 @@ export default function Dashboard({
         ? 'Concluído'
         : statusCorrida === 'abandonada'
           ? 'Abandonada'
-          : 'Em execução'
+          : 'Aguardando'
+
+  const infoResultadoUltimaExecucao =
+    statusCorrida === 'concluida'
+      ? { texto: 'Concluído', classeTexto: 'texto-verde', classePonto: 'verde' }
+      : statusCorrida === 'abandonada'
+        ? {
+            texto: `Abandonada (${motivoFim || 'parada'})`,
+            classeTexto: 'texto-vermelho',
+            classePonto: 'vermelho',
+          }
+        : statusCorrida === 'em_execucao'
+          ? { texto: 'Em andamento', classeTexto: 'texto-ambar', classePonto: 'ambar' }
+          : { texto: 'Aguardando', classeTexto: 'texto-secundario-forte', classePonto: 'neutro' }
 
   const desafioCumprido = statusCorrida === 'concluida'
   const onlineAtivo = roboOnline || (conectadoWs && ultimoPacoteEm === null)
@@ -655,9 +700,9 @@ export default function Dashboard({
               </span>
             </div>
             {abaAtiva === 'dashboard' && (
-              <div className="pilula-data-calendario">
+              <div className="pilula-data-calendario" data-testid="data-calendario">
                 <span aria-hidden="true">📅</span>
-                <span>25 set 2026</span>
+                <span>{formatarDataCurta(ultimoPacoteEm)}</span>
               </div>
             )}
           </div>
@@ -697,13 +742,21 @@ export default function Dashboard({
                   <strong className="card-topo-valor" data-testid="porcentagem-bateria-visao-geral">
                     {porcentagemBateria}%
                   </strong>
-                  <div className="barra-progresso-trilha" style={{ width: '100%', marginTop: '4px' }}>
+                  <div
+                    className="barra-progresso-trilha barra-progresso-topo"
+                    role="progressbar"
+                    aria-label="Nível de bateria na visão geral"
+                    aria-valuenow={porcentagemBateria}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    data-testid="barra-progresso-bateria-visao-geral"
+                  >
                     <div
                       className={`barra-progresso-preenchimento ${alertaBateriaCritica ? 'critica' : ''}`}
                       style={{ width: `${porcentagemBateria}%` }}
                     />
                   </div>
-                  <span className="card-topo-sub" style={{ marginTop: '2px' }}>
+                  <span className="card-topo-sub">
                     <span className={`ponto-inline ${alertaBateriaCritica ? 'vermelho' : 'neutro'}`} />{' '}
                     {alertaBateriaCritica ? 'Bateria crítica' : 'Nível normal'}
                   </span>
@@ -739,7 +792,7 @@ export default function Dashboard({
                 <div className="card-topo-conteudo">
                   <span className="card-topo-rotulo">Labirinto Atual</span>
                   <strong className="card-topo-valor">
-                    {dimensoesLabirinto.altura} × {dimensoesLabirinto.largura}
+                    {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
                   </strong>
                   <span className="card-topo-sub">
                     <span className="ponto-inline neutro" /> Tentativa {corridaAtual}
@@ -764,7 +817,7 @@ export default function Dashboard({
                   <div className="metrica-bloco">
                     <span className="rotulo-caixa-alta">TIPO DO LABIRINTO</span>
                     <strong className="metrica-valor">
-                      {dimensoesLabirinto.altura} × {dimensoesLabirinto.largura}
+                      {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
                     </strong>
                   </div>
 
@@ -800,13 +853,15 @@ export default function Dashboard({
 
                   <div className="metrica-bloco">
                     <span className="rotulo-caixa-alta">RESULTADO</span>
-                    <strong className={`metrica-valor ${desafioCumprido ? 'texto-verde' : 'texto-petroleo'}`}>
-                      <span className="ponto-inline verde" />{' '}
-                      {statusCorrida === 'concluida'
-                        ? 'Concluído'
-                        : statusCorrida === 'abandonada'
-                          ? `Abandonada (${motivoFim || 'parada'})`
-                          : 'Em andamento'}
+                    <strong
+                      className={`metrica-valor ${infoResultadoUltimaExecucao.classeTexto}`}
+                      data-testid="resultado-ultima-execucao"
+                    >
+                      <span
+                        className={`ponto-inline ${infoResultadoUltimaExecucao.classePonto}`}
+                        data-testid="ponto-resultado-ultima-execucao"
+                      />{' '}
+                      {infoResultadoUltimaExecucao.texto}
                     </strong>
                   </div>
                 </div>
@@ -860,10 +915,12 @@ export default function Dashboard({
 
                   <li className="item-status-sistema">
                     <span className="descricao-item-sistema">
-                      <span className="ponto-inline verde" />
+                      <span className="ponto-inline neutro" />
                       Banco de dados
                     </span>
-                    <strong className="texto-verde">Operacional</strong>
+                    <strong className="texto-secundario" data-testid="status-banco-dados">
+                      --
+                    </strong>
                   </li>
 
                   <li className="item-status-sistema">
@@ -871,8 +928,12 @@ export default function Dashboard({
                       <span aria-hidden="true">⏱</span>
                       Última atualização
                     </span>
-                    <strong className="texto-secundario">
-                      {segundosDesdeUltimoPacote > 0 ? `há ${formatarDecimalBr(segundosDesdeUltimoPacote, 1)} segundos` : 'há poucos instantes'}
+                    <strong className="texto-secundario" data-testid="ultima-atualizacao-sistema">
+                      {ultimoPacoteEm === null
+                        ? '--'
+                        : segundosDesdeUltimoPacote > 0
+                          ? `há ${formatarDecimalBr(segundosDesdeUltimoPacote, 1)} segundos`
+                          : 'há 0,0 segundos'}
                     </strong>
                   </li>
                 </ul>
@@ -916,7 +977,7 @@ export default function Dashboard({
                 <div className="card-topo-conteudo">
                   <span className="card-topo-rotulo">LABIRINTO</span>
                   <strong className="card-topo-valor">
-                    {dimensoesLabirinto.altura} × {dimensoesLabirinto.largura}
+                    {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
                   </strong>
                   <span className="card-topo-sub">Tentativa {corridaAtual}</span>
                 </div>
@@ -944,7 +1005,9 @@ export default function Dashboard({
                   <strong className="card-topo-valor" data-testid="valor-cronometro">
                     {formatarCronometro(tempoMs)}
                   </strong>
-                  <span className="card-topo-sub">Limite: 10:00</span>
+                  <span className="card-topo-sub" data-testid="limite-tempo">
+                    {limiteTempoMs !== null ? `Limite: ${formatarCronometro(limiteTempoMs)}` : 'Limite: --'}
+                  </span>
                 </div>
               </article>
             </section>
@@ -961,18 +1024,15 @@ export default function Dashboard({
                     </p>
                   </div>
 
-                  <div className="legenda-mapa" aria-label="Legenda do mapa">
+                  <div className="legenda-mapa" aria-label="Legenda do mapa" data-testid="legenda-mapa">
                     <span className="item-legenda">
                       <i className="icone-legenda robo" /> Robô
                     </span>
                     <span className="item-legenda">
-                      <i className="icone-legenda trajeto" /> Trajeto
-                    </span>
-                    <span className="item-legenda">
-                      <i className="icone-legenda objetivo" /> Objetivo
-                    </span>
-                    <span className="item-legenda">
                       <i className="icone-legenda explorada" /> Área explorada
+                    </span>
+                    <span className="item-legenda">
+                      <i className="icone-legenda parede" /> Parede confirmada
                     </span>
                   </div>
                 </div>
@@ -983,8 +1043,10 @@ export default function Dashboard({
                     data-testid="espaco-mapa-labirinto"
                     data-celulas-count={celulas.length}
                     data-robo-pos={`${roboPos.pos_x},${roboPos.pos_y},${roboPos.orientacao}`}
+                    data-robo-keys={Object.keys(roboPos).slice(0, 2).join(',')}
+                    data-celula-keys={celulas[0] ? Object.keys(celulas[0]).slice(0, 2).join(',') : ''}
                   >
-                    <ComponenteMapa
+                    <MazeMap
                       largura={dimensoesLabirinto.largura}
                       altura={dimensoesLabirinto.altura}
                       celulas={celulas}
@@ -1011,13 +1073,15 @@ export default function Dashboard({
 
                       <div className="linha-metrica-mapa">
                         <span>Células mapeadas</span>
-                        <strong>
+                        <strong data-testid="celulas-mapeadas-total">
                           {qtdCelulasMapeadas} / {totalCelulasLabirinto}
                         </strong>
                       </div>
                       <div className="linha-metrica-mapa">
                         <span>Cobertura</span>
-                        <strong className="texto-petroleo">{coberturaPercentual}%</strong>
+                        <strong className="texto-petroleo" data-testid="cobertura-percentual">
+                          {coberturaPercentual}%
+                        </strong>
                       </div>
                     </div>
 
@@ -1034,10 +1098,13 @@ export default function Dashboard({
                       </div>
                       <div className="linha-metrica-mapa">
                         <span>Recalculos</span>
-                        <strong>00</strong>
+                        <strong data-testid="recalculos-rota">
+                          {recalculosRota !== null ? String(recalculosRota).padStart(2, '0') : '--'}
+                        </strong>
                       </div>
                       <div className="pilula-caminho-disponivel">
-                        <span className="ponto-inline" /> Menor caminho disponível
+                        <span className="ponto-inline" />{' '}
+                        {valorFlood !== null ? 'Menor caminho disponível' : 'Aguardando leitura de rota'}
                       </div>
                     </div>
 
@@ -1058,8 +1125,9 @@ export default function Dashboard({
                   <h2 className="titulo-coluna-telemetria">
                     <span className="icone-pulso" aria-hidden="true">∿</span> Telemetria
                   </h2>
-                  <span className="taxa-hz">
-                    <span className="ponto-inline verde" /> 5 Hz
+                  <span className="taxa-hz" data-testid="taxa-telemetria-hz">
+                    <span className={`ponto-inline ${frequenciaHz !== null ? 'verde' : 'neutro'}`} />{' '}
+                    {frequenciaHz !== null ? `${frequenciaHz} Hz` : '--'}
                   </span>
                 </div>
 
@@ -1097,7 +1165,7 @@ export default function Dashboard({
                   <div className="card-indicador-rodape">
                     {alertaBateriaCritica ? (
                       <span className="alerta-critico-texto" role="alert" data-testid="alerta-bateria-critica">
-                        ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V &lt; 7,0 V)
+                        ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em 7,20 V)
                       </span>
                     ) : (
                       <span className="texto-secundario" data-testid="status-bateria-normal">
@@ -1185,11 +1253,16 @@ export default function Dashboard({
 
                   <div className="comunicacao-rodape">
                     <span>
-                      Latência <strong data-testid="latencia-ms">{latenciaMs} ms</strong>
+                      Latência{' '}
+                      <strong data-testid="latencia-ms">
+                        {latenciaMs !== null ? `${latenciaMs} ms` : '--'}
+                      </strong>
                     </span>
                     <span>
                       Último pacote{' '}
-                      <strong>há {formatarDecimalBr(segundosDesdeUltimoPacote, 1)} s</strong>
+                      <strong data-testid="ultimo-pacote-tempo">
+                        {ultimoPacoteEm !== null ? `há ${formatarDecimalBr(segundosDesdeUltimoPacote, 1)} s` : '--'}
+                      </strong>
                     </span>
                   </div>
                 </article>
