@@ -24,6 +24,8 @@ void Labirinto::iniciar(uint8_t largura, uint8_t altura)
     y_ = 0;
     orientacao_ = NORTE;
     marcarVisitada(0, 0);
+    objetivoX_ = largura_ - 1;
+    objetivoY_ = altura_ - 1;
 }
 
 void Labirinto::marcarParede(uint8_t x, uint8_t y, Direcao d) { gravar(x, y, d, true); }
@@ -73,6 +75,22 @@ bool Labirinto::visitada(uint8_t x, uint8_t y) const
 {
     return dentro(x, y) && visitada_[x][y];
 }
+
+bool Labirinto::definirObjetivo(uint8_t x, uint8_t y)
+{
+    if (!dentro(x, y))
+        return false;
+    objetivoX_ = x;
+    objetivoY_ = y;
+    return true;
+}
+
+bool Labirinto::ehObjetivo(uint8_t x, uint8_t y) const
+{
+    return x == objetivoX_ && y == objetivoY_;
+}
+
+bool Labirinto::noObjetivo() const { return ehObjetivo(x_, y_); }
 
 bool Labirinto::dentro(int x, int y) const
 {

@@ -7,8 +7,8 @@
 const uint8_t MAX_LARG = 16;
 const uint8_t MAX_ALT = 16;
 
-// Mapa do labirinto em memória fixa (RNF03). A célula (0,0) é a largada, no
-// canto sudoeste; x cresce para Leste e y para Norte (docs/4.4.7).
+// Mapa do labirinto em memória fixa (RNF03). A célula (0,0) é a largada
+// x cresce para Leste e y para Norte.
 class Labirinto
 {
 public:
@@ -30,6 +30,12 @@ public:
     void marcarVisitada(uint8_t x, uint8_t y);
     bool visitada(uint8_t x, uint8_t y) const;
 
+    // Objetivo: o canto diagonalmente oposto à largada, definido
+    // por iniciar() em (largura-1, altura-1). definirObjetivo() troca a célula.
+    bool definirObjetivo(uint8_t x, uint8_t y); // false se fora do labirinto
+    bool ehObjetivo(uint8_t x, uint8_t y) const;
+    bool noObjetivo() const; // única condição de fim da corrida
+
 private:
     bool dentro(int x, int y) const;
     void gravar(uint8_t x, uint8_t y, Direcao d, bool parede);
@@ -43,4 +49,6 @@ private:
     uint8_t x_ = 0;
     uint8_t y_ = 0;
     Direcao orientacao_ = NORTE;
+    uint8_t objetivoX_ = 0;
+    uint8_t objetivoY_ = 0;
 };

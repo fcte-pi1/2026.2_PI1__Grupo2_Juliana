@@ -107,7 +107,7 @@ void test_coordenada_fora_do_labirinto_e_ignorada()
 {
     Labirinto lab;
     lab.iniciar(4, 4);
-    lab.marcarParede(9, 9, NORTE); // não pode travar nem escrever fora da matriz
+    lab.marcarParede(9, 9, NORTE);
     TEST_ASSERT_TRUE(lab.temParede(9, 9, NORTE));
     TEST_ASSERT_EQUAL_UINT8(0, lab.paredesDe(9, 9));
 }
@@ -118,8 +118,8 @@ void test_mascara_do_contrato()
     lab.iniciar(4, 4);
     lab.marcarParede(2, 1, NORTE);
     lab.marcarParede(2, 1, OESTE);
-    TEST_ASSERT_EQUAL_UINT8(9, lab.paredesDe(2, 1));           // exemplo do docs/4.4.7
-    TEST_ASSERT_EQUAL_UINT8(SUL | OESTE, lab.paredesDe(0, 0)); // canto da largada
+    TEST_ASSERT_EQUAL_UINT8(9, lab.paredesDe(2, 1));          
+    TEST_ASSERT_EQUAL_UINT8(SUL | OESTE, lab.paredesDe(0, 0)); 
 }
 
 void test_comeca_na_largada_virado_para_o_norte()
@@ -170,21 +170,116 @@ void test_girar_troca_a_orientacao()
     TEST_ASSERT_EQUAL_CHAR('L', letra(lab.orientacao()));
 }
 
-// CT-SE10: a sequência de células e orientações bate com o percurso feito.
 void test_percurso_registra_celula_e_orientacao()
 {
     Labirinto lab;
     lab.iniciar(4, 4);
     lab.girar(LESTE);
-    lab.avancar(); // (1,0)
-    lab.avancar(); // (2,0)
+    lab.avancar(); 
+    lab.avancar(); 
     lab.girar(NORTE);
-    lab.avancar(); // (2,1)
+    lab.avancar(); 
     TEST_ASSERT_EQUAL_UINT8(2, lab.x());
     TEST_ASSERT_EQUAL_UINT8(1, lab.y());
     TEST_ASSERT_EQUAL(NORTE, lab.orientacao());
     TEST_ASSERT_TRUE(lab.visitada(1, 0));
-    TEST_ASSERT_FALSE(lab.visitada(1, 1)); // não passou por ali
+    TEST_ASSERT_FALSE(lab.visitada(1, 1)); 
+}
+
+void test_largada_nao_e_objetivo()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_FALSE(lab.noObjetivo());
+}
+
+static void conferirCantoOposto(uint8_t largura, uint8_t altura)
+{
+    Labirinto lab;
+    lab.iniciar(largura, altura);
+    TEST_ASSERT_TRUE(lab.ehObjetivo(largura - 1, altura - 1));
+    TEST_ASSERT_FALSE(lab.ehObjetivo(0, 0));
+    TEST_ASSERT_FALSE(lab.ehObjetivo(largura - 1, 0));
+    TEST_ASSERT_FALSE(lab.ehObjetivo(0, altura - 1));
+}
+
+void test_objetivo_no_canto_oposto_a_largada()
+{
+    conferirCantoOposto(4, 4);
+    conferirCantoOposto(8, 4);
+    conferirCantoOposto(12, 4);
+    conferirCantoOposto(4, 8);
+}
+
+void test_reconhece_a_chegada()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.girar(LESTE);
+    for (int i = 0; i < 3; i++)
+        lab.avancar();
+    lab.girar(NORTE);
+    lab.avancar(); 
+    lab.avancar(); 
+    TEST_ASSERT_FALSE(lab.noObjetivo());
+    lab.avancar();
+    TEST_ASSERT_TRUE(lab.noObjetivo());
+}
+
+void test_nao_encerra_antes_do_objetivo()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.marcarParede(1, 0, NORTE); 
+    lab.marcarParede(1, 0, LESTE);
+
+    lab.girar(LESTE);
+    lab.avancar(); 
+    TEST_ASSERT_FALSE(lab.noObjetivo());
+    TEST_ASSERT_FALSE(lab.avancar());
+
+    lab.girar(OESTE);
+    lab.avancar(); 
+    lab.girar(NORTE);
+    for (int i = 0; i < 3; i++)
+    {
+        lab.avancar(); 
+        TEST_ASSERT_FALSE(lab.noObjetivo());
+    }
+    lab.girar(LESTE);
+    lab.avancar(); 
+    lab.avancar(); 
+    TEST_ASSERT_FALSE(lab.noObjetivo());
+    lab.avancar();
+    TEST_ASSERT_TRUE(lab.noObjetivo());
+}
+
+void test_definir_objetivo_troca_a_celula()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_TRUE(lab.definirObjetivo(1, 2));
+    TEST_ASSERT_TRUE(lab.ehObjetivo(1, 2));
+    TEST_ASSERT_FALSE(lab.ehObjetivo(3, 3));
+}
+
+void test_objetivo_fora_do_labirinto_e_recusado()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_FALSE(lab.definirObjetivo(4, 0));
+    TEST_ASSERT_FALSE(lab.ehObjetivo(4, 0));
+    TEST_ASSERT_TRUE(lab.ehObjetivo(3, 3)); 
+}
+
+void test_iniciar_volta_o_objetivo_para_o_canto_oposto()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.definirObjetivo(1, 1);
+    lab.iniciar(8, 4);
+    TEST_ASSERT_FALSE(lab.ehObjetivo(1, 1));
+    TEST_ASSERT_TRUE(lab.ehObjetivo(7, 3));
 }
 
 int main()
@@ -208,6 +303,13 @@ int main()
     RUN_TEST(test_avanco_bloqueado_pela_borda);
     RUN_TEST(test_girar_troca_a_orientacao);
     RUN_TEST(test_percurso_registra_celula_e_orientacao);
+    RUN_TEST(test_largada_nao_e_objetivo);
+    RUN_TEST(test_objetivo_no_canto_oposto_a_largada);
+    RUN_TEST(test_reconhece_a_chegada);
+    RUN_TEST(test_nao_encerra_antes_do_objetivo);
+    RUN_TEST(test_definir_objetivo_troca_a_celula);
+    RUN_TEST(test_objetivo_fora_do_labirinto_e_recusado);
+    RUN_TEST(test_iniciar_volta_o_objetivo_para_o_canto_oposto);
 
     return UNITY_END();
 }
