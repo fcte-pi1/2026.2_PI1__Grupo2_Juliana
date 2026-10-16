@@ -7,6 +7,7 @@ void Labirinto::iniciar(uint8_t largura, uint8_t altura)
     largura_ = (largura == 0 || largura > MAX_LARG) ? MAX_LARG : largura;
     altura_ = (altura == 0 || altura > MAX_ALT) ? MAX_ALT : altura;
     memset(paredes_, 0, sizeof(paredes_));
+    memset(visitada_, 0, sizeof(visitada_));
 
     for (uint8_t x = 0; x < largura_; x++)
     {
@@ -18,6 +19,11 @@ void Labirinto::iniciar(uint8_t largura, uint8_t altura)
         gravarLado(0, y, OESTE, true);
         gravarLado(largura_ - 1, y, LESTE, true);
     }
+
+    x_ = 0;
+    y_ = 0;
+    orientacao_ = NORTE;
+    marcarVisitada(0, 0);
 }
 
 void Labirinto::marcarParede(uint8_t x, uint8_t y, Direcao d) { gravar(x, y, d, true); }
@@ -43,6 +49,29 @@ uint8_t Labirinto::paredesDe(uint8_t x, uint8_t y) const
     if (!dentro(x, y))
         return 0;
     return paredes_[x][y] & 0x0F;
+}
+
+bool Labirinto::avancar()
+{
+    if (temParede(x_, y_, orientacao_))
+        return false;
+    x_ += dx(orientacao_);
+    y_ += dy(orientacao_);
+    marcarVisitada(x_, y_);
+    return true;
+}
+
+void Labirinto::girar(Direcao nova) { orientacao_ = nova; }
+
+void Labirinto::marcarVisitada(uint8_t x, uint8_t y)
+{
+    if (dentro(x, y))
+        visitada_[x][y] = true;
+}
+
+bool Labirinto::visitada(uint8_t x, uint8_t y) const
+{
+    return dentro(x, y) && visitada_[x][y];
 }
 
 bool Labirinto::dentro(int x, int y) const

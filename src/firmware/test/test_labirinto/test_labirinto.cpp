@@ -122,6 +122,71 @@ void test_mascara_do_contrato()
     TEST_ASSERT_EQUAL_UINT8(SUL | OESTE, lab.paredesDe(0, 0)); // canto da largada
 }
 
+void test_comeca_na_largada_virado_para_o_norte()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
+    TEST_ASSERT_EQUAL(NORTE, lab.orientacao());
+    TEST_ASSERT_TRUE(lab.visitada(0, 0));
+    TEST_ASSERT_FALSE(lab.visitada(0, 1));
+}
+
+void test_avancar_atualiza_celula_e_marca_visitada()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    TEST_ASSERT_TRUE(lab.avancar());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(1, lab.y());
+    TEST_ASSERT_TRUE(lab.visitada(0, 1));
+}
+
+void test_avanco_bloqueado_por_parede_nao_move()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.marcarParede(0, 0, NORTE);
+    TEST_ASSERT_FALSE(lab.avancar());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
+}
+
+void test_avanco_bloqueado_pela_borda()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.girar(OESTE);
+    TEST_ASSERT_FALSE(lab.avancar());
+}
+
+void test_girar_troca_a_orientacao()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.girar(girarDireita(lab.orientacao()));
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacao());
+    TEST_ASSERT_EQUAL_CHAR('L', letra(lab.orientacao()));
+}
+
+// CT-SE10: a sequência de células e orientações bate com o percurso feito.
+void test_percurso_registra_celula_e_orientacao()
+{
+    Labirinto lab;
+    lab.iniciar(4, 4);
+    lab.girar(LESTE);
+    lab.avancar(); // (1,0)
+    lab.avancar(); // (2,0)
+    lab.girar(NORTE);
+    lab.avancar(); // (2,1)
+    TEST_ASSERT_EQUAL_UINT8(2, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(1, lab.y());
+    TEST_ASSERT_EQUAL(NORTE, lab.orientacao());
+    TEST_ASSERT_TRUE(lab.visitada(1, 0));
+    TEST_ASSERT_FALSE(lab.visitada(1, 1)); // não passou por ali
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -137,6 +202,12 @@ int main()
     RUN_TEST(test_borda_nao_pode_ser_aberta);
     RUN_TEST(test_coordenada_fora_do_labirinto_e_ignorada);
     RUN_TEST(test_mascara_do_contrato);
+    RUN_TEST(test_comeca_na_largada_virado_para_o_norte);
+    RUN_TEST(test_avancar_atualiza_celula_e_marca_visitada);
+    RUN_TEST(test_avanco_bloqueado_por_parede_nao_move);
+    RUN_TEST(test_avanco_bloqueado_pela_borda);
+    RUN_TEST(test_girar_troca_a_orientacao);
+    RUN_TEST(test_percurso_registra_celula_e_orientacao);
 
     return UNITY_END();
 }

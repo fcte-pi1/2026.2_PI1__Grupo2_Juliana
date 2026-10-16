@@ -21,6 +21,15 @@ public:
     uint8_t largura() const { return largura_; }
     uint8_t altura() const { return altura_; }
 
+    // Pose do robô
+    bool avancar(); // anda uma célula na orientação atual; false se houver parede
+    void girar(Direcao nova);
+    uint8_t x() const { return x_; }
+    uint8_t y() const { return y_; }
+    Direcao orientacao() const { return orientacao_; }
+    void marcarVisitada(uint8_t x, uint8_t y);
+    bool visitada(uint8_t x, uint8_t y) const;
+
 private:
     bool dentro(int x, int y) const;
     void gravar(uint8_t x, uint8_t y, Direcao d, bool parede);
@@ -30,4 +39,8 @@ private:
     uint8_t paredes_[MAX_LARG][MAX_ALT];
     uint8_t largura_ = 0;
     uint8_t altura_ = 0;
+    bool visitada_[MAX_LARG][MAX_ALT];
+    uint8_t x_ = 0;
+    uint8_t y_ = 0;
+    Direcao orientacao_ = NORTE;
 };
