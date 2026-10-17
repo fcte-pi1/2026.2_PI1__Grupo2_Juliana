@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import './MazeMap.css'
 
 const TAMANHO_CELULA = 40
@@ -25,10 +25,7 @@ export default function MazeMap({
   style,
 }) {
   const id = useId()
-
-  if (!Number.isInteger(largura) || largura < 1 || !Number.isInteger(altura) || altura < 1) {
-    return <p role="status">Informe largura e altura inteiras maiores que zero.</p>
-  }
+  const dimensoesValidas = [4, 8, 12].includes(largura) && altura === 4
 
   const dentroDoMapa = (x, y) => (
     Number.isInteger(x) && Number.isInteger(y)
@@ -41,8 +38,8 @@ export default function MazeMap({
 
   for (const [chave, celula] of entradas) {
     const coordenadas = chave === null ? [] : chave.split(',').map(Number)
-    const x = celula?.x ?? celula?.pos_x ?? coordenadas[0]
-    const y = celula?.y ?? celula?.pos_y ?? coordenadas[1]
+    const x = celula?.pos_x ?? coordenadas[0]
+    const y = celula?.pos_y ?? coordenadas[1]
     const paredes = typeof celula === 'number' ? celula : celula?.paredes
 
     if (dentroDoMapa(x, y) && Number.isInteger(paredes) && paredes >= 0 && paredes <= 15) {
@@ -50,10 +47,46 @@ export default function MazeMap({
     }
   }
 
-  const roboX = roboPos?.x ?? roboPos?.pos_x
-  const roboY = roboPos?.y ?? roboPos?.pos_y
+  const roboX = roboPos?.pos_x
+  const roboY = roboPos?.pos_y
+  const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
-  const mostrarRobo = dentroDoMapa(roboX, roboY) && Boolean(direcao)
+  const mostrarRobo = posicaoValida && Boolean(direcao)
+  const mapaVazio = mapa.size === 0
+  const [historico, setHistorico] = useState(() => ({
+    largura, altura, roboX, roboY, mapaVazio,
+    pontos: dimensoesValidas && !mapaVazio && posicaoValida ? [{ pos_x: roboX, pos_y: roboY }] : [],
+  }))
+
+  // A Dashboard limpa as células no evento inicio. Não reutiliza a posição
+  // antiga nesse intervalo e reinicia também ao trocar o tamanho do labirinto.
+  const mesmasDimensoes = Object.is(historico.largura, largura) && Object.is(historico.altura, altura)
+  if (!mesmasDimensoes || !Object.is(historico.roboX, roboX)
+    || !Object.is(historico.roboY, roboY) || historico.mapaVazio !== mapaVazio) {
+    let pontos = mesmasDimensoes ? historico.pontos : []
+    if (!dimensoesValidas || mapaVazio) {
+      pontos = []
+    } else if (posicaoValida) {
+      pontos = [...pontos, { pos_x: roboX, pos_y: roboY }]
+    } else if (pontos.length && pontos.at(-1) !== null) {
+      // Uma posição inválida interrompe o traçado entre pacotes válidos.
+      pontos = [...pontos, null]
+    }
+    setHistorico({ largura, altura, roboX, roboY, mapaVazio, pontos })
+  }
+
+  if (!dimensoesValidas) {
+    return <p role="status">Informe um tamanho previsto no TAP: 4×4, 8×4 ou 12×4 (largura × altura).</p>
+  }
+
+  const pontosTrajeto = historico.largura === largura && historico.altura === altura && !mapaVazio
+    ? historico.pontos
+    : []
+  const caminho = pontosTrajeto.map((ponto, indice) => {
+    if (ponto === null) return ''
+    const comando = indice > 0 && pontosTrajeto[indice - 1] !== null ? 'L' : 'M'
+    return `${comando} ${(ponto.pos_x + 0.5) * TAMANHO_CELULA} ${(altura - ponto.pos_y - 0.5) * TAMANHO_CELULA}`
+  }).filter(Boolean).join(' ')
   const posicao = mostrarRobo ? `Robô em (${roboX}, ${roboY}), voltado para ${direcao.nome}.` : 'Sem posição válida do robô.'
   const larguraMapa = largura * TAMANHO_CELULA
   const alturaMapa = altura * TAMANHO_CELULA
@@ -72,7 +105,7 @@ export default function MazeMap({
       >
         <title id={`${id}-titulo`}>Labirinto de {largura} colunas por {altura} linhas</title>
         <desc id={`${id}-descricao`}>
-          Origem (0, 0) no canto inferior esquerdo. Norte para cima. {mapa.size} de {largura * altura} células observadas. {posicao}
+          Origem (0, 0) no canto inferior esquerdo. Norte para cima. {mapa.size} de {largura * altura} células observadas. Objetivo em ({largura - 1}, {altura - 1}). {posicao}
         </desc>
 
         {colunas.map((x) => (
@@ -101,6 +134,24 @@ export default function MazeMap({
               <title>Célula ({x}, {y}): {mapa.has(`${x},${y}`) ? `máscara ${mapa.get(`${x},${y}`)}` : 'não observada'}</title>
             </rect>
           )))}
+
+          <rect
+            className="maze-map__goal"
+            data-objetivo={`${largura - 1},${altura - 1}`}
+            x={(largura - 1) * TAMANHO_CELULA + 5}
+            y={5}
+            width={TAMANHO_CELULA - 10}
+            height={TAMANHO_CELULA - 10}
+            rx={4}
+          >
+            <title>Objetivo ({largura - 1}, {altura - 1})</title>
+          </rect>
+
+          {caminho && (
+            <path className="maze-map__trail" data-trajeto="true" d={caminho}>
+              <title>Trajeto percorrido pelo robô</title>
+            </path>
+          )}
 
           {linhas.flatMap((y, linha) => colunas.map((x) => (
             <g key={`${x},${y}`} transform={`translate(${x * TAMANHO_CELULA} ${linha * TAMANHO_CELULA})`}>
@@ -131,6 +182,8 @@ export default function MazeMap({
           <span><i className="maze-map__key maze-map__key--observed" aria-hidden="true" />Observada</span>
           <span><i className="maze-map__key" aria-hidden="true" />Não observada</span>
           <span><i className="maze-map__key maze-map__key--wall" aria-hidden="true" />Parede confirmada</span>
+          <span><i className="maze-map__key maze-map__key--trail" aria-hidden="true" />Trajeto</span>
+          <span><i className="maze-map__key maze-map__key--goal" aria-hidden="true" />Objetivo</span>
         </span>
       </figcaption>
     </figure>
