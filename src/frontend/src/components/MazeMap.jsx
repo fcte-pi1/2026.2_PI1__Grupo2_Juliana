@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId } from 'react'
 import './MazeMap.css'
 
 const TAMANHO_CELULA = 40
@@ -21,11 +21,15 @@ export default function MazeMap({
   altura = 4,
   celulas = [],
   roboPos = null,
+  trajeto = [],
   className = '',
   style,
 }) {
   const id = useId()
-  const dimensoesValidas = [4, 8, 12].includes(largura) && altura === 4
+
+  if (![4, 8, 12].includes(largura) || altura !== 4) {
+    return <p role="status">Informe um tamanho previsto no TAP: 4×4, 8×4 ou 12×4 (largura × altura).</p>
+  }
 
   const dentroDoMapa = (x, y) => (
     Number.isInteger(x) && Number.isInteger(y)
@@ -52,39 +56,11 @@ export default function MazeMap({
   const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
   const mostrarRobo = posicaoValida && Boolean(direcao)
-  const mapaVazio = mapa.size === 0
-  const [historico, setHistorico] = useState(() => ({
-    largura, altura, roboX, roboY, mapaVazio,
-    pontos: dimensoesValidas && !mapaVazio && posicaoValida ? [{ pos_x: roboX, pos_y: roboY }] : [],
-  }))
-
-  // A Dashboard limpa as células no evento inicio. Não reutiliza a posição
-  // antiga nesse intervalo e reinicia também ao trocar o tamanho do labirinto.
-  const mesmasDimensoes = Object.is(historico.largura, largura) && Object.is(historico.altura, altura)
-  if (!mesmasDimensoes || !Object.is(historico.roboX, roboX)
-    || !Object.is(historico.roboY, roboY) || historico.mapaVazio !== mapaVazio) {
-    let pontos = mesmasDimensoes ? historico.pontos : []
-    if (!dimensoesValidas || mapaVazio) {
-      pontos = []
-    } else if (posicaoValida) {
-      pontos = [...pontos, { pos_x: roboX, pos_y: roboY }]
-    } else if (pontos.length && pontos.at(-1) !== null) {
-      // Uma posição inválida interrompe o traçado entre pacotes válidos.
-      pontos = [...pontos, null]
-    }
-    setHistorico({ largura, altura, roboX, roboY, mapaVazio, pontos })
-  }
-
-  if (!dimensoesValidas) {
-    return <p role="status">Informe um tamanho previsto no TAP: 4×4, 8×4 ou 12×4 (largura × altura).</p>
-  }
-
-  const pontosTrajeto = historico.largura === largura && historico.altura === altura && !mapaVazio
-    ? historico.pontos
-    : []
-  const caminho = pontosTrajeto.map((ponto, indice) => {
-    if (ponto === null) return ''
-    const comando = indice > 0 && pontosTrajeto[indice - 1] !== null ? 'L' : 'M'
+  // A Dashboard mantém o histórico; posições inválidas apenas interrompem a linha.
+  const caminho = trajeto.map((ponto, indice) => {
+    if (!dentroDoMapa(ponto?.pos_x, ponto?.pos_y)) return ''
+    const anterior = trajeto[indice - 1]
+    const comando = dentroDoMapa(anterior?.pos_x, anterior?.pos_y) ? 'L' : 'M'
     return `${comando} ${(ponto.pos_x + 0.5) * TAMANHO_CELULA} ${(altura - ponto.pos_y - 0.5) * TAMANHO_CELULA}`
   }).filter(Boolean).join(' ')
   const posicao = mostrarRobo ? `Robô em (${roboX}, ${roboY}), voltado para ${direcao.nome}.` : 'Sem posição válida do robô.'
