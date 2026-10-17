@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MazeMap from './components/MazeMap.jsx'
 
 const LIMIAR_BATERIA_CRITICA_V = 7.0
@@ -10,12 +10,8 @@ const TIMEOUT_OFFLINE_MS = 3000
 const LABIRINTOS_OFICIAIS = [
   { largura: 4, altura: 4 },
   { largura: 8, altura: 4 },
-  { largura: 4, altura: 8 },
   { largura: 12, altura: 4 },
-  { largura: 4, altura: 12 },
 ]
-
-const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
 const NOMES_ORIENTACAO = {
   N: { nome: 'Norte', seta: '↑' },
@@ -55,13 +51,25 @@ function ehLabirintoOficial(largura, altura) {
 }
 
 /**
- * Extrai dimensões do labirinto do pacote/evento caso correspondam a um dos 3 tamanhos oficiais (4x4, 8x4, 12x4).
+ * Extrai dimensões do labirinto (largura_celula/altura_celula ou fallback largura/altura)
+ * de qualquer pacote/evento caso correspondam a um dos 3 tamanhos oficiais (4x4, 8x4, 12x4).
  */
 function resolverDimensoesLabirinto(dados, dimensoesAtuais) {
-  if (typeof dados.largura === 'number' && typeof dados.altura === 'number') {
-    if (ehLabirintoOficial(dados.largura, dados.altura)) {
-      return { largura: dados.largura, altura: dados.altura }
-    }
+  const larguraCand =
+    typeof dados.largura_celula === 'number'
+      ? dados.largura_celula
+      : typeof dados.largura === 'number'
+        ? dados.largura
+        : null
+  const alturaCand =
+    typeof dados.altura_celula === 'number'
+      ? dados.altura_celula
+      : typeof dados.altura === 'number'
+        ? dados.altura
+        : null
+
+  if (larguraCand !== null && alturaCand !== null && ehLabirintoOficial(larguraCand, alturaCand)) {
+    return { largura: larguraCand, altura: alturaCand }
   }
   if (typeof dados.labirinto === 'string') {
     const partes = dados.labirinto
@@ -225,40 +233,8 @@ function formatarHorario(timestampMs) {
   return `${h}:${m}:${s}`
 }
 
-/**
- * Formata a data de um timestamp no padrão "DD mmm AAAA" ou "--" quando ausente.
- */
-function formatarDataCurta(timestampMs) {
-  if (!timestampMs) {
-    return '--'
-  }
-  const data = new Date(timestampMs)
-  const dia = String(data.getDate()).padStart(2, '0')
-  const mes = MESES_CURTOS[data.getMonth()]
-  const ano = data.getFullYear()
-  return `${dia} ${mes} ${ano}`
-}
-
-/**
- * Cria a estrutura de células pronta tanto para iteração como Array
- * quanto para indexação por coordenada "x,y" pelo componente MazeMap.jsx.
- */
-function construirPropCelulas(mapaCelulas) {
-  const lista = Object.values(mapaCelulas)
-  for (const celula of lista) {
-    Object.defineProperty(lista, `${celula.pos_x},${celula.pos_y}`, {
-      value: celula,
-      enumerable: false,
-      configurable: true,
-    })
-  }
-  return lista
-}
-
 export default function Dashboard({
   wsUrl = import.meta.env?.VITE_WS_URL || 'ws://localhost:8000/ws/painel',
-  larguraInicial = 4,
-  alturaInicial = 4,
 }) {
   const [abaAtiva, setAbaAtiva] = useState('monitoramento')
   const [conectadoWs, setConectadoWs] = useState(false)
@@ -275,15 +251,10 @@ export default function Dashboard({
     pos_x: 0,
     pos_y: 0,
     orientacao: 'N',
-    x: 0,
-    y: 0,
   })
   const [mapaCelulas, setMapaCelulas] = useState({})
-  const [dimensoesLabirinto, setDimensoesLabirinto] = useState(() =>
-    ehLabirintoOficial(larguraInicial, alturaInicial)
-      ? { largura: larguraInicial, altura: alturaInicial }
-      : { largura: 4, altura: 4 },
-  )
+  const [trajeto, setTrajeto] = useState([])
+  const [dimensoesLabirinto, setDimensoesLabirinto] = useState(null)
 
   const [tensaoBateria, setTensaoBateria] = useState(8.4)
   const [tensaoInicial, setTensaoInicial] = useState(null)
@@ -294,12 +265,8 @@ export default function Dashboard({
   const [qtdLeiturasTel, setQtdLeiturasTel] = useState(0)
 
   const [valorFlood, setValorFlood] = useState(null)
-  const [recalculosRota, setRecalculosRota] = useState(null)
-  const [frequenciaHz, setFrequenciaHz] = useState(null)
-  const [limiteTempoMs, setLimiteTempoMs] = useState(null)
   const [estadoExecucao, setEstadoExecucao] = useState('parado')
 
-  const [latenciaMs, setLatenciaMs] = useState(null)
   const [ultimoPacoteEm, setUltimoPacoteEm] = useState(null)
   const [segundosDesdeUltimoPacote, setSegundosDesdeUltimoPacote] = useState(0)
   const [eventosRecentes, setEventosRecentes] = useState([
@@ -314,9 +281,6 @@ export default function Dashboard({
   const ultimoPacoteRef = useRef(null)
   const roboOnlineRef = useRef(false)
   const celulasVistasRef = useRef(new Set())
-
-  // Prepara a prop celulas compatível com Array e mapa indexado para o MazeMap.jsx
-  const celulas = useMemo(() => construirPropCelulas(mapaCelulas), [mapaCelulas])
 
   // Monitora o tempo desde o último pacote para marcar Offline após 3 s sem mensagens (CT-S06)
   useEffect(() => {
@@ -384,31 +348,8 @@ export default function Dashboard({
         setCorridaAtual(dados.corrida)
       }
 
+      // Lê largura_celula e altura_celula (ou fallback largura/altura) em todo pacote válido
       setDimensoesLabirinto((atual) => resolverDimensoesLabirinto(dados, atual))
-
-      if (typeof dados.recalculos === 'number' && !Number.isNaN(dados.recalculos)) {
-        setRecalculosRota(dados.recalculos)
-      }
-      if (typeof dados.frequencia_hz === 'number' && !Number.isNaN(dados.frequencia_hz)) {
-        setFrequenciaHz(dados.frequencia_hz)
-      }
-      if (typeof dados.limite_tempo_ms === 'number' && !Number.isNaN(dados.limite_tempo_ms)) {
-        setLimiteTempoMs(dados.limite_tempo_ms)
-      }
-
-      // Cálculo de latência apenas quando o pacote traz o timestamp real do servidor
-      const timestampServidor =
-        typeof dados.timestamp_servidor_ms === 'number' && !Number.isNaN(dados.timestamp_servidor_ms)
-          ? dados.timestamp_servidor_ms
-          : typeof dados.enviado_em_ms === 'number' && !Number.isNaN(dados.enviado_em_ms)
-            ? dados.enviado_em_ms
-            : null
-
-      if (timestampServidor !== null) {
-        setLatenciaMs(Math.max(0, Math.round(recebidoEm - timestampServidor)))
-      } else {
-        setLatenciaMs(null)
-      }
 
       setTempoMs(dados.tempo_ms)
 
@@ -434,10 +375,20 @@ export default function Dashboard({
           pos_x: dados.pos_x,
           pos_y: dados.pos_y,
           orientacao: dados.orientacao,
-          x: dados.pos_x,
-          y: dados.pos_y,
         }
         setRoboPos(novaPos)
+
+        setTrajeto((trajetoAnterior) => {
+          const ultimoPonto = trajetoAnterior[trajetoAnterior.length - 1]
+          if (
+            ultimoPonto &&
+            ultimoPonto.pos_x === dados.pos_x &&
+            ultimoPonto.pos_y === dados.pos_y
+          ) {
+            return trajetoAnterior
+          }
+          return [...trajetoAnterior, { pos_x: dados.pos_x, pos_y: dados.pos_y }]
+        })
 
         const chaveCelula = `${dados.pos_x},${dados.pos_y}`
         const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
@@ -457,8 +408,6 @@ export default function Dashboard({
             valor_flood: dados.valor_flood ?? null,
             orientacao: dados.orientacao,
             visitada: true,
-            x: dados.pos_x,
-            y: dados.pos_y,
           },
         }))
       } else if (dados.t === 'evt') {
@@ -469,9 +418,9 @@ export default function Dashboard({
           setTempoConclusaoS(null)
           setConsumoMedioMa(null)
           setMapaCelulas({})
+          setTrajeto([])
           setSomaVelocidades(0)
           setQtdLeiturasTel(0)
-          setRecalculosRota(null)
           setEstadoExecucao('explorando')
           if (typeof dados.tensao_bateria === 'number') {
             setTensaoInicial(dados.tensao_bateria)
@@ -565,10 +514,20 @@ export default function Dashboard({
   const alertaBateriaCritica = bateriaCriticaAtiva || tensaoBateria < LIMIAR_BATERIA_CRITICA_V
 
   const velocidadeMedia = qtdLeiturasTel > 0 ? somaVelocidades / qtdLeiturasTel : 0
-  const totalCelulasLabirinto = dimensoesLabirinto.largura * dimensoesLabirinto.altura
-  const qtdCelulasMapeadas = celulas.length
-  const coberturaPercentual =
-    totalCelulasLabirinto > 0 ? ((qtdCelulasMapeadas / totalCelulasLabirinto) * 100).toFixed(1).replace('.', ',') : '0,0'
+  const qtdCelulasMapeadas = Object.keys(mapaCelulas).length
+  const totalCelulasLabirinto = dimensoesLabirinto
+    ? dimensoesLabirinto.largura * dimensoesLabirinto.altura
+    : null
+  const textoDimensoesLabirinto = dimensoesLabirinto
+    ? `${dimensoesLabirinto.largura} × ${dimensoesLabirinto.altura}`
+    : '--'
+  const textoSubtituloMapa = dimensoesLabirinto
+    ? `Leitura espacial • ${dimensoesLabirinto.altura} linhas × ${dimensoesLabirinto.largura} colunas`
+    : 'Leitura espacial • aguardando dimensões'
+  const textoCobertura =
+    totalCelulasLabirinto && totalCelulasLabirinto > 0
+      ? `${((qtdCelulasMapeadas / totalCelulasLabirinto) * 100).toFixed(1).replace('.', ',')}%`
+      : '--'
 
   const codigoCelulaAtual = formatarCodigoCelula(roboPos.pos_x, roboPos.pos_y)
   const infoOrientacao = NOMES_ORIENTACAO[roboPos.orientacao] || NOMES_ORIENTACAO.N
@@ -699,12 +658,6 @@ export default function Dashboard({
                 Atualizado às {formatarHorario(ultimoPacoteEm)}
               </span>
             </div>
-            {abaAtiva === 'dashboard' && (
-              <div className="pilula-data-calendario" data-testid="data-calendario">
-                <span aria-hidden="true">📅</span>
-                <span>{formatarDataCurta(ultimoPacoteEm)}</span>
-              </div>
-            )}
           </div>
         </header>
 
@@ -791,8 +744,8 @@ export default function Dashboard({
                 </div>
                 <div className="card-topo-conteudo">
                   <span className="card-topo-rotulo">Labirinto Atual</span>
-                  <strong className="card-topo-valor">
-                    {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
+                  <strong className="card-topo-valor" data-testid="valor-labirinto-visao-geral">
+                    {textoDimensoesLabirinto}
                   </strong>
                   <span className="card-topo-sub">
                     <span className="ponto-inline neutro" /> Tentativa {corridaAtual}
@@ -816,8 +769,8 @@ export default function Dashboard({
                 <div className="grade-metricas-ultima-execucao">
                   <div className="metrica-bloco">
                     <span className="rotulo-caixa-alta">TIPO DO LABIRINTO</span>
-                    <strong className="metrica-valor">
-                      {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
+                    <strong className="metrica-valor" data-testid="tipo-labirinto-ultima-execucao">
+                      {textoDimensoesLabirinto}
                     </strong>
                   </div>
 
@@ -976,8 +929,8 @@ export default function Dashboard({
                 </div>
                 <div className="card-topo-conteudo">
                   <span className="card-topo-rotulo">LABIRINTO</span>
-                  <strong className="card-topo-valor">
-                    {dimensoesLabirinto.largura} × {dimensoesLabirinto.altura}
+                  <strong className="card-topo-valor" data-testid="valor-labirinto-monitoramento">
+                    {textoDimensoesLabirinto}
                   </strong>
                   <span className="card-topo-sub">Tentativa {corridaAtual}</span>
                 </div>
@@ -1005,9 +958,6 @@ export default function Dashboard({
                   <strong className="card-topo-valor" data-testid="valor-cronometro">
                     {formatarCronometro(tempoMs)}
                   </strong>
-                  <span className="card-topo-sub" data-testid="limite-tempo">
-                    {limiteTempoMs !== null ? `Limite: ${formatarCronometro(limiteTempoMs)}` : 'Limite: --'}
-                  </span>
                 </div>
               </article>
             </section>
@@ -1019,21 +969,9 @@ export default function Dashboard({
                 <div className="card-mapa-cabecalho">
                   <div>
                     <h2 className="card-titulo">Mapa do Labirinto</h2>
-                    <p className="card-subtitulo">
-                      Leitura espacial • {dimensoesLabirinto.altura} linhas × {dimensoesLabirinto.largura} colunas
+                    <p className="card-subtitulo" data-testid="subtitulo-mapa">
+                      {textoSubtituloMapa}
                     </p>
-                  </div>
-
-                  <div className="legenda-mapa" aria-label="Legenda do mapa" data-testid="legenda-mapa">
-                    <span className="item-legenda">
-                      <i className="icone-legenda robo" /> Robô
-                    </span>
-                    <span className="item-legenda">
-                      <i className="icone-legenda explorada" /> Área explorada
-                    </span>
-                    <span className="item-legenda">
-                      <i className="icone-legenda parede" /> Parede confirmada
-                    </span>
                   </div>
                 </div>
 
@@ -1041,16 +979,17 @@ export default function Dashboard({
                   <div
                     className="container-maze-map"
                     data-testid="espaco-mapa-labirinto"
-                    data-celulas-count={celulas.length}
+                    data-celulas-count={qtdCelulasMapeadas}
                     data-robo-pos={`${roboPos.pos_x},${roboPos.pos_y},${roboPos.orientacao}`}
-                    data-robo-keys={Object.keys(roboPos).slice(0, 2).join(',')}
-                    data-celula-keys={celulas[0] ? Object.keys(celulas[0]).slice(0, 2).join(',') : ''}
+                    data-trajeto-count={trajeto.length}
+                    data-trajeto={trajeto.map((p) => `${p.pos_x},${p.pos_y}`).join(';')}
                   >
                     <MazeMap
-                      largura={dimensoesLabirinto.largura}
-                      altura={dimensoesLabirinto.altura}
-                      celulas={celulas}
+                      largura={dimensoesLabirinto?.largura ?? 4}
+                      altura={dimensoesLabirinto?.altura ?? 4}
+                      celulas={mapaCelulas}
                       roboPos={roboPos}
+                      trajeto={trajeto}
                     />
                   </div>
 
@@ -1074,13 +1013,15 @@ export default function Dashboard({
                       <div className="linha-metrica-mapa">
                         <span>Células mapeadas</span>
                         <strong data-testid="celulas-mapeadas-total">
-                          {qtdCelulasMapeadas} / {totalCelulasLabirinto}
+                          {totalCelulasLabirinto !== null
+                            ? `${qtdCelulasMapeadas} / ${totalCelulasLabirinto}`
+                            : `${qtdCelulasMapeadas} / --`}
                         </strong>
                       </div>
                       <div className="linha-metrica-mapa">
                         <span>Cobertura</span>
                         <strong className="texto-petroleo" data-testid="cobertura-percentual">
-                          {coberturaPercentual}%
+                          {textoCobertura}
                         </strong>
                       </div>
                     </div>
@@ -1094,12 +1035,6 @@ export default function Dashboard({
                         <span>Distância ao objetivo</span>
                         <strong data-testid="distancia-flood">
                           {valorFlood !== null ? `${valorFlood} células` : '--'}
-                        </strong>
-                      </div>
-                      <div className="linha-metrica-mapa">
-                        <span>Recalculos</span>
-                        <strong data-testid="recalculos-rota">
-                          {recalculosRota !== null ? String(recalculosRota).padStart(2, '0') : '--'}
                         </strong>
                       </div>
                       <div className="pilula-caminho-disponivel">
@@ -1125,10 +1060,6 @@ export default function Dashboard({
                   <h2 className="titulo-coluna-telemetria">
                     <span className="icone-pulso" aria-hidden="true">∿</span> Telemetria
                   </h2>
-                  <span className="taxa-hz" data-testid="taxa-telemetria-hz">
-                    <span className={`ponto-inline ${frequenciaHz !== null ? 'verde' : 'neutro'}`} />{' '}
-                    {frequenciaHz !== null ? `${frequenciaHz} Hz` : '--'}
-                  </span>
                 </div>
 
                 {/* Bateria */}
@@ -1252,12 +1183,6 @@ export default function Dashboard({
                   </div>
 
                   <div className="comunicacao-rodape">
-                    <span>
-                      Latência{' '}
-                      <strong data-testid="latencia-ms">
-                        {latenciaMs !== null ? `${latenciaMs} ms` : '--'}
-                      </strong>
-                    </span>
                     <span>
                       Último pacote{' '}
                       <strong data-testid="ultimo-pacote-tempo">
