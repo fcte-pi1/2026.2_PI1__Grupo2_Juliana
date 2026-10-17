@@ -8,8 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/main.tsx', 'src/**/*.test.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx,js,jsx}'],
+      exclude: ['src/main.tsx', 'src/**/*.test.{ts,tsx,js,jsx}'],
       reporter: ['text', 'json-summary'],
     },
   },

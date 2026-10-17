@@ -1,5 +1,7 @@
+import Dashboard from './Dashboard.jsx'
+
 function App() {
-  return <h1>Micromouse - Telemetria</h1>
+  return <Dashboard />
 }
 
 export default App
