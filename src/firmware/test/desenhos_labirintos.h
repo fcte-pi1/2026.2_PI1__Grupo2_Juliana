@@ -77,6 +77,50 @@ static const char DUAS_ROTAS_ASCII[] = R"MAZE(+---+---+---+---+
 +---+---+---+---+
 )MAZE";
 
+static const char SAIDA_DIREITA_ASCII[] = R"MAZE(+---+---+---+---+
+|               |
++   +   +   +   +
+|               |
++   +   +   +   +
+|               |
++---+   +   +   +
+|               |
++---+---+---+---+
+)MAZE";
+
+static const char ARMADILHA_4X4_ASCII[] = R"MAZE(+---+---+---+---+
+|   |           |
++   +   +   +   +
+|   |           |
++   +   +   +   +
+|   |           |
++   +   +   +   +
+|               |
++---+---+---+---+
+)MAZE";
+
+static const char ARMADILHA_8X4_ASCII[] = R"MAZE(+---+---+---+---+---+---+---+---+
+|                           |   |
++   +---+---+---+---+---+---+   +
+|                               |
++   +   +   +   +   +   +   +   +
+|                               |
++   +   +   +   +   +   +   +   +
+|                               |
++---+---+---+---+---+---+---+---+
+)MAZE";
+
+static const char ARMADILHA_12X4_ASCII[] = R"MAZE(+---+---+---+---+---+---+---+---+---+---+---+---+
+|                                           |   |
++   +---+---+---+---+---+---+---+---+---+---+   +
+|                                           |   |
++   +   +---+---+---+---+---+---+---+---+---+   +
+|                                               |
++   +   +   +   +   +   +   +   +   +   +   +   +
+|                                               |
++---+---+---+---+---+---+---+---+---+---+---+---+
+)MAZE";
+
 static const LabirintoTeste LABIRINTOS_TESTE[] = {
     {"MISTO_4X4", 4, 4, 3, 3, MISTO_4X4_ASCII},
     {"BARREIRAS_8X4", 8, 4, 7, 3, BARREIRAS_8X4_ASCII},
@@ -84,6 +128,10 @@ static const LabirintoTeste LABIRINTOS_TESTE[] = {
     {"CORREDOR_RETO", 4, 4, 3, 0, CORREDOR_RETO_ASCII},
     {"BECO_LARGADA", 4, 4, 3, 3, BECO_LARGADA_ASCII},
     {"DUAS_ROTAS", 4, 4, 3, 3, DUAS_ROTAS_ASCII},
+    {"SAIDA_DIREITA", 4, 4, 3, 3, SAIDA_DIREITA_ASCII},
+    {"ARMADILHA_4X4", 4, 4, 3, 3, ARMADILHA_4X4_ASCII},
+    {"ARMADILHA_8X4", 8, 4, 7, 3, ARMADILHA_8X4_ASCII},
+    {"ARMADILHA_12X4", 12, 4, 11, 3, ARMADILHA_12X4_ASCII},
 };
 static const unsigned QUANTIDADE_LABIRINTOS_TESTE =
     sizeof(LABIRINTOS_TESTE) / sizeof(LABIRINTOS_TESTE[0]);
