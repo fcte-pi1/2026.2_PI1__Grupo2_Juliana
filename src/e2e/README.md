@@ -47,6 +47,31 @@ Teste automatizado só ajuda se o grupo confiar nele. Um teste que às vezes fal
 7. **Prefira o labirinto 4x4.** Na velocidade real, uma corrida 4x4 leva ~11 s; 8x4 e 12x4 só no caso que pede.
 8. **Rodou verde uma vez não basta.** Antes do PR, rode o teste novo algumas vezes seguidas: `npx playwright test -g "nome do teste" --repeat-each 5`.
 
+## Casos automatizados
+
+| Caso | Arquivo | Situação |
+| :--- | :--- | :--- |
+| CT-S01 Recepção de telemetria | `tests/ct-s01.spec.ts` | ✅ |
+| CT-S02 Pacote válido | `tests/ct-s02.spec.ts` | ✅ ("nenhum erro em Logs" conferido no banco até a tela existir) |
+| CT-S03 Pacote corrompido | `tests/ct-s03.spec.ts` | ✅ backend e painel · ⏸️ tela Logs e Eventos (aguarda 3.8.7) |
+| CT-S04 Tempo real | `tests/ct-s04.spec.ts` | ✅ |
+| CT-S05 Bateria crítica | `tests/ct-s05.spec.ts` | ✅ contra o painel atual (3.8.4 ainda aberta) |
+| CT-S06 Perda de conexão | `tests/ct-s06.spec.ts` | ✅ contra o painel atual (3.8.4 ainda aberta) |
+| CT-S07 a CT-S14 | — | Aguardam 3.8.2, 3.8.5 e 3.8.7 |
+
+Casos marcados com `test.fixme` aparecem como *skipped*: estão previstos, mas a tela ainda não existe.
+
+## Evidências para o documento 7.4
+
+Cada caso anexa ao relatório do Playwright as evidências pedidas no roteiro (prints, CSV das consultas ao banco, log do simulador, latências). Para gravá-las também em `docs/evidencias/<caso>/`, no padrão `<caso>_<AAAA-MM-DD>_exec<n>_<nome>.<ext>`:
+
+```bash
+E2E_EVIDENCIAS=1 npx playwright test          # Linux/macOS/Git Bash
+$env:E2E_EVIDENCIAS=1; npx playwright test     # PowerShell
+```
+
+Sem a variável nada é escrito em `docs/`, para o CI e as execuções do dia a dia não sujarem o repositório.
+
 ## Estrutura
 
 | Caminho | Conteúdo |
@@ -56,8 +81,16 @@ Teste automatizado só ajuda se o grupo confiar nele. Um teste que às vezes fal
 | `helpers/ambiente.ts` | Caminhos, bancos, portas e Python usado |
 | `helpers/teste.ts` | `test` e `expect` com o banco limpo antes de cada caso |
 | `helpers/banco.ts` | `limparBanco`, `criarCorrida` e `consultar` (SQL para conferir o que foi gravado) |
-| `helpers/simulador.ts` | `rodarSimulador(args)`: roda o `simulador.py` e conta mensagens, acks e falhas |
+| `helpers/simulador.ts` | `rodarSimulador(args)`: roda o `simulador.py` (corrida inteira, realista) e conta mensagens, acks e falhas |
+| `helpers/robo.ts` | `RoboFalso`: manda pacotes exatos pelo protocolo (com CRC) e espera o ack; `ouvirPainel` escuta o que o backend retransmite ao site |
+| `helpers/painel.ts` | `abrirPainel` (abre o site com o labirinto escolhido e espera conectar), `irPara(aba)`, `celulaDoMapa` |
+| `helpers/evidencia.ts` | `salvarEvidencia`, `capturarTela` e `csv` |
 | `tests/base.spec.ts` | Fumaça da infraestrutura (servidores no ar e simulador gravando no banco) |
+| `tests/ct-sNN.spec.ts` | Um arquivo por caso do roteiro; o título começa com o código (`CT-S01 - ...`) |
+
+**Simulador ou robô falso?** Use o `rodarSimulador` quando o caso é uma corrida inteira (taxa, perdas). Use o `RoboFalso` quando o caso precisa de pacotes exatos: valores conhecidos para comparar com a tela, pacotes inválidos específicos, pausas controladas.
+
+**Ack chega antes da tela.** O backend responde o ack ao robô e só depois retransmite ao painel. Depois de `robo.tel(...)`, espere o valor aparecer (`expect(...).toHaveText`) ou a mensagem chegar ao `ouvirPainel` (`expect.poll`) antes de conferir.
 
 `criarCorrida` grava a corrida direto no banco porque ainda não há rota para isso. Quando a 3.8.2 entrar, troca pela rota.
 
