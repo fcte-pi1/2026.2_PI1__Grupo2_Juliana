@@ -27,7 +27,7 @@ Os testes ficam em `tests/` e a cobertura do pacote `app` é mostrada ao final. 
 
 > **Atenção (Banco local):** Devido à restrição que permite apenas uma corrida `em_andamento` por vez (índice `uq_corrida_uma_em_andamento`), certifique-se de que não haja corridas abertas no seu banco local (deixadas por execuções manuais ou pelo simulador) antes de rodar o `pytest`, caso contrário os testes de restrição falharão. Se necessário, encerre-as ou limpe o banco antes da execução.
 
-## Consulta de logs (#222 — parte da Geovana)
+## Consulta de logs
 
 `GET /logs` retorna uma lista JSON, do evento mais recente ao mais antigo
 (ordem por ID). Os filtros opcionais podem ser combinados:
@@ -56,9 +56,27 @@ Descartes por quadro inválido usam o contexto já confirmado do socket, nunca
 o campo `corrida` de um quadro corrompido. Bateria crítica e reconexão mantêm
 o processamento já existente. Nenhum limite de bateria foi alterado aqui.
 
-O CSV da mesma issue continua sendo a parte da Letícia. Esta mudança não
-conclui a #222 inteira nem conecta a tela do frontend. Os testes novos ficam
-em `tests/test_logs.py` e exigem o mesmo PostgreSQL dos demais testes.
+## Exportação CSV
+
+`GET /exportacao/corridas.csv` baixa o arquivo `corridas.csv` (UTF-8, separado
+por vírgula). Os filtros opcionais podem ser combinados:
+
+| Parâmetro | Valores |
+| --- | --- |
+| `id_corrida` | ID do banco, inteiro positivo |
+| `id_labirinto` | ID do banco, inteiro positivo |
+
+Exemplo: `/exportacao/corridas.csv?id_labirinto=1`.
+
+Cada linha é uma leitura de telemetria, com os dados da corrida repetidos à
+esquerda: `id_corrida`, `labirinto`, `num_tentativa`, `num_corrida_robo`,
+`status`, `iniciado_em`, `tempo_conc_s`, `consumo_medio_ma`, `tempo_ms`,
+`recebido_em`, `pos_x`, `pos_y`, `orientacao`, `paredes`, `velocidade`,
+`tensao_bateria`, `valor_flood`. As linhas seguem a ordem da corrida e, dentro
+dela, de `tempo_ms`. Corrida sem leituras sai em uma linha só, com as colunas
+de leitura vazias. Valor nulo vira célula vazia. Sem resultados, o arquivo tem
+só o cabeçalho; parâmetros inválidos retornam HTTP 422. Os testes ficam em
+`tests/test_exportacao.py`.
 
 ## Como rodar o banco de dados
 
