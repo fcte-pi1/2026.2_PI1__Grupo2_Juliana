@@ -1,4 +1,4 @@
-"""RF20: logs persistidos e consultados em PostgreSQL, sem simular o banco."""
+"""Testes de persistência e consulta dos logs (RF20)."""
 
 from contextlib import contextmanager
 

@@ -1,4 +1,4 @@
-"""Registro de desconexão observado pelo backend (RF20-S / #222)."""
+"""Registro de desconexões do robô."""
 
 from sqlalchemy.orm import Session
 
@@ -6,7 +6,7 @@ from app.db.models import Corrida, LogEvento
 
 
 def registrar_desconexao(db: Session, id_corrida: int | None) -> None:
-    """Não atribuir uma conexão desconhecida à corrida que estiver ativa."""
+    """Registra a perda sem encerrar a corrida, permitindo reconexão."""
     if id_corrida is not None:
         corrida = db.get(Corrida, id_corrida)
         if corrida is None:

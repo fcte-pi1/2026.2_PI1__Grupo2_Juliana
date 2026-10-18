@@ -34,8 +34,7 @@ async def websocket_telemetria(websocket: WebSocket) -> None:
     except Exception:
         logger.exception("Erro inesperado no WebSocket de telemetria")
     finally:
-        # Uma tentativa por conexão encerrada, inclusive se send_text falhar.
-        # Não altera o status da corrida: o robô pode reconectar e reenviar.
+        # Registrar também quando a conexão falhar durante o envio do ACK.
         try:
             with session_scope() as db:
                 registrar_desconexao(db, contexto.id_corrida)

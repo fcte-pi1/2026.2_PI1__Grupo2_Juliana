@@ -1,4 +1,4 @@
-"""Consulta paginada de logs para o painel, sem mudanças no banco (#222)."""
+"""Consulta paginada de logs para o painel."""
 
 from datetime import datetime
 from typing import Literal

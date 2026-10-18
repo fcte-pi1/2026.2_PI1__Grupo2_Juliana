@@ -17,7 +17,7 @@ logger = logging.getLogger("telemetry_service")
 
 @dataclass
 class ContextoConexao:
-    """Associação confirmada para UMA conexão, nunca compartilhada entre sockets."""
+    """Corrida confirmada nesta conexão, sem compartilhar estado entre sockets."""
 
     id_corrida: int | None = None
 
@@ -38,8 +38,7 @@ class TelemetryService:
             # 1 a 6: Validação estrutural do protocolo
             result = validate_frame(raw_text)
             if not result.valid:
-                # Não confiar no campo corrida de um quadro corrompido. Usar
-                # apenas a associação previamente confirmada nesta conexão.
+                # O campo corrida de um quadro corrompido não é confiável.
                 self._registrar_erro(
                     db, mensagem=result.error or "quadro invalido",
                     id_corrida=contexto.id_corrida if contexto else None,
