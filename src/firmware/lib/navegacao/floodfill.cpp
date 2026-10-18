@@ -90,6 +90,14 @@ uint8_t FloodFill::rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t 
     return passos;
 }
 
+bool FloodFill::rotaGarantida(const Labirinto &lab)
+{
+    recalcular(lab, EXPLORACAO);
+    uint8_t otimista = dist_[0][0];
+    recalcular(lab, RAPIDO);
+    return dist_[0][0] != INFINITO && dist_[0][0] == otimista;
+}
+
 // Desconhecido conta como aberto na exploração e como fechado na rota rápida.
 // As bordas já são paredes conhecidas, então o vizinho sempre existe.
 bool FloodFill::passavel(const Labirinto &lab, uint8_t x, uint8_t y, Direcao d) const

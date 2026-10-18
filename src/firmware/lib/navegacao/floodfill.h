@@ -37,6 +37,13 @@ public:
     // rota ou se ela não couber em max.
     uint8_t rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t max);
 
+    // Se a rota rápida já é a menor possível, mesmo sem conhecer o labirinto
+    // inteiro (CT-SE14). EXPLORACAO dá a menor distância que o labirinto real
+    // poderia ter e RAPIDO a que ele com certeza tem; se as duas da largada
+    // forem iguais, nenhum lado desconhecido encurtaria a rota. Deixa as
+    // distâncias calculadas em modo RAPIDO.
+    bool rotaGarantida(const Labirinto &lab);
+
 private:
     bool passavel(const Labirinto &lab, uint8_t x, uint8_t y, Direcao d) const;
     bool escolher(const Labirinto &lab, uint8_t x, uint8_t y, Direcao frente,
