@@ -70,12 +70,12 @@ bool Labirinto::podeAvancar() const { return !temParede(x_, y_, orientacao_); }
 // sincronia com o robô, e quem chama precisa tratar.
 bool Labirinto::avancar()
 {
-    int nx = x_ + dx(orientacao_);
-    int ny = y_ + dy(orientacao_);
-    if (!dentro(nx, ny))
+    int proximoX = x_ + deslocamentoX(orientacao_);
+    int proximoY = y_ + deslocamentoY(orientacao_);
+    if (!dentro(proximoX, proximoY))
         return false;
-    x_ = nx;
-    y_ = ny;
+    x_ = proximoX;
+    y_ = proximoY;
     marcarVisitada(x_, y_);
     return true;
 }
@@ -118,12 +118,12 @@ bool Labirinto::dentro(int x, int y) const
 // As bordas já nascem fechadas em iniciar() e não podem ser abertas.
 void Labirinto::gravar(uint8_t x, uint8_t y, Direcao d, bool parede)
 {
-    int vx = x + dx(d);
-    int vy = y + dy(d);
-    if (!dentro(x, y) || !dentro(vx, vy))
+    int vizinhoX = x + deslocamentoX(d);
+    int vizinhoY = y + deslocamentoY(d);
+    if (!dentro(x, y) || !dentro(vizinhoX, vizinhoY))
         return;
     gravarLado(x, y, d, parede);
-    gravarLado(vx, vy, oposta(d), parede);
+    gravarLado(vizinhoX, vizinhoY, oposta(d), parede);
 }
 
 void Labirinto::gravarLado(uint8_t x, uint8_t y, Direcao d, bool parede)

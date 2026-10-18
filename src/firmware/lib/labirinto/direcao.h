@@ -19,8 +19,8 @@ inline Direcao girarEsquerda(Direcao d) {
 inline Direcao oposta(Direcao d) { return girarDireita(girarDireita(d)); }
 
 // Deslocamento ao andar uma célula: x cresce para Leste, y cresce para Norte.
-inline int8_t dx(Direcao d) { return d == LESTE ? 1 : (d == OESTE ? -1 : 0); }
-inline int8_t dy(Direcao d) { return d == NORTE ? 1 : (d == SUL ? -1 : 0); }
+inline int8_t deslocamentoX(Direcao d) { return d == LESTE ? 1 : (d == OESTE ? -1 : 0); }
+inline int8_t deslocamentoY(Direcao d) { return d == NORTE ? 1 : (d == SUL ? -1 : 0); }
 
 inline char letra(Direcao d) {
   switch (d) {
