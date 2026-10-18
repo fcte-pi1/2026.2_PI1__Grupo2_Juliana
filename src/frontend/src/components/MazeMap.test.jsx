@@ -90,36 +90,64 @@ describe('MazeMap', () => {
     expect(container.querySelector('[data-robo]').getAttribute('transform')).toContain('translate(100 100)')
   })
 
-  test('acumula posições sem duplicar pacotes, preserva revisitas e reinicia com o mapa', () => {
-    const celulas = [{ pos_x: 0, pos_y: 0, paredes: 0 }]
-    const props = { celulas, roboPos: { pos_x: 0, pos_y: 0, orientacao: 'N' } }
-    const { container, rerender } = render(<StrictMode><MazeMap {...props} /></StrictMode>)
-    const atualizar = (pos_x, pos_y, extras = {}) => rerender(
-      <StrictMode><MazeMap {...props} roboPos={{ pos_x, pos_y, orientacao: 'N' }} {...extras} /></StrictMode>,
-    )
+  test('desenha apenas o trajeto recebido, preservando ordem e revisitas sem alterar a prop', () => {
+    const trajeto = Object.freeze([
+      Object.freeze({ pos_x: 0, pos_y: 0 }),
+      Object.freeze({ pos_x: 1, pos_y: 0 }),
+      Object.freeze({ pos_x: 0, pos_y: 0 }),
+      Object.freeze({ pos_x: 0, pos_y: 1 }),
+    ])
+    const { container, rerender } = render(<MazeMap trajeto={trajeto} />)
     const caminho = () => container.querySelector('[data-trajeto]')?.getAttribute('d')
-    expect(caminho()).toBe('M 20 140')
-    atualizar(0, 0)
-    expect(caminho()).toBe('M 20 140')
-    atualizar(1, 0)
-    atualizar(0, 0)
-    expect(caminho()).toBe('M 20 140 L 60 140 L 20 140')
-    atualizar(12, 0)
-    atualizar(13, 0)
-    atualizar(0, 1)
-    expect(caminho()).toBe('M 20 140 L 60 140 L 20 140 M 20 100')
-    atualizar(0, 1, { celulas: [] })
+    expect(caminho()).toBe('M 20 140 L 60 140 L 20 140 L 20 100')
+
+    // Mudanças na posição do robô e nas células não acrescentam nem removem pontos.
+    rerender(<MazeMap trajeto={trajeto}
+      roboPos={{ pos_x: 2, pos_y: 2, orientacao: 'N' }}
+      celulas={{ '2,2': { pos_x: 2, pos_y: 2, paredes: 9 } }}
+    />)
+    expect(caminho()).toBe('M 20 140 L 60 140 L 20 140 L 20 100')
+    rerender(<MazeMap trajeto={trajeto} celulas={{}} />)
+    expect(caminho()).toBe('M 20 140 L 60 140 L 20 140 L 20 100')
+
+    rerender(<MazeMap trajeto={[{ pos_x: 3, pos_y: 3 }]} />)
+    expect(caminho()).toBe('M 140 20')
+    rerender(<MazeMap trajeto={[]} />)
     expect(caminho()).toBeUndefined()
-    atualizar(0, 1, { celulas: [] })
-    atualizar(0, 0)
-    expect(caminho()).toBe('M 20 140')
-    atualizar(7, 3, { largura: 8 })
-    expect(caminho()).toBe('M 300 20')
-    atualizar(7, 3, { largura: 5 })
-    expect(screen.getByRole('status')).toBeTruthy()
-    atualizar(7, 3, { largura: 8 })
-    expect(caminho()).toBe('M 300 20')
     expect(screen.getByText('Trajeto')).toBeTruthy()
     expect(screen.getByText('Objetivo')).toBeTruthy()
+  })
+
+  test('restaura todo o trajeto recebido ao remontar o componente em StrictMode', () => {
+    const trajeto = [{ pos_x: 0, pos_y: 0 }, { pos_x: 0, pos_y: 1 }, { pos_x: 1, pos_y: 1 }]
+    const montar = () => render(<StrictMode><MazeMap trajeto={trajeto} /></StrictMode>)
+    const inicial = montar()
+    const caminho = inicial.container.querySelector('[data-trajeto]').getAttribute('d')
+    expect(caminho).toBe('M 20 140 L 20 100 L 60 100')
+    inicial.unmount()
+    const retorno = montar()
+    expect(retorno.container.querySelector('[data-trajeto]').getAttribute('d')).toBe(caminho)
+  })
+
+  test('interrompe a linha em pontos inválidos ou fora dos limites do labirinto', () => {
+    const { container } = render(<MazeMap largura={12} trajeto={[
+      { pos_x: 0, pos_y: 0 }, { pos_x: 1, pos_y: 0 },
+      { pos_x: 12, pos_y: 0 }, { pos_x: 11, pos_y: 3 },
+      { pos_x: 0, pos_y: 4 }, { pos_x: 0, pos_y: 1 },
+      { pos_x: -1, pos_y: 0 }, { pos_x: 0.5, pos_y: 0 },
+      { pos_x: 0, pos_y: NaN }, { x: 1, y: 1 }, null,
+      { pos_x: 0, pos_y: 2 },
+    ]} />)
+    expect(container.querySelector('[data-trajeto]').getAttribute('d'))
+      .toBe('M 20 140 L 60 140 M 460 20 M 20 100 M 20 60')
+  })
+
+  test('não cria trajeto a partir do robô quando a prop é omitida', () => {
+    const { container } = render(<MazeMap
+      roboPos={{ pos_x: 1, pos_y: 1, orientacao: 'N' }}
+      celulas={{ '1,1': { pos_x: 1, pos_y: 1, paredes: 9 } }}
+    />)
+    expect(container.querySelector('[data-robo]')).toBeTruthy()
+    expect(container.querySelector('[data-trajeto]')).toBeNull()
   })
 })
