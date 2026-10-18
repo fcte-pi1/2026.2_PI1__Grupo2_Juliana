@@ -57,6 +57,7 @@ class MockWebSocket {
 
 describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
   beforeEach(() => {
+    window.localStorage.clear()
     vi.useFakeTimers()
     MockWebSocket.instancias = []
     vi.stubGlobal('WebSocket', MockWebSocket)
@@ -68,8 +69,9 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     vi.unstubAllGlobals()
   })
 
-  test('exibe "--" nas dimensões e cobertura antes do primeiro pacote e remove campos fora do Contrato 4.4.7', () => {
+  test('não desenha o MazeMap sem tamanho escolhido nem recebido no pacote e exibe "Escolha o tipo de labirinto"', () => {
     render(<App />)
+    const ws = MockWebSocket.instancias[0]
 
     act(() => {
       vi.advanceTimersByTime(10)
@@ -77,39 +79,146 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
 
     expect(screen.getByRole('heading', { name: 'Monitoramento em Tempo Real' })).toBeTruthy()
     expect(screen.getByText('Micromouse')).toBeTruthy()
-    expect(screen.getByTestId('espaco-mapa-labirinto')).toBeTruthy()
+    const containerMapa = screen.getByTestId('espaco-mapa-labirinto')
 
-    // Antes de iniciar a corrida, Estado da Corrida deve exibir "Aguardando"
-    expect(screen.getByTestId('card-estado-corrida').textContent).toContain('Aguardando')
+    // Nenhum botão seletor está ativo inicialmente
+    expect(screen.getByRole('button', { name: '4 × 4' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: '8 × 4' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: '12 × 4' }).getAttribute('aria-pressed')).toBe('false')
 
-    // Item 1: Sem pacotes recebidos, dimensões e cobertura exibem "--" e subtítulo indica aguardando dimensões
+    // MazeMap NÃO deve ser renderizado enquanto não houver tamanho definido
+    expect(screen.queryByTestId('maze-map')).toBeNull()
+    expect(containerMapa.querySelector('.maze-map')).toBeNull()
+    expect(screen.getByText('Escolha o tipo de labirinto')).toBeTruthy()
+
+    // Mesmo recebendo pacote tel sem largura_celula/altura_celula (ou com largura/altura fora do contrato), continua sem desenhar o mapa
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 1,
+          tempo_ms: 200,
+          largura: 4,
+          altura: 4,
+          labirinto: '4x4',
+          pos_x: 0,
+          pos_y: 0,
+          orientacao: 'N',
+          paredes: 14,
+          velocidade: 0.2,
+          tensao_bateria: 8.4,
+          estado: 'explorando',
+        }),
+      )
+    })
+
+    expect(screen.queryByTestId('maze-map')).toBeNull()
+    expect(screen.getByText('Escolha o tipo de labirinto')).toBeTruthy()
     expect(screen.getByTestId('valor-labirinto-monitoramento').textContent).toBe('--')
     expect(screen.getByTestId('subtitulo-mapa').textContent).toBe('Leitura espacial • aguardando dimensões')
-    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('0 / --')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / --')
     expect(screen.getByTestId('cobertura-percentual').textContent).toBe('--')
-    expect(screen.getByTestId('ultimo-pacote-tempo').textContent).toBe('--')
 
-    // Item 5: Legenda duplicada do cabeçalho e campos fora do Contrato 4.4.7 foram removidos
+    // Legenda duplicada do cabeçalho e campos fora do Contrato 4.4.7 foram removidos
     expect(screen.queryByTestId('legenda-mapa')).toBeNull()
     expect(screen.queryByTestId('latencia-ms')).toBeNull()
     expect(screen.queryByTestId('limite-tempo')).toBeNull()
     expect(screen.queryByTestId('recalculos-rota')).toBeNull()
     expect(screen.queryByTestId('taxa-telemetria-hz')).toBeNull()
 
-    // Aba Visão Geral (Dashboard): verifica "--" inicial no labirinto e barra de progresso horizontal da bateria
+    // Aba Visão Geral (Dashboard): verifica "--" no labirinto e barra de progresso horizontal da bateria
     fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
     expect(screen.queryByTestId('data-calendario')).toBeNull()
     expect(screen.getByTestId('valor-labirinto-visao-geral').textContent).toBe('--')
     expect(screen.getByTestId('tipo-labirinto-ultima-execucao').textContent).toBe('--')
-    expect(screen.getByTestId('card-estado-corrida-visao-geral').textContent).toContain('Aguardando')
-    expect(screen.getByTestId('resultado-ultima-execucao').textContent).toContain('Aguardando')
-    expect(screen.getByTestId('ponto-resultado-ultima-execucao').className).toContain('neutro')
     expect(screen.getByTestId('status-banco-dados').textContent).toBe('--')
-    expect(screen.getByTestId('ultima-atualizacao-sistema').textContent).toBe('--')
 
     const barraBateriaTopo = screen.getByTestId('barra-progresso-bateria-visao-geral')
     expect(barraBateriaTopo.getAttribute('aria-valuenow')).toBe('100')
     expect(barraBateriaTopo.querySelector('.barra-progresso-preenchimento')).toBeTruthy()
+  })
+
+  test('seleciona "8 × 4" no seletor, grava no localStorage, desenha o mapa 8x4 e posiciona o robô em (5, 0) sem largura_celula no pacote', () => {
+    const { unmount } = render(<Dashboard />)
+    const ws = MockWebSocket.instancias[0]
+
+    // Clica no botão "8 × 4" do seletor
+    const botao8x4 = screen.getByRole('button', { name: '8 × 4' })
+    fireEvent.click(botao8x4)
+
+    // Verifica gravação no localStorage e destaque visual do botão ativo
+    expect(window.localStorage.getItem('micromouse_tipo_labirinto')).toBe('8x4')
+    expect(botao8x4.getAttribute('aria-pressed')).toBe('true')
+    expect(botao8x4.className).toContain('ativo')
+    expect(screen.getByRole('button', { name: '4 × 4' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: '12 × 4' }).getAttribute('aria-pressed')).toBe('false')
+
+    // Envia pacote tel com pos_x: 5, pos_y: 0 (sem largura_celula no pacote)
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 5,
+          pos_y: 0,
+          orientacao: 'L',
+          paredes: 5,
+          velocidade: 0.28,
+          tensao_bateria: 8.2,
+          valor_flood: 4,
+          estado: 'explorando',
+        }),
+      )
+    })
+
+    // Confere que o aviso sumiu, o mapa 8x4 (32 células) foi desenhado e o robô aparece na célula (5, 0)
+    expect(screen.queryByText('Escolha o tipo de labirinto')).toBeNull()
+    expect(screen.getByTestId('valor-labirinto-monitoramento').textContent).toBe('8 × 4')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / 32')
+
+    const containerMapa = screen.getByTestId('espaco-mapa-labirinto')
+    expect(containerMapa.querySelectorAll('[data-celula]').length).toBe(32)
+    expect(containerMapa.querySelector('[data-celula="5,0"].maze-map__cell--observed')).toBeTruthy()
+    const elementoRobo = containerMapa.querySelector('[data-robo="true"]')
+    expect(elementoRobo).toBeTruthy()
+    expect(elementoRobo?.textContent).toContain('Robô em (5, 0)')
+
+    // Simula F5 (desmonta e monta novamente) conferindo restauração do localStorage
+    unmount()
+    const { unmount: unmount2 } = render(<Dashboard />)
+    expect(screen.getByRole('button', { name: '8 × 4' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('valor-labirinto-monitoramento').textContent).toBe('8 × 4')
+
+    // Se o backend enviar largura_celula e altura_celula válidos (ex: 12x4), o valor do backend tem prioridade sobre a escolha manual
+    const ws2 = MockWebSocket.instancias[MockWebSocket.instancias.length - 1]
+    act(() => {
+      ws2.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 2,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 12,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+    })
+    expect(screen.getByRole('button', { name: '12 × 4' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('valor-labirinto-monitoramento').textContent).toBe('12 × 4')
+
+    // Valor inválido no localStorage deve ser ignorado na inicialização
+    unmount2()
+    window.localStorage.setItem('micromouse_tipo_labirinto', '9x9')
+    render(<Dashboard />)
+    expect(screen.getByText('Escolha o tipo de labirinto')).toBeTruthy()
   })
 
   test('lê largura_celula e altura_celula em qualquer pacote (tel ou evt) e aceita apenas 4x4, 8x4 e 12x4', () => {

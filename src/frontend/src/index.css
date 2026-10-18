@@ -349,42 +349,45 @@ body {
   margin-top: 2px;
 }
 
-.legenda-mapa {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 0.78rem;
-  color: var(--cor-texto-secundario);
-}
-
-.item-legenda {
+.seletor-tipo-labirinto {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  background-color: #f8fafc;
+  border: 1px solid var(--cor-card-borda);
+  border-radius: 10px;
+  padding: 4px 6px;
 }
 
-.icone-legenda {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+.rotulo-seletor-labirinto {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cor-texto-secundario);
+  padding: 0 4px;
 }
 
-.icone-legenda.robo {
+.botao-seletor-labirinto {
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--cor-texto-secundario);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.botao-seletor-labirinto:hover {
+  background-color: #e2e8f0;
+  color: var(--cor-texto-principal);
+}
+
+.botao-seletor-labirinto.ativo {
   background-color: var(--cor-petroleo);
-  border-radius: 50%;
-}
-
-.icone-legenda.explorada {
-  background-color: var(--cor-azul-claro);
-  border: 1px solid #93c5fd;
-}
-
-.icone-legenda.parede {
-  background-color: var(--cor-texto-principal);
-  height: 4px;
-  border-radius: 2px;
+  color: #ffffff;
+  border-color: var(--cor-petroleo);
+  box-shadow: 0 1px 3px rgba(15, 118, 110, 0.25);
 }
 
 .card-mapa-corpo {

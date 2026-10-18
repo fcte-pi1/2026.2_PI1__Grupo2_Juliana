@@ -43,6 +43,8 @@ const TEXTOS_ESTADO_EXECUCAO = {
   },
 }
 
+const CHAVE_STORAGE_LABIRINTO = 'micromouse_tipo_labirinto'
+
 /**
  * Verifica se o par (largura, altura) corresponde a um dos 3 labirintos oficiais: 4x4, 8x4 ou 12x4.
  */
@@ -51,34 +53,34 @@ function ehLabirintoOficial(largura, altura) {
 }
 
 /**
- * Extrai dimensões do labirinto (largura_celula/altura_celula ou fallback largura/altura)
+ * Carrega as dimensões do labirinto salvas no localStorage ('4x4', '8x4' ou '12x4').
+ */
+function lerDimensoesSalvas() {
+  const valorSalvo = window.localStorage.getItem(CHAVE_STORAGE_LABIRINTO)
+  if (!valorSalvo) {
+    return null
+  }
+  const partes = valorSalvo
+    .toLowerCase()
+    .split('x')
+    .map((p) => Number.parseInt(p.trim(), 10))
+  if (partes.length === 2 && ehLabirintoOficial(partes[0], partes[1])) {
+    return { largura: partes[0], altura: partes[1] }
+  }
+  return null
+}
+
+/**
+ * Extrai dimensões do labirinto exclusivamente dos campos largura_celula e altura_celula
  * de qualquer pacote/evento caso correspondam a um dos 3 tamanhos oficiais (4x4, 8x4, 12x4).
  */
 function resolverDimensoesLabirinto(dados, dimensoesAtuais) {
-  const larguraCand =
-    typeof dados.largura_celula === 'number'
-      ? dados.largura_celula
-      : typeof dados.largura === 'number'
-        ? dados.largura
-        : null
-  const alturaCand =
-    typeof dados.altura_celula === 'number'
-      ? dados.altura_celula
-      : typeof dados.altura === 'number'
-        ? dados.altura
-        : null
-
-  if (larguraCand !== null && alturaCand !== null && ehLabirintoOficial(larguraCand, alturaCand)) {
-    return { largura: larguraCand, altura: alturaCand }
-  }
-  if (typeof dados.labirinto === 'string') {
-    const partes = dados.labirinto
-      .toLowerCase()
-      .split('x')
-      .map((p) => Number.parseInt(p.trim(), 10))
-    if (partes.length === 2 && ehLabirintoOficial(partes[0], partes[1])) {
-      return { largura: partes[0], altura: partes[1] }
-    }
+  if (
+    typeof dados.largura_celula === 'number' &&
+    typeof dados.altura_celula === 'number' &&
+    ehLabirintoOficial(dados.largura_celula, dados.altura_celula)
+  ) {
+    return { largura: dados.largura_celula, altura: dados.altura_celula }
   }
   return dimensoesAtuais
 }
@@ -254,7 +256,12 @@ export default function Dashboard({
   })
   const [mapaCelulas, setMapaCelulas] = useState({})
   const [trajeto, setTrajeto] = useState([])
-  const [dimensoesLabirinto, setDimensoesLabirinto] = useState(null)
+  const [dimensoesLabirinto, setDimensoesLabirinto] = useState(lerDimensoesSalvas)
+
+  function selecionarTipoLabirinto(largura, altura) {
+    setDimensoesLabirinto({ largura, altura })
+    window.localStorage.setItem(CHAVE_STORAGE_LABIRINTO, `${largura}x${altura}`)
+  }
 
   const [tensaoBateria, setTensaoBateria] = useState(8.4)
   const [tensaoInicial, setTensaoInicial] = useState(null)
@@ -973,6 +980,33 @@ export default function Dashboard({
                       {textoSubtituloMapa}
                     </p>
                   </div>
+
+                  <div
+                    className="seletor-tipo-labirinto"
+                    role="group"
+                    aria-label="Seletor do tipo de labirinto"
+                    data-testid="seletor-tipo-labirinto"
+                  >
+                    <span className="rotulo-seletor-labirinto">Tipo:</span>
+                    {LABIRINTOS_OFICIAIS.map((opcao) => {
+                      const chave = `${opcao.largura}x${opcao.altura}`
+                      const ativo =
+                        dimensoesLabirinto?.largura === opcao.largura &&
+                        dimensoesLabirinto?.altura === opcao.altura
+                      return (
+                        <button
+                          key={chave}
+                          type="button"
+                          className={`botao-seletor-labirinto ${ativo ? 'ativo' : ''}`}
+                          aria-pressed={ativo}
+                          data-testid={`seletor-labirinto-${chave}`}
+                          onClick={() => selecionarTipoLabirinto(opcao.largura, opcao.altura)}
+                        >
+                          {opcao.largura} × {opcao.altura}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div className="card-mapa-corpo">
@@ -984,13 +1018,25 @@ export default function Dashboard({
                     data-trajeto-count={trajeto.length}
                     data-trajeto={trajeto.map((p) => `${p.pos_x},${p.pos_y}`).join(';')}
                   >
-                    <MazeMap
-                      largura={dimensoesLabirinto?.largura ?? 4}
-                      altura={dimensoesLabirinto?.altura ?? 4}
-                      celulas={mapaCelulas}
-                      roboPos={roboPos}
-                      trajeto={trajeto}
-                    />
+                    {dimensoesLabirinto ? (
+                      <MazeMap
+                        largura={dimensoesLabirinto.largura}
+                        altura={dimensoesLabirinto.altura}
+                        celulas={mapaCelulas}
+                        roboPos={roboPos}
+                        trajeto={trajeto}
+                      />
+                    ) : (
+                      <div className="placeholder-maze-map" data-testid="aviso-escolha-labirinto">
+                        <span className="placeholder-grade-icone" aria-hidden="true">
+                          ⊞
+                        </span>
+                        <strong className="placeholder-titulo">Escolha o tipo de labirinto</strong>
+                        <span className="placeholder-detalhe">
+                          Selecione 4 × 4, 8 × 4 ou 12 × 4 acima para desenhar o mapa.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Detalhes ao lado do mapa */}
