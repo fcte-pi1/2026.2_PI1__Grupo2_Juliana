@@ -134,4 +134,3 @@ Largada (0,0); objetivo (3,3).
 - Quantidade de movimentos: **a preencher**.
 - Justificativa de que nao ha rota menor: **a preencher**.
 - Responsavel e data da conferencia: **a preencher**.
-
