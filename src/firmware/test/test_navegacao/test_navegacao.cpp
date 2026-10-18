@@ -1,7 +1,7 @@
 // Valida os desenhos de teste; ainda nao executa o Flood Fill.
 #include <unity.h>
 #include <string.h>
-#include "labirintos.h"
+#include "desenhos_labirintos.h"
 
 void setUp() {}
 void tearDown() {}
