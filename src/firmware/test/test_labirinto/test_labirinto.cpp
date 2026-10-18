@@ -29,11 +29,11 @@ void test_oposta()
 
 void test_deslocamento()
 {
-    TEST_ASSERT_EQUAL(1, dx(LESTE));
-    TEST_ASSERT_EQUAL(-1, dx(OESTE));
-    TEST_ASSERT_EQUAL(1, dy(NORTE));
-    TEST_ASSERT_EQUAL(-1, dy(SUL));
-    TEST_ASSERT_EQUAL(0, dx(NORTE));
+    TEST_ASSERT_EQUAL(1, deslocamentoX(LESTE));
+    TEST_ASSERT_EQUAL(-1, deslocamentoX(OESTE));
+    TEST_ASSERT_EQUAL(1, deslocamentoY(NORTE));
+    TEST_ASSERT_EQUAL(-1, deslocamentoY(SUL));
+    TEST_ASSERT_EQUAL(0, deslocamentoX(NORTE));
 }
 
 void test_letra_do_contrato()
