@@ -1,5 +1,4 @@
-// Preparacao da #164: valida os dados de entrada, NAO o algoritmo Flood Fill.
-// Acrescentar os testes de aceitacao quando a API da Leticia estiver disponivel.
+// Valida os desenhos de teste; ainda nao executa o Flood Fill.
 #include <unity.h>
 #include <string.h>
 #include "labirintos.h"
@@ -33,8 +32,7 @@ void test_fixtures_tem_dimensoes_bordas_e_simbolos_validos() {
 }
 
 void test_objetivos_das_fixtures_sao_alcancaveis() {
-    // Busca em profundidade SO para detectar erro no desenho. Nao fornece
-    // distancia/rota minima e nao substitui a referencia manual do CT-SE14.
+    // Confere conectividade, sem calcular a rota minima usada como referencia.
     for (const auto& f : LABIRINTOS_TESTE) {
         bool visitada[48] = {};
         uint8_t pilha[48] = {}, n = 1;
