@@ -261,7 +261,20 @@ void test_ct_se14_rota_igual_a_referencia()
         Direcao rota[64];
         uint8_t passos = robo.floodFill().rotaMaisCurta(robo.mapa(), rota, 64);
         TEST_ASSERT_EQUAL_UINT8_MESSAGE(menorCaminho(gabarito), passos, nome);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(desenho(nome).movimentosConferidos, passos, nome);
         TEST_ASSERT_TRUE_MESSAGE(rotaValida(gabarito, rota, passos), nome);
+    }
+}
+
+// CT-SE14: a referencia manual e o script de referencia concordam em todos os
+// desenhos. Se discordarem, alguem errou e a ficha precisa ser revista.
+void test_ct_se14_conferencia_manual_bate_com_o_script()
+{
+    for (const auto &f : LABIRINTOS_TESTE)
+    {
+        Labirinto gabarito;
+        carregarDesenho(f.nome, gabarito);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(f.movimentosConferidos, menorCaminho(gabarito), f.nome);
     }
 }
 
@@ -313,6 +326,7 @@ int main()
     RUN_TEST(test_ct_se11_mapa_montado_igual_ao_desenho);
     RUN_TEST(test_ct_se11_armadilhas_obrigam_a_revisitar);
     RUN_TEST(test_ct_se14_rota_igual_a_referencia);
+    RUN_TEST(test_ct_se14_conferencia_manual_bate_com_o_script);
     RUN_TEST(test_ct_se14_parede_nova_bloqueia_a_rota);
     return UNITY_END();
 }
