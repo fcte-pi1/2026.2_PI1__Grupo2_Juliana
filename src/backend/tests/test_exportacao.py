@@ -1,4 +1,4 @@
-"""Testes da exportação das corridas em CSV (RF18)."""
+"""Testes da exportação das corridas e dos logs em CSV (RF18)."""
 
 import csv
 import io
@@ -9,9 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.db.models import Corrida, Labirinto, LeituraTelemetria
+from app.db.models import Corrida, Labirinto, LeituraTelemetria, LogEvento
 from app.main import app
-from app.services.exportacao import COLUNAS
+from app.services.exportacao import COLUNAS, COLUNAS_LOGS
 
 
 @pytest.fixture
@@ -30,8 +30,8 @@ def leitura(id_corrida, tempo_ms, **campos):
     return LeituraTelemetria(id_corrida=id_corrida, tempo_ms=tempo_ms, **{**dados, **campos})
 
 
-def baixar(params):
-    resposta = TestClient(app).get("/exportacao/corridas.csv", params=params)
+def baixar(params, arquivo="corridas.csv"):
+    resposta = TestClient(app).get(f"/exportacao/{arquivo}", params=params)
     assert resposta.status_code == 200
     return resposta, list(csv.DictReader(io.StringIO(resposta.text)))
 
@@ -85,6 +85,40 @@ def test_filtro_por_labirinto_nao_mistura_corridas(sessao_exportacao, id_corrida
     assert linhas[0]["tempo_conc_s"] == "12.500"
 
 
+def test_logs_sem_resultados_saem_so_com_cabecalho(sessao_exportacao):
+    resposta, linhas = baixar({"id_corrida": 999999}, "logs.csv")
+    assert resposta.headers["content-type"].startswith("text/csv")
+    assert 'filename="logs.csv"' in resposta.headers["content-disposition"]
+    assert resposta.text.splitlines() == [",".join(COLUNAS_LOGS)]
+    assert linhas == []
+
+
+def test_logs_filtram_por_corrida_e_labirinto_em_ordem(sessao_exportacao, id_corrida, id_labirinto):
+    outro = Labirinto(nome="labirinto-pytest-2", largura_celula=8, altura_celula=4)
+    sessao_exportacao.add(outro)
+    sessao_exportacao.flush()
+    outra_corrida = Corrida(id_labirinto=outro.id, num_tentativa=1, status="concluida",
+                            tempo_conc_s=Decimal("12.500"))
+    sessao_exportacao.add(outra_corrida)
+    sessao_exportacao.flush()
+    sessao_exportacao.add_all([
+        LogEvento(id_corrida=id_corrida, tipo="info", origem="backend", mensagem="evento inicio"),
+        LogEvento(id_corrida=None, tipo="erro", origem="backend", mensagem="quadro invalido"),
+        LogEvento(id_corrida=outra_corrida.id, tipo="aviso", origem="firmware", mensagem="outra"),
+        LogEvento(id_corrida=id_corrida, tipo="aviso", origem="backend", mensagem="desconexao, rede"),
+    ])
+    sessao_exportacao.commit()
+    _, linhas = baixar({"id_corrida": id_corrida}, "logs.csv")
+    assert [linha["mensagem"] for linha in linhas] == ["evento inicio", "desconexao, rede"]
+    assert linhas[0]["tipo"] == "info"
+    assert linhas[0]["ocorrido_em"]
+    _, linhas = baixar({"id_labirinto": outro.id}, "logs.csv")
+    assert [linha["mensagem"] for linha in linhas] == ["outra"]
+    _, linhas = baixar({}, "logs.csv")
+    assert any(linha["id_corrida"] == "" for linha in linhas)
+
+
+@pytest.mark.parametrize("arquivo", ["corridas.csv", "logs.csv"])
 @pytest.mark.parametrize("params", [{"id_corrida": 0}, {"id_labirinto": 0}, {"id_corrida": "x"}])
-def test_exportacao_rejeita_filtros_invalidos(params):
-    assert TestClient(app).get("/exportacao/corridas.csv", params=params).status_code == 422
+def test_exportacao_rejeita_filtros_invalidos(arquivo, params):
+    assert TestClient(app).get(f"/exportacao/{arquivo}", params=params).status_code == 422

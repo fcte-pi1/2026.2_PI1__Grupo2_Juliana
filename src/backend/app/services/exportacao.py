@@ -1,4 +1,4 @@
-"""Exportação das corridas e leituras em CSV (RF18)."""
+"""Exportação das corridas, leituras e logs em CSV (RF18)."""
 
 import csv
 import io
@@ -8,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Corrida, Labirinto, LeituraTelemetria
+from app.db.models import Corrida, Labirinto, LeituraTelemetria, LogEvento
 
 COLUNAS = [
     "id_corrida", "labirinto", "num_tentativa", "num_corrida_robo", "status",
@@ -16,6 +16,8 @@ COLUNAS = [
     "tempo_ms", "recebido_em", "pos_x", "pos_y", "orientacao", "paredes",
     "velocidade", "tensao_bateria", "valor_flood",
 ]
+
+COLUNAS_LOGS = ["id", "id_corrida", "tipo", "origem", "mensagem", "ocorrido_em"]
 
 
 def _celula(valor) -> str:
@@ -59,4 +61,24 @@ def gerar_csv(db: Session, id_corrida: int | None = None, id_labirinto: int | No
                 leitura.tensao_bateria, leitura.valor_flood,
             ]
         escritor.writerow([_celula(valor) for valor in dados_corrida + dados_leitura])
+    return saida.getvalue()
+
+
+def gerar_csv_logs(db: Session, id_corrida: int | None = None, id_labirinto: int | None = None) -> str:
+    """Uma linha por log, do mais antigo ao mais recente; sem filtro, inclui os logs sem corrida."""
+    consulta = select(LogEvento)
+    if id_corrida is not None:
+        consulta = consulta.where(LogEvento.id_corrida == id_corrida)
+    if id_labirinto is not None:
+        consulta = consulta.join(Corrida, LogEvento.id_corrida == Corrida.id).where(
+            Corrida.id_labirinto == id_labirinto
+        )
+    consulta = consulta.order_by(LogEvento.id)
+
+    saida = io.StringIO()
+    escritor = csv.writer(saida, lineterminator="\n")
+    escritor.writerow(COLUNAS_LOGS)
+    for log in db.scalars(consulta):
+        dados = [log.id, log.id_corrida, log.tipo, log.origem, log.mensagem, log.ocorrido_em]
+        escritor.writerow([_celula(valor) for valor in dados])
     return saida.getvalue()

@@ -75,7 +75,14 @@ esquerda: `id_corrida`, `labirinto`, `num_tentativa`, `num_corrida_robo`,
 `tensao_bateria`, `valor_flood`. As linhas seguem a ordem da corrida e, dentro
 dela, de `tempo_ms`. Corrida sem leituras sai em uma linha só, com as colunas
 de leitura vazias. Valor nulo vira célula vazia. Sem resultados, o arquivo tem
-só o cabeçalho; parâmetros inválidos retornam HTTP 422. Os testes ficam em
+só o cabeçalho; parâmetros inválidos retornam HTTP 422.
+
+`GET /exportacao/logs.csv` baixa o arquivo `logs.csv` com os eventos de
+`log_evento` (início/fim, desconexões, descartes, bateria crítica), aceitando
+os mesmos filtros. As colunas são `id`, `id_corrida`, `tipo`, `origem`,
+`mensagem` e `ocorrido_em`, do evento mais antigo ao mais recente. Sem filtro,
+inclui também os logs sem corrida (`id_corrida` vazio); com `id_labirinto`, só
+entram os logs ligados a uma corrida daquele labirinto. Os testes ficam em
 `tests/test_exportacao.py`.
 
 ## Como rodar o banco de dados
