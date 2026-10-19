@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import MazeMap from './components/MazeMap.jsx'
+import ConnectionAlert from './components/ConnectionAlert.jsx'
 
 const LIMIAR_BATERIA_CRITICA_V = 7.0
 const LIMIAR_REARME_BATERIA_V = 7.2
@@ -567,6 +568,7 @@ export default function Dashboard({
 
   return (
     <div className="painel-layout">
+      {ultimoPacoteEm !== null && !roboOnline && <ConnectionAlert />}
       {/* Menu Lateral Esquerdo (Sidebar fiel ao Figma) */}
       <aside className="menu-lateral" aria-label="Menu principal">
         <div className="marca-topo">

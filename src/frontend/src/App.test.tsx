@@ -650,6 +650,12 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     render(<Dashboard />)
     const ws = MockWebSocket.instancias[0]
 
+    // A espera pela primeira mensagem não representa perda de conexão.
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+
     act(() => {
       ws.emitirMensagem(
         gerarQuadroCrc({
@@ -679,10 +685,27 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('ponto-resultado-ultima-execucao').className).toContain('ambar')
     fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
 
-    // Avança 3,2 segundos sem novos pacotes
+    // O toast só aparece ao atingir o timeout de 3 segundos.
     act(() => {
-      vi.advanceTimersByTime(3200)
+      vi.advanceTimersByTime(2800)
     })
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(screen.getByRole('alert').textContent).toContain('Conexão com o robô perdida')
+
+    // Mensagens inválidas não encerram o alerta.
+    act(() => {
+      ws.emitirMensagem('{json_invalido')
+    })
+    expect(screen.getByRole('alert')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
 
     expect(screen.getByTestId('card-conexao').textContent).toContain('Offline')
     expect(screen.getByTestId('status-conexao-micromouse').textContent).toContain('Offline')
@@ -695,6 +718,7 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
 
     expect(screen.getByTestId('card-conexao').textContent).toContain('Conectado')
     expect(screen.getByTestId('desafio-cumprido').textContent).toBe('Sim')
+    expect(screen.queryByRole('alert')).toBeNull()
 
     // Alterna para a aba Dashboard (Visão Geral) e verifica Resultado Concluído com ponto verde
     fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
