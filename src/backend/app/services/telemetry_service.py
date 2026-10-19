@@ -1,6 +1,7 @@
 """Serviço de orquestração, persistência e validação da telemetria (RF24-S, RF25-S, RNF06-S)."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
@@ -14,6 +15,13 @@ from app.services.protocol import format_frame, validate_frame, validate_limites
 logger = logging.getLogger("telemetry_service")
 
 
+@dataclass
+class ContextoConexao:
+    """Corrida confirmada nesta conexão, sem compartilhar estado entre sockets."""
+
+    id_corrida: int | None = None
+
+
 class TelemetryService:
     """Gerencia o ciclo de vida e regras de negócio da recepção de telemetria."""
 
@@ -21,14 +29,20 @@ class TelemetryService:
         # Cache em memória de pares (id_corrida, seq) de eventos já processados para deduplicação
         self.processed_events: set[tuple[int, int]] = set()
 
-    async def process_frame(self, raw_text: str, db: Session) -> tuple[str | None, dict[str, Any] | None]:
+    async def process_frame(
+        self, raw_text: str, db: Session, contexto: ContextoConexao | None = None
+    ) -> tuple[str | None, dict[str, Any] | None]:
         """Processa um quadro de telemetria, grava no banco e retorna (ack_frame, broadcast_data)."""
         corrida_id_contexto: int | None = None
         try:
             # 1 a 6: Validação estrutural do protocolo
             result = validate_frame(raw_text)
             if not result.valid:
-                self._registrar_erro(db, mensagem=result.error or "quadro invalido", id_corrida=None)
+                # O campo corrida de um quadro corrompido não é confiável.
+                self._registrar_erro(
+                    db, mensagem=result.error or "quadro invalido",
+                    id_corrida=contexto.id_corrida if contexto else None,
+                )
                 return None, None
 
             data: dict[str, Any] = result.data or {}
@@ -40,7 +54,10 @@ class TelemetryService:
             # 7: Associação da corrida (Seção 5 do Contrato 4.4.7)
             corrida, ja_encerrada = self._obter_corrida(db, num_corrida_robo, evento)
             if not corrida:
-                self._registrar_erro(db, mensagem=f"corrida desconhecida: {num_corrida_robo}", id_corrida=None)
+                self._registrar_erro(
+                    db, mensagem=f"corrida desconhecida: {num_corrida_robo}",
+                    id_corrida=contexto.id_corrida if contexto else None,
+                )
                 return None, None
 
             corrida_id_contexto = corrida.id
@@ -81,12 +98,16 @@ class TelemetryService:
                 db.commit()
 
                 # Transmite ao painel apenas se a leitura foi inserida pela primeira vez (não reenviada)
+                if contexto is not None:
+                    contexto.id_corrida = corrida.id
                 broadcast_data = {**data, "id_corrida": corrida.id} if inserted_id is not None else None
                 return ack_frame, broadcast_data
 
             elif tipo_msg == "evt":
                 # Reenvio de fim para corrida já finalizada
                 if ja_encerrada:
+                    if contexto is not None:
+                        contexto.id_corrida = corrida.id
                     return ack_frame, None
 
                 # Deduplicação de eventos pelo par (corrida.id, seq)
@@ -112,9 +133,13 @@ class TelemetryService:
                             corrida.consumo_medio_ma = data["consumo_medio_ma"]
 
                     db.commit()
+                    if contexto is not None:
+                        contexto.id_corrida = corrida.id
                     return ack_frame, {**data, "id_corrida": corrida.id}
                 else:
                     # Evento repetido (reenvio): retorna ACK e não grava nem transmite
+                    if contexto is not None:
+                        contexto.id_corrida = corrida.id
                     return ack_frame, None
 
             return ack_frame, None

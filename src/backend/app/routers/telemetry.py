@@ -6,7 +6,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.websocket_manager import manager
 from app.db.session import session_scope
-from app.services.telemetry_service import telemetry_service
+from app.services.telemetry_service import ContextoConexao, telemetry_service
+from app.services.logs import registrar_desconexao
 
 logger = logging.getLogger("telemetry_router")
 
@@ -17,12 +18,13 @@ router = APIRouter(tags=["telemetria"])
 async def websocket_telemetria(websocket: WebSocket) -> None:
     """Endpoint WebSocket para recepção de pacotes do robô e envio de ACKs."""
     await websocket.accept()
+    contexto = ContextoConexao()
     logger.info("Conexão WebSocket estabelecida em /ws/telemetria")
     try:
         while True:
             text_frame = await websocket.receive_text()
             with session_scope() as db:
-                ack, broadcast_data = await telemetry_service.process_frame(text_frame, db)
+                ack, broadcast_data = await telemetry_service.process_frame(text_frame, db, contexto)
                 if ack:
                     await websocket.send_text(ack)
                 if broadcast_data:
@@ -31,6 +33,13 @@ async def websocket_telemetria(websocket: WebSocket) -> None:
         logger.info("Conexão WebSocket finalizada em /ws/telemetria")
     except Exception:
         logger.exception("Erro inesperado no WebSocket de telemetria")
+    finally:
+        # Registrar também quando a conexão falhar durante o envio do ACK.
+        try:
+            with session_scope() as db:
+                registrar_desconexao(db, contexto.id_corrida)
+        except Exception:
+            logger.exception("Não foi possível registrar a desconexão")
 
 
 @router.websocket("/ws/painel")
