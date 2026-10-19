@@ -68,3 +68,27 @@ Para o ensaio real, o driver deve registrar no Serial o CSV
 filtrada ainda nao for valida, acompanhado de log da validade e das paredes.
 Coletar 10 s estaveis, objeto breve e lanterna conforme 4.4.6. O firmware
 principal ainda e um esqueleto: leitura fisica e emissao serial dependem da #213.
+
+## Decisoes da revisao do PR #243
+
+8190/8191 continuam como INVALIDA, inclusive com sensorOk=true. Esse booleano
+nao distingue ausencia de alvo de uma medicao sem qualidade suficiente.
+Converter esses numeros diretamente em LIVRE pode abrir uma parede no mapa
+sem evidencia. Confirmar na #213, com o driver e ensaios reais, um estado
+explicito de fora de alcance antes de mudar essa politica. Na biblioteca
+Pololu, last_status informa a transmissao I2C, nao a qualidade da distancia:
+https://github.com/pololu/vl53l0x-arduino#library-reference
+
+O contrato atual exige aquisicao parada na mesma celula e orientacao.
+Cinco amostras a 33 ms representam aproximadamente 165 ms de aquecimento,
+alem da resposta da EMA. Mesmo a 20 ms por amostra, sao 100 ms. Portanto,
+este filtro ainda nao comprova o ciclo completo de 50 ms do RNF01.
+A integracao #213/#214 precisa medir a cadencia real e rever a janela ou
+separar aquisicao e decisao antes de usar leituras durante o movimento.
+Nao reutilizar historico de outra pose para esconder esse atraso. Mantemos
+o reinicio apos falha para evitar reaproveitar medidas anteriores a uma
+interrupcao cuja duracao esta fora do controle desta biblioteca.
+
+Os valores padrao agora sao validados por static_assert. As verificacoes
+em execucao e seus testes permanecem: os construtores publicos aceitam
+alpha, limiar e histerese diferentes das constantes de config.h.
