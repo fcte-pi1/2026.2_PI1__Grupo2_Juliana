@@ -43,12 +43,11 @@ def test_desconexao_fica_na_corrida_confirmada_e_nao_a_encerra(sessao_logs, id_c
     assert sessao_logs.get(Corrida, id_corrida).status == "em_andamento"
 
 
-def test_socket_sem_quadro_confirmado_nao_assume_corrida_ativa(sessao_logs, id_corrida):
+def test_socket_sem_quadro_confirmado_nao_registra_desconexao(sessao_logs, id_corrida):
+    # Conexão de teste ou do navegador não pode poluir o painel de logs.
     with TestClient(app).websocket_connect("/ws/telemetria"):
         pass
-    log = sessao_logs.scalar(select(LogEvento))
-    assert log.id_corrida is None
-    assert "desconexao" in log.mensagem
+    assert sessao_logs.scalars(select(LogEvento)).all() == []
 
 
 def test_fechamento_depois_do_fim_nao_gera_falsa_perda(sessao_logs, id_corrida):
@@ -91,7 +90,7 @@ def test_contextos_de_duas_conexoes_nao_se_misturam(sessao_logs, id_corrida):
         with client.websocket_connect("/ws/telemetria"):
             pass
     avisos = sessao_logs.scalars(select(LogEvento).where(LogEvento.tipo == "aviso").order_by(LogEvento.id)).all()
-    assert [log.id_corrida for log in avisos] == [None, id_corrida]
+    assert [log.id_corrida for log in avisos] == [id_corrida]
 
 
 def test_consulta_combina_filtros_e_pagina_sem_duplicar(sessao_logs, id_corrida):

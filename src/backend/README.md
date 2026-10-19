@@ -47,9 +47,9 @@ retornam HTTP 422. O contrato também aparece em `/docs`.
 
 Ao encerrar a conexão de telemetria, o backend registra `desconexao` como
 aviso, sem encerrar a corrida. Usa a última corrida confirmada por um pacote
-válido e persistido naquela conexão. Sem associação confirmada, o log tem
-`id_corrida=null`. Fechar após um evento de fim já confirmado não gera falso
-aviso. A detecção ocorre quando o WebSocket informa fechamento/erro; este
+válido e persistido naquela conexão. Sem associação confirmada (por exemplo,
+uma conexão de teste ou do navegador), nada é registrado. Fechar após um evento
+de fim já confirmado também não gera falso aviso. A detecção ocorre quando o WebSocket informa fechamento/erro; este
 código não promete descobrir instantaneamente uma perda silenciosa de rede.
 
 Descartes por quadro inválido usam o contexto já confirmado do socket, nunca
