@@ -209,9 +209,26 @@ void test_reiniciar_apos_mudar_pose_nao_mistura_celulas()
     TEST_ASSERT_EQUAL(Parede::LIVRE, detector.atualizar(aquecer(filtro, 300)));
 }
 
+void test_sem_alvo_ou_timeout_nao_abre_passagem_no_mapa()
+{
+    for (uint16_t bruto : {uint16_t(8190), uint16_t(8191), uint16_t(65535)})
+    {
+        FiltroDistancia filtro;
+        DetectorParede detector;
+        TEST_ASSERT_EQUAL(Parede::LIVRE, detector.atualizar(aquecer(filtro, 300)));
+        auto parede = detector.atualizar(filtro.atualizar(bruto, true));
+        auto paredes = paredesAbsolutas(parede, Parede::DESCONHECIDA,
+                                       Parede::DESCONHECIDA, NORTE);
+        TEST_ASSERT_EQUAL(Parede::DESCONHECIDA, parede);
+        TEST_ASSERT_EQUAL_UINT8(0, paredes.conhecidas);
+        TEST_ASSERT_EQUAL_UINT8(0, paredes.presentes);
+    }
+}
+
 int main()
 {
     UNITY_BEGIN();
+    RUN_TEST(test_sem_alvo_ou_timeout_nao_abre_passagem_no_mapa);
     RUN_TEST(test_aquecimento_nao_inventa_distancia);
     RUN_TEST(test_mediana_remove_dois_picos_na_janela);
     RUN_TEST(test_ema_responde_a_mudanca_real_sem_salto);
