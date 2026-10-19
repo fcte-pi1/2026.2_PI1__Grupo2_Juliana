@@ -50,6 +50,17 @@ def test_socket_sem_quadro_confirmado_nao_registra_desconexao(sessao_logs, id_co
     assert sessao_logs.scalars(select(LogEvento)).all() == []
 
 
+def test_corrida_desconhecida_usa_contexto_confirmado(sessao_logs, id_corrida):
+    with TestClient(app).websocket_connect("/ws/telemetria") as ws:
+        ws.send_text(format_frame(inicio()))
+        ws.receive_text()
+        ws.send_text(format_frame(inicio(999)))
+    descartes = sessao_logs.scalars(select(LogEvento).where(LogEvento.tipo == "erro")).all()
+    assert len(descartes) == 1
+    assert "corrida desconhecida: 999" in descartes[0].mensagem
+    assert descartes[0].id_corrida == id_corrida
+
+
 def test_fechamento_depois_do_fim_nao_gera_falsa_perda(sessao_logs, id_corrida):
     with TestClient(app).websocket_connect("/ws/telemetria") as ws:
         ws.send_text(format_frame(inicio()))

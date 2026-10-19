@@ -54,7 +54,10 @@ class TelemetryService:
             # 7: Associação da corrida (Seção 5 do Contrato 4.4.7)
             corrida, ja_encerrada = self._obter_corrida(db, num_corrida_robo, evento)
             if not corrida:
-                self._registrar_erro(db, mensagem=f"corrida desconhecida: {num_corrida_robo}", id_corrida=None)
+                self._registrar_erro(
+                    db, mensagem=f"corrida desconhecida: {num_corrida_robo}",
+                    id_corrida=contexto.id_corrida if contexto else None,
+                )
                 return None, None
 
             corrida_id_contexto = corrida.id

@@ -52,8 +52,8 @@ uma conexão de teste ou do navegador), nada é registrado. Fechar após um even
 de fim já confirmado também não gera falso aviso. A detecção ocorre quando o WebSocket informa fechamento/erro; este
 código não promete descobrir instantaneamente uma perda silenciosa de rede.
 
-Descartes por quadro inválido usam o contexto já confirmado do socket, nunca
-o campo `corrida` de um quadro corrompido. Bateria crítica e reconexão mantêm
+Descartes por quadro inválido ou por `corrida desconhecida` usam o contexto
+já confirmado do socket, nunca o campo `corrida` do quadro descartado. Bateria crítica e reconexão mantêm
 o processamento já existente. Nenhum limite de bateria foi alterado aqui.
 
 ## Exportação CSV
