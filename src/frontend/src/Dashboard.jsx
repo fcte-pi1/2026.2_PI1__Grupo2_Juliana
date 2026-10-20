@@ -4,6 +4,7 @@ import ConnectionAlert from './components/ConnectionAlert.jsx'
 
 const LIMIAR_BATERIA_CRITICA_V = 7.0
 const LIMIAR_REARME_BATERIA_V = 7.2
+const TEXTO_REARME_BATERIA = LIMIAR_REARME_BATERIA_V.toFixed(2).replace('.', ',')
 const TENSAO_MIN_V = 6.4
 const TENSAO_MAX_V = 8.4
 const TIMEOUT_OFFLINE_MS = 3000
@@ -87,6 +88,77 @@ function resolverDimensoesLabirinto(dados, dimensoesAtuais) {
 }
 
 /**
+ * Verifica se o ponto (pos_x, pos_y) está dentro dos limites internos da matriz (0..largura-1, 0..altura-1).
+ */
+function ehCelulaInterna(ponto, dimensoes) {
+  return Boolean(
+    dimensoes &&
+      ponto &&
+      Number.isInteger(ponto.pos_x) &&
+      Number.isInteger(ponto.pos_y) &&
+      ponto.pos_x >= 0 &&
+      ponto.pos_x < dimensoes.largura &&
+      ponto.pos_y >= 0 &&
+      ponto.pos_y < dimensoes.altura,
+  )
+}
+
+/**
+ * Regra única de saída: exatamente 1 passo fora da matriz e em apenas um eixo
+ * (pos_x inteiro entre -1 e largura, pos_y inteiro entre -1 e altura, sem diagonal e sem valores distantes).
+ */
+function ehSaidaValida(ponto, dimensoes) {
+  if (!dimensoes || !ponto || !Number.isInteger(ponto.pos_x) || !Number.isInteger(ponto.pos_y)) {
+    return false
+  }
+  const { pos_x: x, pos_y: y } = ponto
+  const { largura, altura } = dimensoes
+  if (x < -1 || x > largura || y < -1 || y > altura) {
+    return false
+  }
+  const foraX = x === -1 || x === largura
+  const foraY = y === -1 || y === altura
+  return foraX !== foraY
+}
+
+/**
+ * Valida se a coordenada (pos_x, pos_y) de um pacote tel é permitida pelas dimensões atuais do labirinto.
+ */
+function ehPosicaoPermitida(ponto, dimensoes) {
+  if (!Number.isInteger(ponto.pos_x) || !Number.isInteger(ponto.pos_y)) {
+    return false
+  }
+  if (ponto.pos_x < -1 || ponto.pos_y < -1) {
+    return false
+  }
+  if (ponto.pos_x === -1 && ponto.pos_y === -1) {
+    return false
+  }
+  if (!dimensoes) {
+    return true
+  }
+  return ehCelulaInterna(ponto, dimensoes) || ehSaidaValida(ponto, dimensoes)
+}
+
+/**
+ * Centraliza o cálculo da saída do labirinto e da última célula interna a partir do trajeto.
+ */
+function calcularSaidaLabirinto(trajeto, dimensoes) {
+  const ultimoPonto = trajeto[trajeto.length - 1]
+  const penultimoPonto = trajeto[trajeto.length - 2]
+  if (ehSaidaValida(ultimoPonto, dimensoes) && ehCelulaInterna(penultimoPonto, dimensoes)) {
+    return {
+      ultimaCelulaInterna: penultimoPonto,
+      pontoSaidaExterna: ultimoPonto,
+    }
+  }
+  return {
+    ultimaCelulaInterna: null,
+    pontoSaidaExterna: null,
+  }
+}
+
+/**
  * Calcula o checksum CRC-16/CCITT-FALSE (polinômio 0x1021, inicial 0xFFFF,
  * sem reflexão, XOR final 0) sobre os bytes UTF-8 do texto JSON,
  * exatamente conforme a seção 4 do Contrato de Telemetria (4.4.7) e simulador.py.
@@ -108,7 +180,7 @@ function calcularCrc16Ccitt(texto) {
  * Aceita tanto o formato bruto <JSON>|<CRC> (do simulador.py / robô)
  * quanto JSON puro (retransmitido pelo endpoint /ws/painel do backend).
  */
-function interpretarFrameTelemetria(textoBruto) {
+function interpretarFrameTelemetria(textoBruto, dimensoesAtuais = null) {
   if (typeof textoBruto !== 'string') {
     return { valido: false, motivo: 'formato invalido' }
   }
@@ -159,6 +231,8 @@ function interpretarFrameTelemetria(textoBruto) {
     return { valido: false, motivo: 'campo invalido: tempo_ms' }
   }
 
+  const dimensoesEfetivas = resolverDimensoesLabirinto(dados, dimensoesAtuais)
+
   if (dados.t === 'tel') {
     const camposNumericos = ['pos_x', 'pos_y', 'paredes', 'velocidade', 'tensao_bateria']
     for (const campo of camposNumericos) {
@@ -169,7 +243,7 @@ function interpretarFrameTelemetria(textoBruto) {
     if (dados.paredes < 0 || dados.paredes > 15 || !Number.isInteger(dados.paredes)) {
       return { valido: false, motivo: `fora do intervalo: paredes=${dados.paredes}` }
     }
-    if (!Number.isInteger(dados.pos_x) || !Number.isInteger(dados.pos_y) || dados.pos_x < -1 || dados.pos_y < -1) {
+    if (!ehPosicaoPermitida(dados, dimensoesEfetivas)) {
       return { valido: false, motivo: 'fora do intervalo: coordenadas invalidas' }
     }
     if (!NOMES_ORIENTACAO[dados.orientacao]) {
@@ -180,7 +254,7 @@ function interpretarFrameTelemetria(textoBruto) {
     }
   }
 
-  return { valido: true, dados }
+  return { valido: true, dados, dimensoes: dimensoesEfetivas }
 }
 
 /**
@@ -341,24 +415,23 @@ export default function Dashboard({
 
     function processarMensagem(eventoWs) {
       const recebidoEm = Date.now()
-      const resultado = interpretarFrameTelemetria(eventoWs.data)
+      const resultado = interpretarFrameTelemetria(eventoWs.data, dimensoesLabirintoRef.current)
       if (!resultado.valido) {
         return
       }
 
-      const { dados } = resultado
-      const novasDimensoes = resolverDimensoesLabirinto(dados, dimensoesLabirintoRef.current)
+      const { dados, dimensoes: novasDimensoes } = resultado
 
-      if (dados.t === 'tel' && !novasDimensoes && (dados.pos_x < 0 || dados.pos_y < 0)) {
-        return
-      }
-
-      // Atualiza marcadores de conexão (painel é apenas leitura; não envia ACK)
+      // Atualiza marcadores de conexão antes do descarte de coordenada negativa sem dimensões (evita falso Offline)
       ultimoPacoteRef.current = recebidoEm
       roboOnlineRef.current = true
       setUltimoPacoteEm(recebidoEm)
       setSegundosDesdeUltimoPacote(0)
       setRoboOnline(true)
+
+      if (dados.t === 'tel' && !novasDimensoes && (dados.pos_x < 0 || dados.pos_y < 0)) {
+        return
+      }
 
       if (typeof dados.corrida === 'number') {
         setCorridaAtual(dados.corrida)
@@ -408,10 +481,7 @@ export default function Dashboard({
         })
 
         const dentroDaMatriz = novasDimensoes
-          ? dados.pos_x >= 0 &&
-            dados.pos_x < novasDimensoes.largura &&
-            dados.pos_y >= 0 &&
-            dados.pos_y < novasDimensoes.altura
+          ? ehCelulaInterna(dados, novasDimensoes)
           : dados.pos_x >= 0 && dados.pos_y >= 0
 
         if (dentroDaMatriz) {
@@ -561,30 +631,11 @@ export default function Dashboard({
       ? `${((qtdCelulasMapeadas / totalCelulasLabirinto) * 100).toFixed(1).replace('.', ',')}%`
       : '--'
 
-  const dentroDaMatrizAtual = (ponto) =>
-    Boolean(
-      dimensoesLabirinto &&
-        ponto &&
-        Number.isInteger(ponto.pos_x) &&
-        Number.isInteger(ponto.pos_y) &&
-        ponto.pos_x >= 0 &&
-        ponto.pos_x < dimensoesLabirinto.largura &&
-        ponto.pos_y >= 0 &&
-        ponto.pos_y < dimensoesLabirinto.altura,
-    )
-  const ultimoPontoTrajeto = trajeto[trajeto.length - 1]
-  const penultimoPontoTrajeto = trajeto[trajeto.length - 2]
-  const roboSaiuDoLabirinto = Boolean(
-    dimensoesLabirinto &&
-      ultimoPontoTrajeto &&
-      !dentroDaMatrizAtual(ultimoPontoTrajeto) &&
-      dentroDaMatrizAtual(penultimoPontoTrajeto),
-  )
-  const ultimaCelulaInterna = roboSaiuDoLabirinto ? penultimoPontoTrajeto : null
-  const pontoSaidaLabirinto = roboSaiuDoLabirinto ? ultimoPontoTrajeto : null
+  const { ultimaCelulaInterna, pontoSaidaExterna } = calcularSaidaLabirinto(trajeto, dimensoesLabirinto)
+  const roboSaiuDoLabirinto = Boolean(ultimaCelulaInterna && pontoSaidaExterna)
 
   const codigoCelulaAtual = roboSaiuDoLabirinto
-    ? `Saída (${pontoSaidaLabirinto.pos_x}, ${pontoSaidaLabirinto.pos_y})`
+    ? `Saída (${pontoSaidaExterna.pos_x}, ${pontoSaidaExterna.pos_y})`
     : formatarCodigoCelula(roboPos.pos_x, roboPos.pos_y)
   const infoOrientacao = NOMES_ORIENTACAO[roboPos.orientacao] || NOMES_ORIENTACAO.N
   const infoEstadoExecucao = TEXTOS_ESTADO_EXECUCAO[estadoExecucao] || TEXTOS_ESTADO_EXECUCAO.parado
@@ -616,7 +667,7 @@ export default function Dashboard({
 
   return (
     <div className="painel-layout">
-      {ultimoPacoteEm !== null && !roboOnline && <ConnectionAlert />}
+      {ultimoPacoteEm !== null && !roboOnline && <ConnectionAlert timeoutMs={TIMEOUT_OFFLINE_MS} />}
       {/* Menu Lateral Esquerdo (Sidebar fiel ao Figma) */}
       <aside className="menu-lateral" aria-label="Menu principal">
         <div className="marca-topo">
@@ -778,7 +829,7 @@ export default function Dashboard({
                       className="card-topo-sub alerta-critico-texto"
                       data-testid="alerta-bateria-critica-visao-geral"
                     >
-                      <span className="ponto-inline vermelho" /> ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em 7,20 V)
+                      <span className="ponto-inline vermelho" /> ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em {TEXTO_REARME_BATERIA} V)
                     </span>
                   ) : (
                     <span className="card-topo-sub" data-testid="status-bateria-normal-visao-geral">
@@ -1086,7 +1137,7 @@ export default function Dashboard({
                       ultimaCelulaInterna ? `${ultimaCelulaInterna.pos_x},${ultimaCelulaInterna.pos_y}` : ''
                     }
                     data-saida-labirinto={
-                      pontoSaidaLabirinto ? `${pontoSaidaLabirinto.pos_x},${pontoSaidaLabirinto.pos_y}` : ''
+                      pontoSaidaExterna ? `${pontoSaidaExterna.pos_x},${pontoSaidaExterna.pos_y}` : ''
                     }
                   >
                     {dimensoesLabirinto ? (
@@ -1096,6 +1147,8 @@ export default function Dashboard({
                         celulas={mapaCelulas}
                         roboPos={roboPos}
                         trajeto={trajeto}
+                        ultimaCelula={ultimaCelulaInterna}
+                        pontoSaida={pontoSaidaExterna}
                       />
                     ) : (
                       <div className="placeholder-maze-map" data-testid="aviso-escolha-labirinto">
@@ -1127,7 +1180,7 @@ export default function Dashboard({
 
                       {roboSaiuDoLabirinto && ultimaCelulaInterna && (
                         <div className="pilula-saida-labirinto" data-testid="indicador-saida-painel">
-                          ✓ Saída do mapa em ({pontoSaidaLabirinto.pos_x}, {pontoSaidaLabirinto.pos_y}) · Última célula:{' '}
+                          ✓ Saída do mapa em ({pontoSaidaExterna.pos_x}, {pontoSaidaExterna.pos_y}) · Última célula:{' '}
                           {formatarCodigoCelula(ultimaCelulaInterna.pos_x, ultimaCelulaInterna.pos_y)} ({ultimaCelulaInterna.pos_x},{' '}
                           {ultimaCelulaInterna.pos_y})
                         </div>
@@ -1231,8 +1284,8 @@ export default function Dashboard({
 
                   <div className="card-indicador-rodape">
                     {alertaBateriaCritica ? (
-                      <span className="alerta-critico-texto" data-testid="alerta-bateria-critica">
-                        ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em 7,20 V)
+                      <span className="alerta-critico-texto" role="alert" data-testid="alerta-bateria-critica">
+                        ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em {TEXTO_REARME_BATERIA} V)
                       </span>
                     ) : (
                       <span className="texto-secundario" data-testid="status-bateria-normal">
@@ -1275,7 +1328,7 @@ export default function Dashboard({
                   <div className="posicao-resumo-linha">
                     <span className="pilula-celula" data-testid="celula-atual-badge">
                       {roboSaiuDoLabirinto
-                        ? `Saída (${pontoSaidaLabirinto.pos_x}, ${pontoSaidaLabirinto.pos_y}) · Última: ${formatarCodigoCelula(ultimaCelulaInterna.pos_x, ultimaCelulaInterna.pos_y)} (${ultimaCelulaInterna.pos_x}, ${ultimaCelulaInterna.pos_y})`
+                        ? `Saída (${pontoSaidaExterna.pos_x}, ${pontoSaidaExterna.pos_y}) · Última: ${formatarCodigoCelula(ultimaCelulaInterna.pos_x, ultimaCelulaInterna.pos_y)} (${ultimaCelulaInterna.pos_x}, ${ultimaCelulaInterna.pos_y})`
                         : `${codigoCelulaAtual} (${roboPos.pos_x}, ${roboPos.pos_y})`}
                     </span>
                     <strong className="orientacao-label" data-testid="orientacao-atual">
