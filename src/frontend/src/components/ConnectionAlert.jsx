@@ -1,6 +1,6 @@
 import './ConnectionAlert.css'
 
-export default function ConnectionAlert() {
+export default function ConnectionAlert({ timeoutMs = 3000 }) {
   return (
     <div className="connection-alert" role="alert" aria-atomic="true" data-testid="connection-alert">
       <span className="connection-alert__icon" aria-hidden="true">
@@ -12,7 +12,7 @@ export default function ConnectionAlert() {
       <div className="connection-alert__content">
         <p className="connection-alert__title">Conexão com o robô perdida</p>
         <p className="connection-alert__description">
-          Nenhuma mensagem recebida há pelo menos 3 segundos. Verifique a conexão do robô.
+          Nenhuma mensagem recebida há pelo menos {Math.round(timeoutMs / 1000)} segundos. Verifique a conexão do robô.
         </p>
         <span className="connection-alert__status">Aguardando retorno da comunicação</span>
       </div>

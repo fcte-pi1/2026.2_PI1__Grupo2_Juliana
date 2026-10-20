@@ -22,6 +22,8 @@ export default function MazeMap({
   celulas = [],
   roboPos = null,
   trajeto = [],
+  ultimaCelula: ultimaCelulaProp,
+  pontoSaida: pontoSaidaProp,
   className = '',
   style,
 }) {
@@ -35,8 +37,10 @@ export default function MazeMap({
     Number.isInteger(x) && Number.isInteger(y)
     && x >= 0 && x < largura && y >= 0 && y < altura
   )
-  const foraDoMapa = (x, y) => (
-    Number.isInteger(x) && Number.isInteger(y) && !dentroDoMapa(x, y)
+  const ehSaidaValida = (x, y) => (
+    Number.isInteger(x) && Number.isInteger(y)
+    && x >= -1 && x <= largura && y >= -1 && y <= altura
+    && ((x === -1 || x === largura) !== (y === -1 || y === altura))
   )
   const mapa = new Map()
   const entradas = Array.isArray(celulas)
@@ -54,29 +58,25 @@ export default function MazeMap({
     }
   }
 
-  const ultimoPonto = trajeto[trajeto.length - 1]
-  const penultimoPonto = trajeto[trajeto.length - 2]
   const roboX = roboPos?.pos_x
   const roboY = roboPos?.pos_y
-  const saiuPeloTrajeto = (
-    foraDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
-    && dentroDoMapa(penultimoPonto?.pos_x, penultimoPonto?.pos_y)
-  )
-  const saiuPeloRoboPos = (
-    !saiuPeloTrajeto
-    && foraDoMapa(roboX, roboY)
-    && dentroDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
-  )
-  const pontoSaida = saiuPeloTrajeto
-    ? { pos_x: ultimoPonto.pos_x, pos_y: ultimoPonto.pos_y }
-    : saiuPeloRoboPos
-      ? { pos_x: roboX, pos_y: roboY }
-      : null
-  const ultimaCelula = saiuPeloTrajeto
-    ? { pos_x: penultimoPonto.pos_x, pos_y: penultimoPonto.pos_y }
-    : saiuPeloRoboPos
-      ? { pos_x: ultimoPonto.pos_x, pos_y: ultimoPonto.pos_y }
-      : null
+  let ultimaCelula = ultimaCelulaProp && pontoSaidaProp ? ultimaCelulaProp : null
+  let pontoSaida = ultimaCelulaProp && pontoSaidaProp ? pontoSaidaProp : null
+
+  // Props fornecidas pelo Dashboard são a fonte da verdade, inclusive quando nulas.
+  if (ultimaCelulaProp === undefined && pontoSaidaProp === undefined) {
+    const ultimoPonto = trajeto[trajeto.length - 1]
+    const penultimoPonto = trajeto[trajeto.length - 2]
+    if (ehSaidaValida(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
+      && dentroDoMapa(penultimoPonto?.pos_x, penultimoPonto?.pos_y)) {
+      pontoSaida = ultimoPonto
+      ultimaCelula = penultimoPonto
+    } else if (ehSaidaValida(roboX, roboY)
+      && dentroDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)) {
+      pontoSaida = roboPos
+      ultimaCelula = ultimoPonto
+    }
+  }
 
   const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
@@ -146,7 +146,7 @@ export default function MazeMap({
 
           {ultimaCelula && (
             <rect
-              className="maze-map__goal maze-map__exit"
+              className="maze-map__exit"
               data-ultima-celula-marcador={`${ultimaCelula.pos_x},${ultimaCelula.pos_y}`}
               data-saida={`${pontoSaida.pos_x},${pontoSaida.pos_y}`}
               x={ultimaCelula.pos_x * TAMANHO_CELULA + 5}
@@ -202,7 +202,7 @@ export default function MazeMap({
           <span><i className="maze-map__key" aria-hidden="true" />Não observada</span>
           <span><i className="maze-map__key maze-map__key--wall" aria-hidden="true" />Parede confirmada</span>
           <span><i className="maze-map__key maze-map__key--trail" aria-hidden="true" />Trajeto</span>
-          <span><i className="maze-map__key maze-map__key--goal" aria-hidden="true" />Saída (última célula)</span>
+          <span><i className="maze-map__key maze-map__key--exit" aria-hidden="true" />Saída (última célula)</span>
         </span>
       </figcaption>
     </figure>
