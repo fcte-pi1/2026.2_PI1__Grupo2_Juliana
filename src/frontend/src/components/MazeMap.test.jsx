@@ -6,14 +6,13 @@ import MazeMap from './MazeMap.jsx'
 afterEach(cleanup)
 
 describe('MazeMap', () => {
-  test.each([4, 8, 12])('renderiza %ix4 com objetivo no canto oposto', (largura) => {
+  test.each([4, 8, 12])('renderiza %ix4 sem objetivo fixo pré-demarcado', (largura) => {
     const { container } = render(<MazeMap largura={largura} altura={4} />)
     expect(screen.getByRole('img').getAttribute('viewBox')).toBe(`0 0 ${largura * 40 + 40} 200`)
     expect(container.querySelectorAll('[data-celula]').length).toBe(largura * 4)
-    const objetivo = container.querySelector(`[data-objetivo="${largura - 1},3"]`)
-    expect(objetivo.getAttribute('x')).toBe(String((largura - 1) * 40 + 5))
-    expect(objetivo.getAttribute('y')).toBe('5')
-    expect(screen.getByRole('img').textContent).toContain(`Objetivo em (${largura - 1}, 3)`)
+    expect(container.querySelector('[data-objetivo]')).toBeNull()
+    expect(container.querySelector('[data-ultima-celula-marcador]')).toBeNull()
+    expect(screen.getByRole('img').textContent).not.toContain('Objetivo em')
   })
 
   test.each([
@@ -115,7 +114,44 @@ describe('MazeMap', () => {
     rerender(<MazeMap trajeto={[]} />)
     expect(caminho()).toBeUndefined()
     expect(screen.getByText('Trajeto')).toBeTruthy()
-    expect(screen.getByText('Objetivo')).toBeTruthy()
+    expect(screen.getByText('Saída (última célula)')).toBeTruthy()
+  })
+
+  test('destaca a penúltima coordenada como última célula interna quando o robô sai do labirinto', () => {
+    const { container, rerender } = render(
+      <MazeMap
+        largura={4}
+        altura={4}
+        trajeto={[
+          { pos_x: 0, pos_y: 0 },
+          { pos_x: 3, pos_y: 3 },
+          { pos_x: 4, pos_y: 3 },
+        ]}
+        roboPos={{ pos_x: 4, pos_y: 3, orientacao: 'L' }}
+      />,
+    )
+
+    const marcador = container.querySelector('[data-ultima-celula-marcador="3,3"]')
+    expect(marcador).toBeTruthy()
+    expect(marcador.getAttribute('data-saida')).toBe('4,3')
+    expect(marcador.getAttribute('x')).toBe(String(3 * 40 + 5))
+    expect(marcador.getAttribute('y')).toBe('5')
+    expect(container.querySelector('[data-celula="3,3"].maze-map__cell--exit')).toBeTruthy()
+    expect(container.querySelector('[data-celula="3,3"]').getAttribute('data-ultima-celula')).toBe('true')
+    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (4, 3)')
+    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Última célula (3, 3)')
+
+    // Também funciona quando a coordenada externa está apenas em roboPos e o último ponto do trajeto é interno
+    rerender(
+      <MazeMap
+        largura={4}
+        altura={4}
+        trajeto={[{ pos_x: 0, pos_y: 0 }, { pos_x: 0, pos_y: 1 }]}
+        roboPos={{ pos_x: -1, pos_y: 1, orientacao: 'O' }}
+      />,
+    )
+    expect(container.querySelector('[data-ultima-celula-marcador="0,1"]')).toBeTruthy()
+    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (-1, 1)')
   })
 
   test('restaura todo o trajeto recebido ao remontar o componente em StrictMode', () => {

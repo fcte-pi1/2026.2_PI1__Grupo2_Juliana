@@ -169,8 +169,8 @@ function interpretarFrameTelemetria(textoBruto) {
     if (dados.paredes < 0 || dados.paredes > 15 || !Number.isInteger(dados.paredes)) {
       return { valido: false, motivo: `fora do intervalo: paredes=${dados.paredes}` }
     }
-    if (dados.pos_x < 0 || dados.pos_y < 0) {
-      return { valido: false, motivo: 'fora do intervalo: coordenadas negativas' }
+    if (!Number.isInteger(dados.pos_x) || !Number.isInteger(dados.pos_y) || dados.pos_x < -1 || dados.pos_y < -1) {
+      return { valido: false, motivo: 'fora do intervalo: coordenadas invalidas' }
     }
     if (!NOMES_ORIENTACAO[dados.orientacao]) {
       return { valido: false, motivo: `orientacao invalida: ${dados.orientacao}` }
@@ -258,9 +258,12 @@ export default function Dashboard({
   const [mapaCelulas, setMapaCelulas] = useState({})
   const [trajeto, setTrajeto] = useState([])
   const [dimensoesLabirinto, setDimensoesLabirinto] = useState(lerDimensoesSalvas)
+  const dimensoesLabirintoRef = useRef(dimensoesLabirinto)
 
   function selecionarTipoLabirinto(largura, altura) {
-    setDimensoesLabirinto({ largura, altura })
+    const novasDimensoes = { largura, altura }
+    dimensoesLabirintoRef.current = novasDimensoes
+    setDimensoesLabirinto(novasDimensoes)
     window.localStorage.setItem(CHAVE_STORAGE_LABIRINTO, `${largura}x${altura}`)
   }
 
@@ -344,6 +347,11 @@ export default function Dashboard({
       }
 
       const { dados } = resultado
+      const novasDimensoes = resolverDimensoesLabirinto(dados, dimensoesLabirintoRef.current)
+
+      if (dados.t === 'tel' && !novasDimensoes && (dados.pos_x < 0 || dados.pos_y < 0)) {
+        return
+      }
 
       // Atualiza marcadores de conexão (painel é apenas leitura; não envia ACK)
       ultimoPacoteRef.current = recebidoEm
@@ -356,8 +364,9 @@ export default function Dashboard({
         setCorridaAtual(dados.corrida)
       }
 
-      // Lê largura_celula e altura_celula (ou fallback largura/altura) em todo pacote válido
-      setDimensoesLabirinto((atual) => resolverDimensoesLabirinto(dados, atual))
+      // Lê largura_celula e altura_celula em todo pacote válido
+      dimensoesLabirintoRef.current = novasDimensoes
+      setDimensoesLabirinto(novasDimensoes)
 
       setTempoMs(dados.tempo_ms)
 
@@ -398,26 +407,41 @@ export default function Dashboard({
           return [...trajetoAnterior, { pos_x: dados.pos_x, pos_y: dados.pos_y }]
         })
 
-        const chaveCelula = `${dados.pos_x},${dados.pos_y}`
-        const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
-        const jaVista = celulasVistasRef.current.has(chaveCelula)
-        celulasVistasRef.current.add(chaveCelula)
+        const dentroDaMatriz = novasDimensoes
+          ? dados.pos_x >= 0 &&
+            dados.pos_x < novasDimensoes.largura &&
+            dados.pos_y >= 0 &&
+            dados.pos_y < novasDimensoes.altura
+          : dados.pos_x >= 0 && dados.pos_y >= 0
 
-        if (!jaVista) {
-          registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
+        if (dentroDaMatriz) {
+          const chaveCelula = `${dados.pos_x},${dados.pos_y}`
+          const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
+          const jaVista = celulasVistasRef.current.has(chaveCelula)
+          celulasVistasRef.current.add(chaveCelula)
+
+          if (!jaVista) {
+            registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
+          }
+
+          setMapaCelulas((mapaAnterior) => ({
+            ...mapaAnterior,
+            [chaveCelula]: {
+              pos_x: dados.pos_x,
+              pos_y: dados.pos_y,
+              paredes: dados.paredes,
+              valor_flood: dados.valor_flood ?? null,
+              orientacao: dados.orientacao,
+              visitada: true,
+            },
+          }))
+        } else {
+          registrarEvento(
+            `Saída do labirinto alcançada (${dados.pos_x}, ${dados.pos_y})`,
+            'sucesso',
+            recebidoEm,
+          )
         }
-
-        setMapaCelulas((mapaAnterior) => ({
-          ...mapaAnterior,
-          [chaveCelula]: {
-            pos_x: dados.pos_x,
-            pos_y: dados.pos_y,
-            paredes: dados.paredes,
-            valor_flood: dados.valor_flood ?? null,
-            orientacao: dados.orientacao,
-            visitada: true,
-          },
-        }))
       } else if (dados.t === 'evt') {
         if (dados.evento === 'inicio') {
           celulasVistasRef.current.clear()
@@ -537,7 +561,31 @@ export default function Dashboard({
       ? `${((qtdCelulasMapeadas / totalCelulasLabirinto) * 100).toFixed(1).replace('.', ',')}%`
       : '--'
 
-  const codigoCelulaAtual = formatarCodigoCelula(roboPos.pos_x, roboPos.pos_y)
+  const dentroDaMatrizAtual = (ponto) =>
+    Boolean(
+      dimensoesLabirinto &&
+        ponto &&
+        Number.isInteger(ponto.pos_x) &&
+        Number.isInteger(ponto.pos_y) &&
+        ponto.pos_x >= 0 &&
+        ponto.pos_x < dimensoesLabirinto.largura &&
+        ponto.pos_y >= 0 &&
+        ponto.pos_y < dimensoesLabirinto.altura,
+    )
+  const ultimoPontoTrajeto = trajeto[trajeto.length - 1]
+  const penultimoPontoTrajeto = trajeto[trajeto.length - 2]
+  const roboSaiuDoLabirinto = Boolean(
+    dimensoesLabirinto &&
+      ultimoPontoTrajeto &&
+      !dentroDaMatrizAtual(ultimoPontoTrajeto) &&
+      dentroDaMatrizAtual(penultimoPontoTrajeto),
+  )
+  const ultimaCelulaInterna = roboSaiuDoLabirinto ? penultimoPontoTrajeto : null
+  const pontoSaidaLabirinto = roboSaiuDoLabirinto ? ultimoPontoTrajeto : null
+
+  const codigoCelulaAtual = roboSaiuDoLabirinto
+    ? `Saída (${pontoSaidaLabirinto.pos_x}, ${pontoSaidaLabirinto.pos_y})`
+    : formatarCodigoCelula(roboPos.pos_x, roboPos.pos_y)
   const infoOrientacao = NOMES_ORIENTACAO[roboPos.orientacao] || NOMES_ORIENTACAO.N
   const infoEstadoExecucao = TEXTOS_ESTADO_EXECUCAO[estadoExecucao] || TEXTOS_ESTADO_EXECUCAO.parado
 
@@ -617,15 +665,6 @@ export default function Dashboard({
             <span className="menu-item-icone" aria-hidden="true">&gt;_</span>
             <span>Logs</span>
           </button>
-
-          <button
-            type="button"
-            className={`menu-item ${abaAtiva === 'configuracoes' ? 'ativo' : ''}`}
-            onClick={() => setAbaAtiva('configuracoes')}
-          >
-            <span className="menu-item-icone" aria-hidden="true">⚙</span>
-            <span>Configurações</span>
-          </button>
         </nav>
       </aside>
 
@@ -641,9 +680,7 @@ export default function Dashboard({
                   ? 'Monitoramento em Tempo Real'
                   : abaAtiva === 'historico'
                     ? 'Histórico de Corridas'
-                    : abaAtiva === 'logs'
-                      ? 'Logs e Eventos'
-                      : 'Configurações'}
+                    : 'Logs e Eventos'}
             </h1>
             <p className="subtitulo-pagina">
               {abaAtiva === 'dashboard'
@@ -652,9 +689,7 @@ export default function Dashboard({
                   ? 'Acompanhamento da execução e telemetria do Micromouse'
                   : abaAtiva === 'historico'
                     ? 'Histórico de tentativas e trajetos anteriores'
-                    : abaAtiva === 'logs'
-                      ? 'Depuração e auditoria de eventos e erros do sistema'
-                      : 'Configurações e parâmetros do sistema de telemetria'}
+                    : 'Depuração e auditoria de eventos e erros do sistema'}
             </p>
           </div>
 
@@ -678,7 +713,10 @@ export default function Dashboard({
             {/* Faixa Superior de 4 Cards da Visão Geral */}
             <section className="grade-resumo-topo" aria-label="Resumo geral do robô">
               {/* Card 1: Status do Robô */}
-              <article className="card-topo" data-testid="card-status-robo">
+              <article
+                className={`card-topo ${!onlineAtivo && ultimoPacoteEm !== null ? 'card-alerta-conexao' : ''}`}
+                data-testid="card-status-robo"
+              >
                 <div className={`icone-quadrado ${onlineAtivo ? 'verde-claro-icone' : 'vermelho'}`} aria-hidden="true">
                   🤖
                 </div>
@@ -695,13 +733,30 @@ export default function Dashboard({
               </article>
 
               {/* Card 2: Bateria */}
-              <article className="card-topo" data-testid="card-bateria-visao-geral">
-                <div className="icone-quadrado azul-claro-icone" aria-hidden="true">
+              <article
+                className={`card-topo ${alertaBateriaCritica ? 'card-bateria-critica' : ''}`}
+                data-testid="card-bateria-visao-geral"
+              >
+                <div
+                  className={`icone-quadrado ${alertaBateriaCritica ? 'vermelho' : 'azul-claro-icone'}`}
+                  aria-hidden="true"
+                >
                   ⚡
                 </div>
                 <div className="card-topo-conteudo card-conteudo-bateria-topo">
-                  <span className="card-topo-rotulo">Bateria</span>
-                  <strong className="card-topo-valor" data-testid="porcentagem-bateria-visao-geral">
+                  <div className="card-topo-cabecalho-bateria">
+                    <span className="card-topo-rotulo">Bateria</span>
+                    <span
+                      className={`tensao-badge ${alertaBateriaCritica ? 'critica' : ''}`}
+                      data-testid="tensao-bateria-visao-geral"
+                    >
+                      {formatarDecimalBr(tensaoBateria, 2)} V
+                    </span>
+                  </div>
+                  <strong
+                    className={`card-topo-valor ${alertaBateriaCritica ? 'texto-vermelho' : ''}`}
+                    data-testid="porcentagem-bateria-visao-geral"
+                  >
                     {porcentagemBateria}%
                   </strong>
                   <div
@@ -718,10 +773,18 @@ export default function Dashboard({
                       style={{ width: `${porcentagemBateria}%` }}
                     />
                   </div>
-                  <span className="card-topo-sub">
-                    <span className={`ponto-inline ${alertaBateriaCritica ? 'vermelho' : 'neutro'}`} />{' '}
-                    {alertaBateriaCritica ? 'Bateria crítica' : 'Nível normal'}
-                  </span>
+                  {alertaBateriaCritica ? (
+                    <span
+                      className="card-topo-sub alerta-critico-texto"
+                      data-testid="alerta-bateria-critica-visao-geral"
+                    >
+                      <span className="ponto-inline vermelho" /> ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em 7,20 V)
+                    </span>
+                  ) : (
+                    <span className="card-topo-sub" data-testid="status-bateria-normal-visao-geral">
+                      <span className="ponto-inline neutro" /> Nível normal
+                    </span>
+                  )}
                 </div>
               </article>
 
@@ -1019,6 +1082,12 @@ export default function Dashboard({
                     data-robo-pos={`${roboPos.pos_x},${roboPos.pos_y},${roboPos.orientacao}`}
                     data-trajeto-count={trajeto.length}
                     data-trajeto={trajeto.map((p) => `${p.pos_x},${p.pos_y}`).join(';')}
+                    data-ultima-celula={
+                      ultimaCelulaInterna ? `${ultimaCelulaInterna.pos_x},${ultimaCelulaInterna.pos_y}` : ''
+                    }
+                    data-saida-labirinto={
+                      pontoSaidaLabirinto ? `${pontoSaidaLabirinto.pos_x},${pontoSaidaLabirinto.pos_y}` : ''
+                    }
                   >
                     {dimensoesLabirinto ? (
                       <MazeMap
@@ -1055,6 +1124,14 @@ export default function Dashboard({
                           </div>
                         </div>
                       </div>
+
+                      {roboSaiuDoLabirinto && ultimaCelulaInterna && (
+                        <div className="pilula-saida-labirinto" data-testid="indicador-saida-painel">
+                          ✓ Saída do mapa em ({pontoSaidaLabirinto.pos_x}, {pontoSaidaLabirinto.pos_y}) · Última célula:{' '}
+                          {formatarCodigoCelula(ultimaCelulaInterna.pos_x, ultimaCelulaInterna.pos_y)} ({ultimaCelulaInterna.pos_x},{' '}
+                          {ultimaCelulaInterna.pos_y})
+                        </div>
+                      )}
 
                       <div className="divisor-horizontal" />
 
@@ -1116,15 +1193,26 @@ export default function Dashboard({
                   data-testid="card-bateria"
                 >
                   <div className="card-indicador-topo">
-                    <span className="icone-indicador verde" aria-hidden="true">🔋</span>
+                    <span
+                      className={`icone-indicador ${alertaBateriaCritica ? 'vermelho' : 'verde'}`}
+                      aria-hidden="true"
+                    >
+                      🔋
+                    </span>
                     <h3 className="card-indicador-titulo">Bateria</h3>
-                    <span className="tensao-badge" data-testid="tensao-bateria">
+                    <span
+                      className={`tensao-badge ${alertaBateriaCritica ? 'critica' : ''}`}
+                      data-testid="tensao-bateria"
+                    >
                       {formatarDecimalBr(tensaoBateria, 2)} V
                     </span>
                   </div>
 
                   <div className="bateria-linha-principal">
-                    <strong className="bateria-porcentagem" data-testid="porcentagem-bateria">
+                    <strong
+                      className={`bateria-porcentagem ${alertaBateriaCritica ? 'texto-vermelho' : ''}`}
+                      data-testid="porcentagem-bateria"
+                    >
                       {porcentagemBateria}%
                     </strong>
                     <div
@@ -1143,7 +1231,7 @@ export default function Dashboard({
 
                   <div className="card-indicador-rodape">
                     {alertaBateriaCritica ? (
-                      <span className="alerta-critico-texto" role="alert" data-testid="alerta-bateria-critica">
+                      <span className="alerta-critico-texto" data-testid="alerta-bateria-critica">
                         ⚠ Bateria crítica ({formatarDecimalBr(tensaoBateria, 2)} V — rearme em 7,20 V)
                       </span>
                     ) : (
@@ -1186,7 +1274,9 @@ export default function Dashboard({
 
                   <div className="posicao-resumo-linha">
                     <span className="pilula-celula" data-testid="celula-atual-badge">
-                      {codigoCelulaAtual} ({roboPos.pos_x}, {roboPos.pos_y})
+                      {roboSaiuDoLabirinto
+                        ? `Saída (${pontoSaidaLabirinto.pos_x}, ${pontoSaidaLabirinto.pos_y}) · Última: ${formatarCodigoCelula(ultimaCelulaInterna.pos_x, ultimaCelulaInterna.pos_y)} (${ultimaCelulaInterna.pos_x}, ${ultimaCelulaInterna.pos_y})`
+                        : `${codigoCelulaAtual} (${roboPos.pos_x}, ${roboPos.pos_y})`}
                     </span>
                     <strong className="orientacao-label" data-testid="orientacao-atual">
                       {infoOrientacao.nome} {infoOrientacao.seta}
@@ -1294,21 +1384,6 @@ export default function Dashboard({
               <h2 className="card-titulo">Logs e Eventos</h2>
               <p className="texto-secundario">
                 Módulo referente à auditoria de descartes e eventos de hardware/software (RF20-S).
-              </p>
-              <button type="button" className="botao-voltar" onClick={() => setAbaAtiva('dashboard')}>
-                Voltar para a Visão Geral
-              </button>
-            </div>
-          </section>
-        )}
-
-        {abaAtiva === 'configuracoes' && (
-          <section className="card-painel card-em-desenvolvimento" data-testid="tela-configuracoes">
-            <div className="placeholder-secao-texto">
-              <span className="icone-secao-grande" aria-hidden="true">⚙</span>
-              <h2 className="card-titulo">Configurações</h2>
-              <p className="texto-secundario">
-                Configurações da URL do WebSocket (atual: <code>{wsUrl}</code>) e parâmetros locais da aplicação.
               </p>
               <button type="button" className="botao-voltar" onClick={() => setAbaAtiva('dashboard')}>
                 Voltar para a Visão Geral
