@@ -1,7 +1,7 @@
 """Simulador de telemetria do Micromouse (atividade 1.4).
 
 Imita o robô: gera um labirinto aleatório, percorre do canto (0, 0) até o canto
-oposto e envia a corrida ao servidor por WebSocket seguindo o contrato de
+oposto, sai do labirinto pelo Norte e envia a corrida ao servidor por WebSocket seguindo o contrato de
 telemetria (docs/4.4.7). Usado para desenvolver e testar o sistema web sem o robô
 (CT-S01 a CT-S06 e CT-S17).
 
@@ -58,7 +58,8 @@ def corromper(msg, tipo):
 def gerar_labirinto(largura, altura, rng):
     """Labirinto perfeito por busca em profundidade a partir de (0, 0).
 
-    Retorna a máscara de paredes de cada célula e a rota de (0, 0) até o canto oposto.
+    Retorna a máscara de paredes de cada célula e a rota de (0, 0) até o canto oposto,
+    que tem a parede Norte aberta para a saída.
     """
     paredes = {(x, y): 15 for x in range(largura) for y in range(altura)}
     pai, pilha = {(0, 0): None}, [(0, 0)]
@@ -74,6 +75,7 @@ def gerar_labirinto(largura, altura, rng):
         paredes[prox] &= ~DIRECOES[OPOSTA[d]][2]
         pai[prox] = (x, y)
         pilha.append(prox)
+    paredes[(largura - 1, altura - 1)] &= ~DIRECOES["N"][2]
 
     rota, celula = [], (largura - 1, altura - 1)
     while celula:
@@ -93,7 +95,8 @@ def gerar_corrida(largura, altura, corrida, rng, bateria_critica=False, bateria_
     6,5 V até o robô parar e abandonar a corrida.
     """
     paredes, rota = gerar_labirinto(largura, altura, rng)
-    total = len(rota) * TICKS_POR_CELULA
+    rota.append((largura - 1, altura))  # saída: 1 passo ao Norte do canto oposto, fora da matriz
+    total = (len(rota) - 1) * TICKS_POR_CELULA + 1
     inicio_queda = total // 3
     cab = {"v": 1, "corrida": corrida}
     ticks, abaixo_desde, parada_desde, armado = [], None, None, True
@@ -118,10 +121,10 @@ def gerar_corrida(largura, altura, corrida, rng, bateria_critica=False, bateria_
         msgs.append({
             **cab, "t": "tel", "tempo_ms": tempo_ms,
             "pos_x": rota[i][0], "pos_y": rota[i][1], "orientacao": orientacao,
-            "paredes": paredes[rota[i]],
+            "paredes": paredes.get(rota[i], 0),
             "velocidade": 0.0 if ultimo else round(0.18 + rng.uniform(-0.02, 0.02), 3),
             "tensao_bateria": tensao,
-            "valor_flood": len(rota) - 1 - i,
+            "valor_flood": max(len(rota) - 2 - i, 0),
             "estado": "parado" if ultimo else "explorando",
         })
         # bateria_critica: < 7,0 V por 1 s; só repete depois de voltar acima de 7,2 V
