@@ -35,11 +35,15 @@ def validate_limites_labirinto(
     largura_celula: int,
     altura_celula: int,
 ) -> str | None:
-    """Valida se pos_x e pos_y estão dentro dos limites do labirinto (0 a limite - 1)."""
-    if pos_x >= largura_celula:
+    """Valida se pos_x e pos_y estão dentro do labirinto ou na saída válida (1 passo fora em um único eixo)."""
+    if pos_x < -1 or pos_x > largura_celula:
         return f"fora do intervalo: pos_x={pos_x}"
-    if pos_y >= altura_celula:
+    if pos_y < -1 or pos_y > altura_celula:
         return f"fora do intervalo: pos_y={pos_y}"
+    fora_x = pos_x == -1 or pos_x == largura_celula
+    fora_y = pos_y == -1 or pos_y == altura_celula
+    if fora_x and fora_y:
+        return f"fora do intervalo: pos_x={pos_x}, pos_y={pos_y}"
     return None
 
 
@@ -114,13 +118,15 @@ def validate_frame(raw_text: str) -> ValidationResult:
             if campo not in data:
                 return ValidationResult(valid=False, error=f"campo ausente: {campo}")
 
-        # pos_x e pos_y
+        # pos_x e pos_y (aceita >= -1, no máximo uma coordenada igual a -1 para saída 1 passo fora)
         for coord in ("pos_x", "pos_y"):
             val = data[coord]
             if not isinstance(val, int) or isinstance(val, bool):
                 return ValidationResult(valid=False, error=f"tipo invalido: {coord}")
-            if val < 0:
+            if val < -1:
                 return ValidationResult(valid=False, error=f"fora do intervalo: {coord}={val}")
+        if data["pos_x"] == -1 and data["pos_y"] == -1:
+            return ValidationResult(valid=False, error="fora do intervalo: pos_x=-1, pos_y=-1")
 
         # orientacao
         if not isinstance(data["orientacao"], str):
