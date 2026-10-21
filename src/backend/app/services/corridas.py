@@ -106,6 +106,8 @@ def listar_corridas(
     status: str | None = None,
     num_tentativa: int | None = None,
     data: date | None = None,
+    limite: int = 100,
+    deslocamento: int = 0,
 ) -> list[dict[str, Any]]:
     """Histórico, da corrida mais recente à mais antiga; sem filtros é a consulta geral (RF08-S, RF09-S)."""
     consulta = _consulta_resumo()
@@ -117,7 +119,7 @@ def listar_corridas(
         consulta = consulta.where(Corrida.num_tentativa == num_tentativa)
     if data is not None:
         consulta = consulta.where(func.date(func.timezone(FUSO_HORARIO, Corrida.iniciado_em)) == data)
-    consulta = consulta.order_by(Corrida.iniciado_em.desc(), Corrida.id.desc())
+    consulta = consulta.order_by(Corrida.iniciado_em.desc(), Corrida.id.desc()).offset(deslocamento).limit(limite)
     return [_resumo(*linha) for linha in db.execute(consulta)]
 
 

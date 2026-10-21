@@ -71,15 +71,22 @@ telemetria é associado a ela (Contrato de Telemetria, seção 5).
 
 Filtros opcionais de `GET /corridas`, combináveis: `id_labirinto`,
 `status` (`em_andamento`, `concluida`, `abandonada`), `num_tentativa` e
-`data` (`AAAA-MM-DD`, dia de início no horário de Brasília). Sem resultados,
-retorna `[]`; parâmetros inválidos retornam HTTP 422.
+`data` (`AAAA-MM-DD`, dia de início no horário de Brasília). A paginação usa
+`limite` (1 a 200, padrão 100) e `deslocamento` (padrão 0), como em `/logs`.
+Sem resultados, retorna `[]`; parâmetros inválidos retornam HTTP 422.
 
 Cada corrida traz `id`, `id_labirinto`, `labirinto`, `largura_celula`,
 `altura_celula`, `num_tentativa`, `num_corrida_robo`, `status`,
 `iniciado_em`, `tempo_conc_s`, `duracao_s`, `consumo_medio_ma`,
 `velocidade_media` e `total_leituras`. `duracao_s` é o `tempo_conc_s` da
 corrida concluída ou, se ela não foi concluída, o `tempo_ms` da última
-leitura. Os testes ficam em `tests/test_corridas.py`.
+leitura. `iniciado_em` vem em UTC (ex.: `2026-10-21T02:30:00Z` é 23h30 do
+dia 20 em Brasília); as telas devem converter para o horário de Brasília ao
+exibir.
+
+Depois de `POST /corridas/{id}/encerrar` o robô não fica sabendo e continua
+enviando. Os pacotes daquela corrida recebem ACK e são ignorados, sem gravar
+leitura nem erro no log. Os testes ficam em `tests/test_corridas.py`.
 
 ## Exportação CSV
 

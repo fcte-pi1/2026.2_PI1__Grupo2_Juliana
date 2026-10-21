@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import Corrida, Labirinto, LeituraTelemetria, LogEvento
@@ -107,6 +108,16 @@ def test_so_uma_corrida_em_andamento_por_vez(sessao, id_labirinto, outro_labirin
     assert total_tentativas(outro_labirinto) == 0
 
 
+def test_corridas_criadas_ao_mesmo_tempo_respondem_409(sessao, id_labirinto, monkeypatch):
+    # A outra corrida passa pela verificação antes do commit: o índice único barra no banco
+    def commit_concorrente():
+        raise IntegrityError("INSERT", {}, Exception("uq_corrida_uma_em_andamento"))
+    monkeypatch.setattr(sessao, "commit", commit_concorrente)
+    resposta = cliente.post("/corridas", json={"id_labirinto": id_labirinto})
+    assert resposta.status_code == 409
+    assert resposta.json()["detail"] == "já existe uma corrida em andamento"
+
+
 def test_criar_corrida_em_labirinto_inexistente(sessao):
     assert cliente.post("/corridas", json={"id_labirinto": 999999}).status_code == 404
 
@@ -191,8 +202,20 @@ def test_consulta_geral_e_filtros(sessao, id_labirinto, outro_labirinto):
     assert listar(id_labirinto=id_labirinto, data=(hoje - timedelta(days=1)).isoformat()) == []
 
 
+def test_consulta_paginada(sessao, id_labirinto):
+    ids = []
+    for _ in range(3):
+        corrida = criar(id_labirinto)
+        encerrar(corrida["id"])
+        ids.append(corrida["id"])
+    ids.reverse()
+    assert [c["id"] for c in listar(id_labirinto=id_labirinto, limite=2)] == ids[:2]
+    assert [c["id"] for c in listar(id_labirinto=id_labirinto, limite=2, deslocamento=2)] == ids[2:]
+
+
 @pytest.mark.parametrize("params", [
     {"id_labirinto": 0}, {"status": "cancelada"}, {"num_tentativa": 0}, {"data": "20/10/2026"},
+    {"limite": 0}, {"limite": 201}, {"deslocamento": -1},
 ])
 def test_consulta_rejeita_filtros_invalidos(params):
     assert cliente.get("/corridas", params=params).status_code == 422
@@ -220,3 +243,28 @@ def test_corrida_criada_pelo_painel_recebe_a_telemetria_do_robo(sessao, id_labir
     assert detalhe["tempo_conc_s"] == 0.2
     assert [(l["pos_x"], l["pos_y"]) for l in detalhe["leituras"]] == [(0, 0), (0, 1)]
     assert total_tentativas(id_labirinto) == 1
+
+
+def test_telemetria_apos_encerrar_pelo_painel_recebe_ack_sem_encher_o_log(sessao, id_labirinto):
+    # O robô não sabe que a corrida foi encerrada e continua enviando (e reenviando)
+    corrida = criar(id_labirinto)
+    cab = {"v": 1, "corrida": 7}
+    tel = {"t": "tel", "pos_x": 0, "pos_y": 0, "orientacao": "N", "paredes": 11,
+           "velocidade": 0.2, "tensao_bateria": 8.2, "valor_flood": 1, "estado": "explorando"}
+    with cliente.websocket_connect("/ws/telemetria") as ws:
+        ws.send_text(format_frame({**cab, "seq": 0, "t": "evt", "tempo_ms": 0, "evento": "inicio", "tensao_bateria": 8.2}))
+        ws.receive_text()
+        encerrar(corrida["id"])
+        for seq in range(1, 21):
+            ws.send_text(format_frame({**cab, **tel, "seq": seq, "tempo_ms": seq * 200}))
+            assert ws.receive_text()
+        ws.send_text(format_frame({**cab, "seq": 21, "t": "evt", "tempo_ms": 4200, "evento": "fim",
+                                   "resultado": "concluida", "tempo_conc_s": 4.2}))
+        assert ws.receive_text()
+    logs = sessao.scalars(select(LogEvento).where(LogEvento.id_corrida == corrida["id"])).all()
+    assert [(log.tipo, log.mensagem) for log in logs if log.tipo != "info"] == [
+        ("aviso", "corrida encerrada manualmente pelo painel"),
+    ]
+    detalhe = cliente.get(f"/corridas/{corrida['id']}").json()
+    assert detalhe["status"] == "abandonada"
+    assert detalhe["leituras"] == []

@@ -66,6 +66,13 @@ class TelemetryService:
             ack_frame = format_frame({"t": "ack", "corrida": num_corrida_robo, "seq": seq})
 
             if tipo_msg == "tel":
+                # Corrida encerrada pelo painel: o robô não sabe e continua enviando.
+                # O ACK evita reenvios e o pacote é ignorado sem gravar erro.
+                if ja_encerrada:
+                    if contexto is not None:
+                        contexto.id_corrida = corrida.id
+                    return ack_frame, None
+
                 # Validação de limites contra o labirinto cadastrado
                 labirinto = db.get(Labirinto, corrida.id_labirinto)
                 if labirinto:
@@ -104,7 +111,7 @@ class TelemetryService:
                 return ack_frame, broadcast_data
 
             elif tipo_msg == "evt":
-                # Reenvio de fim para corrida já finalizada
+                # Reenvio de fim para corrida já finalizada ou evento após o encerramento pelo painel
                 if ja_encerrada:
                     if contexto is not None:
                         contexto.id_corrida = corrida.id
@@ -185,16 +192,16 @@ class TelemetryService:
         if corrida_ativa:
             return corrida_ativa, False
 
-        # Se não há corrida em_andamento e o evento é fim, trata reenvio de fim de corrida já encerrada
-        if evento == "fim":
-            corrida_encerrada = db.scalar(
-                select(Corrida)
-                .where(Corrida.num_corrida_robo == num_corrida_robo)
-                .where(Corrida.status.in_(("concluida", "abandonada")))
-                .order_by(Corrida.id.desc())
-            )
-            if corrida_encerrada:
-                return corrida_encerrada, True
+        # Sem corrida em_andamento: reenvio de fim de corrida já encerrada, ou qualquer
+        # mensagem de uma corrida abandonada (encerrada pelo painel, o robô não fica sabendo)
+        corrida_encerrada = db.scalar(
+            select(Corrida)
+            .where(Corrida.num_corrida_robo == num_corrida_robo)
+            .where(Corrida.status.in_(("concluida", "abandonada")))
+            .order_by(Corrida.id.desc())
+        )
+        if corrida_encerrada and (evento == "fim" or corrida_encerrada.status == "abandonada"):
+            return corrida_encerrada, True
 
         return None, False
 

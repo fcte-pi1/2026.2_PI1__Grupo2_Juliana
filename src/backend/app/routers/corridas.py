@@ -75,9 +75,11 @@ def listar_corridas(
     status: Literal["em_andamento", "concluida", "abandonada"] | None = None,
     num_tentativa: int | None = Query(default=None, ge=1),
     data: date | None = None,
+    limite: int = Query(default=100, ge=1, le=200),
+    deslocamento: int = Query(default=0, ge=0),
 ) -> list[dict]:
     with session_scope() as db:
-        return corridas.listar_corridas(db, id_labirinto, status, num_tentativa, data)
+        return corridas.listar_corridas(db, id_labirinto, status, num_tentativa, data, limite, deslocamento)
 
 
 @router.get("/corridas/{id_corrida}", response_model=CorridaDetalhe)
