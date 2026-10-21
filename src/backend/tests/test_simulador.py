@@ -23,9 +23,7 @@ def test_labirinto_coerente_e_rota_sem_atravessar_paredes():
     for (x, y), m in paredes.items():
         for d, (dx, dy, bit) in DIRECOES.items():
             viz = (x + dx, y + dy)
-            if viz == (7, 4):
-                assert not m & bit, "saída fechada"
-            elif viz not in paredes:
+            if viz not in paredes:
                 assert m & bit, "borda sem parede"
             else:
                 assert bool(m & bit) == bool(paredes[viz] & DIRECOES[{"N": "S", "S": "N", "L": "O", "O": "L"}[d]][2])
@@ -41,10 +39,10 @@ def test_corrida_e_bateria_critica():
     tels = [m for m in msgs if m["t"] == "tel"]
     assert all(b["tempo_ms"] - a["tempo_ms"] == 200 for a, b in zip(tels, tels[1:]))
     assert not any(m.get("evento") == "bateria_critica" for m in msgs)
-    saida = tels[-1]  # último tel: 1 passo fora da matriz, só no eixo y, junto do fim concluída
-    assert (saida["pos_x"], saida["pos_y"]) == (3, 4) and (tels[-2]["pos_x"], tels[-2]["pos_y"]) == (3, 3)
-    assert saida["estado"] == "parado" and saida["valor_flood"] == 0 and saida["tempo_ms"] == msgs[-1]["tempo_ms"]
-    assert msgs[-1]["resultado"] == "concluida"
+    chegada = tels[-1]  # labirinto fechado: a saída é o canto diagonal oposto à largada
+    assert (chegada["pos_x"], chegada["pos_y"]) == (3, 3) and chegada["estado"] == "parado"
+    assert chegada["valor_flood"] == 0 and msgs[-1]["resultado"] == "concluida"
+    assert all(0 <= m["pos_x"] < 4 and 0 <= m["pos_y"] < 4 for m in tels)
 
     msgs = [m for t in gerar_corrida(4, 4, 7, random.Random(2), bateria_critica=True) for m in t]
     criticas = [m for m in msgs if m.get("evento") == "bateria_critica"]
