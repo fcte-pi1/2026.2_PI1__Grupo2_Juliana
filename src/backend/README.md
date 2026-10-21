@@ -56,6 +56,39 @@ Descartes por quadro inválido ou por `corrida desconhecida` usam o contexto
 já confirmado do socket, nunca o campo `corrida` do quadro descartado. Bateria crítica e reconexão mantêm
 o processamento já existente. Nenhum limite de bateria foi alterado aqui.
 
+## Corridas, tentativas e consultas
+
+Antes de o robô largar, o painel abre a corrida; o evento `inicio` da
+telemetria é associado a ela (Contrato de Telemetria, seção 5).
+
+| Rota | Uso |
+| --- | --- |
+| `GET /labirintos` | Labirintos com `total_tentativas` de cada um (0 se não tiver) |
+| `POST /corridas` | Corpo `{"id_labirinto": 1}`. Abre a próxima tentativa do labirinto como `em_andamento` (201). Labirinto inexistente: 404; já existe corrida em andamento: 409 |
+| `POST /corridas/{id}/encerrar` | Encerra a corrida em andamento como `abandonada` e registra um aviso em `log_evento`. Inexistente: 404; já encerrada: 409 |
+| `GET /corridas` | Histórico, da mais recente à mais antiga. Sem filtros é a consulta geral |
+| `GET /corridas/{id}` | Resumo da corrida e as leituras em ordem de `tempo_ms` (trajeto) |
+
+Filtros opcionais de `GET /corridas`, combináveis: `id_labirinto`,
+`status` (`em_andamento`, `concluida`, `abandonada`), `num_tentativa` e
+`data` (`AAAA-MM-DD`, dia de início no horário de Brasília). A paginação usa
+`limite` (1 a 200, padrão 100) e `deslocamento` (padrão 0), como em `/logs`.
+Sem resultados, retorna `[]`; parâmetros inválidos retornam HTTP 422.
+
+Cada corrida traz `id`, `id_labirinto`, `labirinto`, `largura_celula`,
+`altura_celula`, `num_tentativa`, `num_corrida_robo`, `status`,
+`iniciado_em`, `tempo_conc_s`, `duracao_s`, `consumo_medio_ma`,
+`velocidade_media` e `total_leituras`. `duracao_s` é o `tempo_conc_s` da
+corrida concluída ou, se ela não foi concluída, o `tempo_ms` da última
+leitura. `iniciado_em` vem em UTC (ex.: `2026-10-21T02:30:00Z` é 23h30 do
+dia 20 em Brasília); as telas devem converter para o horário de Brasília ao
+exibir.
+
+Depois de `POST /corridas/{id}/encerrar` o robô não fica sabendo e continua
+enviando. Os pacotes daquela corrida que chegam pelo mesmo socket recebem ACK
+e são ignorados, sem gravar leitura nem erro no log. Em outra conexão, continuam
+como `corrida desconhecida` (Contrato de Telemetria, seção 5). Os testes ficam em `tests/test_corridas.py`.
+
 ## Exportação CSV
 
 `GET /exportacao/corridas.csv` baixa o arquivo `corridas.csv` (UTF-8, separado
