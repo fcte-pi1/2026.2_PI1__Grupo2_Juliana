@@ -595,10 +595,22 @@ body {
   background-color: #f1f5f9;
 }
 
+.icone-indicador.vermelho {
+  background-color: var(--cor-vermelho-claro);
+  color: var(--cor-vermelho);
+}
+
 .card-indicador-titulo {
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--cor-texto-principal);
+}
+
+.card-topo-cabecalho-bateria {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .tensao-badge {
@@ -609,6 +621,21 @@ body {
   background-color: var(--cor-petroleo-claro);
   padding: 2px 8px;
   border-radius: 999px;
+}
+
+.tensao-badge.critica {
+  color: var(--cor-vermelho);
+  background-color: var(--cor-vermelho-claro);
+}
+
+.pilula-saida-labirinto {
+  background-color: var(--cor-ambar-claro);
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 .bateria-linha-principal {

@@ -22,6 +22,8 @@ export default function MazeMap({
   celulas = [],
   roboPos = null,
   trajeto = [],
+  ultimaCelula: ultimaCelulaProp,
+  pontoSaida: pontoSaidaProp,
   className = '',
   style,
 }) {
@@ -34,6 +36,11 @@ export default function MazeMap({
   const dentroDoMapa = (x, y) => (
     Number.isInteger(x) && Number.isInteger(y)
     && x >= 0 && x < largura && y >= 0 && y < altura
+  )
+  const ehSaidaValida = (x, y) => (
+    Number.isInteger(x) && Number.isInteger(y)
+    && x >= -1 && x <= largura && y >= -1 && y <= altura
+    && ((x === -1 || x === largura) !== (y === -1 || y === altura))
   )
   const mapa = new Map()
   const entradas = Array.isArray(celulas)
@@ -53,6 +60,24 @@ export default function MazeMap({
 
   const roboX = roboPos?.pos_x
   const roboY = roboPos?.pos_y
+  let ultimaCelula = ultimaCelulaProp && pontoSaidaProp ? ultimaCelulaProp : null
+  let pontoSaida = ultimaCelulaProp && pontoSaidaProp ? pontoSaidaProp : null
+
+  // Props fornecidas pelo Dashboard são a fonte da verdade, inclusive quando nulas.
+  if (ultimaCelulaProp === undefined && pontoSaidaProp === undefined) {
+    const ultimoPonto = trajeto[trajeto.length - 1]
+    const penultimoPonto = trajeto[trajeto.length - 2]
+    if (ehSaidaValida(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
+      && dentroDoMapa(penultimoPonto?.pos_x, penultimoPonto?.pos_y)) {
+      pontoSaida = ultimoPonto
+      ultimaCelula = penultimoPonto
+    } else if (ehSaidaValida(roboX, roboY)
+      && dentroDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)) {
+      pontoSaida = roboPos
+      ultimaCelula = ultimoPonto
+    }
+  }
+
   const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
   const mostrarRobo = posicaoValida && Boolean(direcao)
@@ -63,7 +88,11 @@ export default function MazeMap({
     const comando = dentroDoMapa(anterior?.pos_x, anterior?.pos_y) ? 'L' : 'M'
     return `${comando} ${(ponto.pos_x + 0.5) * TAMANHO_CELULA} ${(altura - ponto.pos_y - 0.5) * TAMANHO_CELULA}`
   }).filter(Boolean).join(' ')
-  const posicao = mostrarRobo ? `Robô em (${roboX}, ${roboY}), voltado para ${direcao.nome}.` : 'Sem posição válida do robô.'
+  const posicao = mostrarRobo
+    ? `Robô em (${roboX}, ${roboY}), voltado para ${direcao.nome}.`
+    : ultimaCelula
+      ? `Robô saiu do labirinto em (${pontoSaida.pos_x}, ${pontoSaida.pos_y}) a partir da última célula (${ultimaCelula.pos_x}, ${ultimaCelula.pos_y}).`
+      : 'Sem posição válida do robô.'
   const larguraMapa = largura * TAMANHO_CELULA
   const alturaMapa = altura * TAMANHO_CELULA
   const linhas = Array.from({ length: altura }, (_, linha) => altura - 1 - linha)
@@ -81,7 +110,7 @@ export default function MazeMap({
       >
         <title id={`${id}-titulo`}>Labirinto de {largura} colunas por {altura} linhas</title>
         <desc id={`${id}-descricao`}>
-          Origem (0, 0) no canto inferior esquerdo. Norte para cima. {mapa.size} de {largura * altura} células observadas. Objetivo em ({largura - 1}, {altura - 1}). {posicao}
+          Origem (0, 0) no canto inferior esquerdo. Norte para cima. {mapa.size} de {largura * altura} células observadas. {posicao}
         </desc>
 
         {colunas.map((x) => (
@@ -97,31 +126,40 @@ export default function MazeMap({
 
         {/* Desenha todas as bases antes das paredes para não encobrir limites compartilhados. */}
         <g transform={`translate(${MARGEM} ${MARGEM})`}>
-          {linhas.flatMap((y, linha) => colunas.map((x) => (
-            <rect
-              key={`${x},${y}`}
-              data-celula={`${x},${y}`}
-              className={`maze-map__cell${mapa.has(`${x},${y}`) ? ' maze-map__cell--observed' : ''}`}
-              x={x * TAMANHO_CELULA}
-              y={linha * TAMANHO_CELULA}
-              width={TAMANHO_CELULA}
-              height={TAMANHO_CELULA}
-            >
-              <title>Célula ({x}, {y}): {mapa.has(`${x},${y}`) ? `máscara ${mapa.get(`${x},${y}`)}` : 'não observada'}</title>
-            </rect>
-          )))}
+          {linhas.flatMap((y, linha) => colunas.map((x) => {
+            const ehUltimaCelula = ultimaCelula?.pos_x === x && ultimaCelula?.pos_y === y
+            return (
+              <rect
+                key={`${x},${y}`}
+                data-celula={`${x},${y}`}
+                data-ultima-celula={ehUltimaCelula ? 'true' : undefined}
+                className={`maze-map__cell${mapa.has(`${x},${y}`) ? ' maze-map__cell--observed' : ''}${ehUltimaCelula ? ' maze-map__cell--exit' : ''}`}
+                x={x * TAMANHO_CELULA}
+                y={linha * TAMANHO_CELULA}
+                width={TAMANHO_CELULA}
+                height={TAMANHO_CELULA}
+              >
+                <title>Célula ({x}, {y}): {mapa.has(`${x},${y}`) ? `máscara ${mapa.get(`${x},${y}`)}` : 'não observada'}</title>
+              </rect>
+            )
+          }))}
 
-          <rect
-            className="maze-map__goal"
-            data-objetivo={`${largura - 1},${altura - 1}`}
-            x={(largura - 1) * TAMANHO_CELULA + 5}
-            y={5}
-            width={TAMANHO_CELULA - 10}
-            height={TAMANHO_CELULA - 10}
-            rx={4}
-          >
-            <title>Objetivo ({largura - 1}, {altura - 1})</title>
-          </rect>
+          {ultimaCelula && (
+            <rect
+              className="maze-map__exit"
+              data-ultima-celula-marcador={`${ultimaCelula.pos_x},${ultimaCelula.pos_y}`}
+              data-saida={`${pontoSaida.pos_x},${pontoSaida.pos_y}`}
+              x={ultimaCelula.pos_x * TAMANHO_CELULA + 5}
+              y={(altura - 1 - ultimaCelula.pos_y) * TAMANHO_CELULA + 5}
+              width={TAMANHO_CELULA - 10}
+              height={TAMANHO_CELULA - 10}
+              rx={4}
+            >
+              <title>
+                Última célula do labirinto ({ultimaCelula.pos_x}, {ultimaCelula.pos_y}) — saída em ({pontoSaida.pos_x}, {pontoSaida.pos_y})
+              </title>
+            </rect>
+          )}
 
           {caminho && (
             <path className="maze-map__trail" data-trajeto="true" d={caminho}>
@@ -154,12 +192,17 @@ export default function MazeMap({
       <figcaption className="maze-map__caption">
         <span>N ↑ · Origem (0, 0) no canto inferior esquerdo</span>
         <span>{posicao}</span>
+        {ultimaCelula && (
+          <span className="maze-map__exit-status" data-testid="status-saida-mapa">
+            Percurso concluído · Saída em ({pontoSaida.pos_x}, {pontoSaida.pos_y}) · Última célula ({ultimaCelula.pos_x}, {ultimaCelula.pos_y})
+          </span>
+        )}
         <span className="maze-map__legend">
           <span><i className="maze-map__key maze-map__key--observed" aria-hidden="true" />Observada</span>
           <span><i className="maze-map__key" aria-hidden="true" />Não observada</span>
           <span><i className="maze-map__key maze-map__key--wall" aria-hidden="true" />Parede confirmada</span>
           <span><i className="maze-map__key maze-map__key--trail" aria-hidden="true" />Trajeto</span>
-          <span><i className="maze-map__key maze-map__key--goal" aria-hidden="true" />Objetivo</span>
+          <span><i className="maze-map__key maze-map__key--exit" aria-hidden="true" />Saída (última célula)</span>
         </span>
       </figcaption>
     </figure>

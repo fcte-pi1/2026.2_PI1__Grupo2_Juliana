@@ -51,14 +51,30 @@ def test_leitura_valida_e_gravada(conexao, id_corrida, paredes):
     assert contar(conexao, "SELECT count(*) FROM leitura_telemetria WHERE id_corrida = :c", c=id_corrida) == 1
 
 
+@pytest.mark.parametrize(("pos_x", "pos_y"), [(-1, 0), (0, -1)])
+def test_leitura_saida_negativa_em_unico_eixo_e_gravada(conexao, id_corrida, pos_x, pos_y):
+    """Aceita -1 em um único eixo para persistir a coordenada final de saída 1 passo fora da matriz."""
+    inserir_leitura(conexao, id_corrida, pos_x=pos_x, pos_y=pos_y)
+    assert contar(conexao, "SELECT count(*) FROM leitura_telemetria WHERE id_corrida = :c", c=id_corrida) == 1
+
+
+def test_leitura_saida_diagonal_negativa_e_rejeitada(conexao, id_corrida):
+    """Rejeita diagonal (-1, -1) na restrição ck_leitura_telemetria_posicao_nao_negativa."""
+    deve_rejeitar(
+        conexao,
+        "ck_leitura_telemetria_posicao_nao_negativa",
+        lambda: inserir_leitura(conexao, id_corrida, pos_x=-1, pos_y=-1),
+    )
+
+
 @pytest.mark.parametrize(
     ("campo", "valor", "restricao"),
     [
         ("paredes", 16, "ck_leitura_telemetria_paredes_valida"),
         ("paredes", -1, "ck_leitura_telemetria_paredes_valida"),
         ("orientacao", "X", "ck_leitura_telemetria_orientacao_valida"),
-        ("pos_x", -1, "ck_leitura_telemetria_posicao_nao_negativa"),
-        ("pos_y", -1, "ck_leitura_telemetria_posicao_nao_negativa"),
+        ("pos_x", -2, "ck_leitura_telemetria_posicao_nao_negativa"),
+        ("pos_y", -2, "ck_leitura_telemetria_posicao_nao_negativa"),
         ("tempo_ms", -1, "ck_leitura_telemetria_tempo_ms_nao_negativo"),
         ("velocidade", -0.1, "ck_leitura_telemetria_velocidade_nao_negativa"),
         ("tensao_bateria", -1, "ck_leitura_telemetria_tensao_nao_negativa"),

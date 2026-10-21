@@ -48,10 +48,27 @@
   stroke-linecap: round;
 }
 
-.maze-map .maze-map__goal {
+.maze-map .maze-map__exit {
   fill: var(--maze-goal);
   stroke: var(--maze-goal-border);
   stroke-width: 2;
+}
+
+.maze-map .maze-map__cell--exit {
+  fill: var(--maze-goal);
+}
+
+.maze-map .maze-map__exit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: fit-content;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--maze-goal-border);
+  border-radius: 999px;
+  background-color: var(--maze-goal);
+  color: #92400e;
+  font-weight: 700;
 }
 
 .maze-map .maze-map__trail {
@@ -121,7 +138,7 @@
   border-top: 3px dashed var(--maze-trail);
 }
 
-.maze-map .maze-map__key--goal {
+.maze-map .maze-map__key--exit {
   background: var(--maze-goal);
   border-color: var(--maze-goal-border);
 }
