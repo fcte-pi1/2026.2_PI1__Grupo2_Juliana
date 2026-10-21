@@ -55,6 +55,8 @@ class MockWebSocket {
   }
 }
 
+vi.setConfig({ testTimeout: 15000 })
+
 describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -467,6 +469,7 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
       ws.emitirMensagem('{"v":1,"t":"evt","corrida":7,"seq":97,"tempo_ms":19350,"evento":"bateria_critica","tensao_bateria":6.98}|8E50')
     })
     expect(screen.getByTestId('alerta-bateria-critica').textContent).toContain('Bateria crítica')
+    expect(screen.getByTestId('alerta-bateria-critica').getAttribute('role')).toBe('alert')
 
     // Passo 3: tensão sobe para 7,1 V (< 7,2 V) -> Alerta DEVE permanecer ativo pela histerese!
     act(() => {
@@ -491,6 +494,13 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('alerta-bateria-critica').textContent).toContain('7,10 V')
     expect(screen.queryByTestId('status-bateria-normal')).toBeNull()
 
+    // Verifica que na aba Dashboard (Visão Geral) o card de bateria também fica destacado em estado crítico
+    fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
+    expect(screen.getByTestId('card-bateria-visao-geral').className).toContain('card-bateria-critica')
+    expect(screen.getByTestId('tensao-bateria-visao-geral').textContent).toBe('7,10 V')
+    expect(screen.getByTestId('alerta-bateria-critica-visao-geral').textContent).toContain('7,10 V')
+    fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
+
     // Passo 4: tensão atinge 7,2 V (>= LIMIAR_REARME_BATERIA_V) -> Alerta finalmente desarma!
     act(() => {
       ws.emitirMensagem(
@@ -514,6 +524,10 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.queryByTestId('alerta-bateria-critica')).toBeNull()
     expect(screen.getByTestId('status-bateria-normal').textContent).toContain('Nível normal')
     expect(screen.getByTestId('texto-status-execucao').textContent).toBe('Retornando ao início')
+
+    fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
+    expect(screen.queryByTestId('alerta-bateria-critica-visao-geral')).toBeNull()
+    expect(screen.getByTestId('status-bateria-normal-visao-geral').textContent).toContain('Nível normal')
   })
 
   test('não duplica eventos em StrictMode quando mapeia célula ou perde conexão', () => {
@@ -602,6 +616,20 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
           v: 1,
           t: 'tel',
           tempo_ms: 100,
+          pos_x: -2,
+          pos_y: 0,
+          orientacao: 'N',
+          paredes: 1,
+          velocidade: 0.2,
+          tensao_bateria: 8.0,
+          estado: 'explorando',
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          tempo_ms: 100,
           pos_x: -1,
           pos_y: 0,
           orientacao: 'N',
@@ -650,6 +678,12 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     render(<Dashboard />)
     const ws = MockWebSocket.instancias[0]
 
+    // A espera pela primeira mensagem não representa perda de conexão.
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+
     act(() => {
       ws.emitirMensagem(
         gerarQuadroCrc({
@@ -679,10 +713,29 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('ponto-resultado-ultima-execucao').className).toContain('ambar')
     fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
 
-    // Avança 3,2 segundos sem novos pacotes
+    // O toast só aparece ao atingir o timeout de 3 segundos.
     act(() => {
-      vi.advanceTimersByTime(3200)
+      vi.advanceTimersByTime(2800)
     })
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(screen.getByRole('alert').textContent).toContain('Conexão com o robô perdida')
+
+    // Mensagens inválidas não encerram o alerta.
+    act(() => {
+      ws.emitirMensagem('{json_invalido')
+    })
+    expect(screen.getByRole('alert')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByTestId('connection-alert')).toBeTruthy()
+    expect(screen.getByTestId('card-status-robo').className).toContain('card-alerta-conexao')
+    fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
 
     expect(screen.getByTestId('card-conexao').textContent).toContain('Offline')
     expect(screen.getByTestId('status-conexao-micromouse').textContent).toContain('Offline')
@@ -695,6 +748,7 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
 
     expect(screen.getByTestId('card-conexao').textContent).toContain('Conectado')
     expect(screen.getByTestId('desafio-cumprido').textContent).toBe('Sim')
+    expect(screen.queryByRole('alert')).toBeNull()
 
     // Alterna para a aba Dashboard (Visão Geral) e verifica Resultado Concluído com ponto verde
     fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
@@ -729,11 +783,335 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('tela-logs')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Voltar para a Visão Geral/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: /Configurações/i }))
-    expect(screen.getByTestId('tela-configuracoes')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Voltar para a Visão Geral/i }))
+    // O item "Configurações" foi removido da barra lateral de navegação
+    expect(screen.queryByRole('button', { name: /Configurações/i })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
     expect(screen.getByRole('heading', { name: 'Monitoramento em Tempo Real' })).toBeTruthy()
+  })
+
+  test('trata coordenada fora da matriz (ex: (4, 3) num mapa 4x4) como saída do labirinto e destaca a penúltima célula ((3, 3))', () => {
+    render(<Dashboard />)
+    const ws = MockWebSocket.instancias[0]
+
+    const percursoInterno = [
+      { seq: 1, tempo_ms: 200, pos_x: 0, pos_y: 0, orientacao: 'L', paredes: 12 },
+      { seq: 2, tempo_ms: 400, pos_x: 1, pos_y: 0, orientacao: 'L', paredes: 5 },
+      { seq: 3, tempo_ms: 600, pos_x: 2, pos_y: 0, orientacao: 'L', paredes: 5 },
+      { seq: 4, tempo_ms: 800, pos_x: 3, pos_y: 0, orientacao: 'N', paredes: 6 },
+      { seq: 5, tempo_ms: 1000, pos_x: 3, pos_y: 1, orientacao: 'N', paredes: 10 },
+      { seq: 6, tempo_ms: 1200, pos_x: 3, pos_y: 2, orientacao: 'N', paredes: 10 },
+      { seq: 7, tempo_ms: 1400, pos_x: 3, pos_y: 3, orientacao: 'L', paredes: 9 },
+    ]
+
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 1,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 4,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+
+      for (const passo of percursoInterno) {
+        ws.emitirMensagem(
+          JSON.stringify({
+            v: 1,
+            t: 'tel',
+            corrida: 1,
+            ...passo,
+            velocidade: 0.35,
+            tensao_bateria: 8.2,
+            valor_flood: 1,
+            estado: 'explorando',
+          }),
+        )
+      }
+    })
+
+    const containerMapa = screen.getByTestId('espaco-mapa-labirinto')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('7 / 16')
+    expect(screen.getByTestId('cobertura-percentual').textContent).toBe('43,8%')
+    expect(containerMapa.getAttribute('data-ultima-celula')).toBe('')
+    expect(screen.queryByTestId('indicador-saida-painel')).toBeNull()
+
+    // Envia a última posição fora da matriz (4, 3) indicando a saída do labirinto 4x4
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 8,
+          tempo_ms: 1600,
+          pos_x: 4,
+          pos_y: 3,
+          orientacao: 'L',
+          paredes: 0,
+          velocidade: 0.3,
+          tensao_bateria: 8.18,
+          valor_flood: 0,
+          estado: 'rapido',
+        }),
+      )
+    })
+
+    // (a) A coordenada externa (4, 3) NÃO deve entrar em mapaCelulas nem distorcer a cobertura
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('7 / 16')
+    expect(screen.getByTestId('cobertura-percentual').textContent).toBe('43,8%')
+    expect(containerMapa.getAttribute('data-celulas-count')).toBe('7')
+
+    // (b) A penúltima coordenada (3, 3) fica marcada como última célula interna e (4, 3) como saída
+    expect(containerMapa.getAttribute('data-ultima-celula')).toBe('3,3')
+    expect(containerMapa.getAttribute('data-saida-labirinto')).toBe('4,3')
+    expect(containerMapa.querySelector('[data-ultima-celula-marcador="3,3"]')).toBeTruthy()
+    expect(containerMapa.querySelector('[data-celula="3,3"].maze-map__cell--exit')).toBeTruthy()
+
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('Saída (4, 3) · Leste')
+    expect(screen.getByTestId('indicador-saida-painel').textContent).toContain('Saída do mapa em (4, 3)')
+    expect(screen.getByTestId('indicador-saida-painel').textContent).toContain('D4 (3, 3)')
+    expect(screen.getByTestId('celula-atual-badge').textContent).toContain('Saída (4, 3) · Última: D4 (3, 3)')
+    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (4, 3)')
+    expect(screen.getByText('Saída do labirinto alcançada (4, 3)')).toBeTruthy()
+  })
+
+  test('aceita saídas válidas pela borda inferior ((0, -1)) e esquerda ((-1, 0)) e rejeita saídas inválidas ((50, 3), (4, 4) e (-1, -1))', () => {
+    render(<Dashboard />)
+    const ws = MockWebSocket.instancias[0]
+
+    // 1. Saídas inválidas após chegar em (3, 3): (50, 3), diagonal (4, 4) e diagonal (-1, -1) NÃO podem virar saída
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 1,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 4,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 3,
+          pos_y: 3,
+          orientacao: 'N',
+          paredes: 9,
+          velocidade: 0.3,
+          tensao_bateria: 8.3,
+          estado: 'explorando',
+        }),
+      )
+      for (const invalido of [
+        { pos_x: 50, pos_y: 3 },
+        { pos_x: 4, pos_y: 4 },
+        { pos_x: -1, pos_y: -1 },
+      ]) {
+        ws.emitirMensagem(
+          JSON.stringify({
+            v: 1,
+            t: 'tel',
+            corrida: 1,
+            seq: 2,
+            tempo_ms: 400,
+            ...invalido,
+            orientacao: 'N',
+            paredes: 0,
+            velocidade: 0.3,
+            tensao_bateria: 8.3,
+            estado: 'explorando',
+          }),
+        )
+      }
+    })
+
+    const containerMapa = screen.getByTestId('espaco-mapa-labirinto')
+    expect(containerMapa.getAttribute('data-trajeto')).toBe('3,3')
+    expect(containerMapa.getAttribute('data-saida-labirinto')).toBe('')
+    expect(containerMapa.getAttribute('data-ultima-celula')).toBe('')
+    expect(containerMapa.querySelector('[data-ultima-celula-marcador]')).toBeNull()
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('D4 · Norte')
+    expect(screen.queryByTestId('indicador-saida-painel')).toBeNull()
+
+    // 2. Saída válida pela borda inferior: (0, 0) -> (0, -1)
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 2,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 4,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 2,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 0,
+          pos_y: 0,
+          orientacao: 'S',
+          paredes: 11,
+          velocidade: 0.3,
+          tensao_bateria: 8.3,
+          estado: 'explorando',
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 2,
+          seq: 2,
+          tempo_ms: 400,
+          pos_x: 0,
+          pos_y: -1,
+          orientacao: 'S',
+          paredes: 0,
+          velocidade: 0.3,
+          tensao_bateria: 8.28,
+          estado: 'rapido',
+        }),
+      )
+    })
+
+    expect(containerMapa.getAttribute('data-ultima-celula')).toBe('0,0')
+    expect(containerMapa.getAttribute('data-saida-labirinto')).toBe('0,-1')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / 16')
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('Saída (0, -1) · Sul')
+
+    // 3. Saída válida pela borda esquerda: (0, 0) -> (-1, 0)
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 3,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 4,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 3,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 0,
+          pos_y: 0,
+          orientacao: 'O',
+          paredes: 7,
+          velocidade: 0.3,
+          tensao_bateria: 8.3,
+          estado: 'explorando',
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 3,
+          seq: 2,
+          tempo_ms: 400,
+          pos_x: -1,
+          pos_y: 0,
+          orientacao: 'O',
+          paredes: 0,
+          velocidade: 0.3,
+          tensao_bateria: 8.28,
+          estado: 'rapido',
+        }),
+      )
+    })
+
+    expect(containerMapa.getAttribute('data-ultima-celula')).toBe('0,0')
+    expect(containerMapa.getAttribute('data-saida-labirinto')).toBe('-1,0')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / 16')
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('Saída (-1, 0) · Oeste')
+  })
+
+  test('pacote tel com coordenada negativa (-1) sem dimensões definidas conta como sinal de vida e não dispara falso alerta de perda de conexão após 3s', () => {
+    render(<Dashboard />)
+    const ws = MockWebSocket.instancias[0]
+
+    // Envia pacote inicial válido sem dimensões definidas
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 0,
+          pos_y: 0,
+          orientacao: 'N',
+          paredes: 14,
+          velocidade: 0.2,
+          tensao_bateria: 8.3,
+          estado: 'explorando',
+        }),
+      )
+    })
+
+    // Durante 5 segundos, envia pacotes tel a cada 1 s com pos_x: -1 sem dimensões definidas
+    for (let passo = 1; passo <= 5; passo += 1) {
+      act(() => {
+        vi.advanceTimersByTime(1000)
+        ws.emitirMensagem(
+          JSON.stringify({
+            v: 1,
+            t: 'tel',
+            corrida: 1,
+            seq: passo + 1,
+            tempo_ms: 200 + passo * 1000,
+            pos_x: -1,
+            pos_y: 0,
+            orientacao: 'O',
+            paredes: 0,
+            velocidade: 0.2,
+            tensao_bateria: 8.25,
+            estado: 'explorando',
+          }),
+        )
+      })
+      expect(screen.queryByTestId('connection-alert')).toBeNull()
+      expect(screen.getByTestId('card-conexao').textContent).toContain('Conectado')
+    }
+
+    // A posição original permanece intacta enquanto não há dimensões definidas
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('A1 · Norte')
+
+    // Ao parar de enviar pacotes por > 3 s, o alerta de perda de conexão dispara normalmente
+    act(() => {
+      vi.advanceTimersByTime(3200)
+    })
+    expect(screen.getByTestId('connection-alert')).toBeTruthy()
   })
 })

@@ -303,7 +303,7 @@ def test_ws_telemetria_evento_fim_abandonada_registra_aviso(db_session, id_corri
 
 
 def test_ws_telemetria_limite_labirinto_descartado_com_log(db_session, id_corrida):
-    """Testa que coordenadas que extrapolam o labirinto são descartadas sem ACK e gravadas em log."""
+    """Testa que coordenadas que extrapolam a saída de 1 passo do labirinto são descartadas sem ACK e gravadas em log."""
     client = TestClient(app)
     with client.websocket_connect("/ws/telemetria") as ws:
         inicio = {
@@ -313,23 +313,31 @@ def test_ws_telemetria_limite_labirinto_descartado_com_log(db_session, id_corrid
         ws.send_text(format_frame(inicio))
         ws.receive_text()
 
-        # Labirinto de teste tem largura=4, altura=4 (coordenadas válidas 0..3)
+        # Labirinto de teste tem largura=4, altura=4 (internas 0..3; saída válida 1 passo fora em 1 eixo: -1 ou 4)
         tel_fora = {
             "v": 1, "t": "tel", "corrida": 1, "seq": 1, "tempo_ms": 200,
-            "pos_x": 4, "pos_y": 0, "orientacao": "N", "paredes": 1,
+            "pos_x": 5, "pos_y": 0, "orientacao": "N", "paredes": 1,
             "velocidade": 0.2, "tensao_bateria": 8.0, "estado": "explorando"
         }
         ws.send_text(format_frame(tel_fora))
 
-        # Envia próximo pacote válido para confirmar que a conexão continua aberta
-        tel_valido = {**tel_fora, "seq": 2, "tempo_ms": 400, "pos_x": 1}
-        ws.send_text(format_frame(tel_valido))
-        ack = ws.receive_text()
-        assert ack.startswith('{"t":"ack","corrida":1,"seq":2}|')
+        # Diagonal fora da matriz (4, 4) também deve ser descartada sem ACK
+        tel_diagonal = {**tel_fora, "seq": 2, "tempo_ms": 300, "pos_x": 4, "pos_y": 4}
+        ws.send_text(format_frame(tel_diagonal))
 
-    log = db_session.scalar(select(LogEvento).where(LogEvento.mensagem == "fora do intervalo: pos_x=4"))
+        # Envia pacote na saída válida 1 passo fora (4, 3) e confirma ACK e gravação
+        tel_saida_valida = {**tel_fora, "seq": 3, "tempo_ms": 400, "pos_x": 4, "pos_y": 3}
+        ws.send_text(format_frame(tel_saida_valida))
+        ack = ws.receive_text()
+        assert ack.startswith('{"t":"ack","corrida":1,"seq":3}|')
+
+    log = db_session.scalar(select(LogEvento).where(LogEvento.mensagem == "fora do intervalo: pos_x=5"))
     assert log is not None
     assert log.tipo == "erro"
+
+    log_diag = db_session.scalar(select(LogEvento).where(LogEvento.mensagem == "fora do intervalo: pos_x=4, pos_y=4"))
+    assert log_diag is not None
+    assert log_diag.tipo == "erro"
 
 
 @pytest.mark.anyio

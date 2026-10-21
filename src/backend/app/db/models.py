@@ -80,14 +80,15 @@ class Corrida(Base):
 class LeituraTelemetria(Base):
     """Um pacote de telemetria válido enviado pelo robô (RF07-S, RF24-S, RF25-S, RNF06-S).
 
-    O limite superior de pos_x e pos_y depende do labirinto e é validado pelo backend (RF24-S).
+    O limite superior de pos_x e pos_y (incluindo a saída 1 passo fora da matriz em um único eixo)
+    depende do labirinto e é validado pelo backend (RF24-S).
     """
 
     __tablename__ = "leitura_telemetria"
     __table_args__ = (
         UniqueConstraint("id_corrida", "tempo_ms"),
         CheckConstraint("tempo_ms >= 0", name="tempo_ms_nao_negativo"),
-        CheckConstraint("pos_x >= 0 AND pos_y >= 0", name="posicao_nao_negativa"),
+        CheckConstraint("pos_x >= -1 AND pos_y >= -1 AND NOT (pos_x = -1 AND pos_y = -1)", name="posicao_nao_negativa"),
         CheckConstraint("orientacao IN ('N', 'S', 'L', 'O')", name="orientacao_valida"),
         CheckConstraint("paredes BETWEEN 0 AND 15", name="paredes_valida"),
         CheckConstraint("velocidade >= 0", name="velocidade_nao_negativa"),

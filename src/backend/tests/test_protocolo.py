@@ -154,9 +154,46 @@ def test_validacao_quadro_valido():
 
 
 def test_validacao_limites_labirinto():
-    assert validate_limites_labirinto(pos_x=4, pos_y=1, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=4"
-    assert validate_limites_labirinto(pos_x=1, pos_y=4, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_y=4"
+    # Células internas válidas (0..3 em um labirinto 4x4)
+    assert validate_limites_labirinto(pos_x=0, pos_y=0, largura_celula=4, altura_celula=4) is None
     assert validate_limites_labirinto(pos_x=3, pos_y=3, largura_celula=4, altura_celula=4) is None
+
+    # Saídas válidas: exatamente 1 passo fora em um único eixo
+    assert validate_limites_labirinto(pos_x=-1, pos_y=0, largura_celula=4, altura_celula=4) is None
+    assert validate_limites_labirinto(pos_x=0, pos_y=-1, largura_celula=4, altura_celula=4) is None
+    assert validate_limites_labirinto(pos_x=4, pos_y=3, largura_celula=4, altura_celula=4) is None
+    assert validate_limites_labirinto(pos_x=2, pos_y=4, largura_celula=4, altura_celula=4) is None
+
+    # Saídas inválidas: coordenadas distantes (> limite ou < -1)
+    assert validate_limites_labirinto(pos_x=50, pos_y=3, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=50"
+    assert validate_limites_labirinto(pos_x=5, pos_y=1, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=5"
+    assert validate_limites_labirinto(pos_x=1, pos_y=5, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_y=5"
+    assert validate_limites_labirinto(pos_x=-2, pos_y=0, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=-2"
+    assert validate_limites_labirinto(pos_x=0, pos_y=-2, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_y=-2"
+
+    # Saídas inválidas: diagonais fora da matriz (ambos os eixos fora de 0..limite-1)
+    assert validate_limites_labirinto(pos_x=4, pos_y=4, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=4, pos_y=4"
+    assert validate_limites_labirinto(pos_x=-1, pos_y=-1, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=-1, pos_y=-1"
+    assert validate_limites_labirinto(pos_x=-1, pos_y=4, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=-1, pos_y=4"
+    assert validate_limites_labirinto(pos_x=4, pos_y=-1, largura_celula=4, altura_celula=4) == "fora do intervalo: pos_x=4, pos_y=-1"
+
+
+def test_validacao_frame_coordenadas_saida_e_invalidas():
+    base = {
+        "v": 1, "t": "tel", "corrida": 7, "seq": 10, "tempo_ms": 2000,
+        "pos_x": 0, "pos_y": 0, "orientacao": "N", "paredes": 0,
+        "velocidade": 0.25, "tensao_bateria": 7.9, "estado": "explorando",
+    }
+
+    # Saídas válidas no protocolo (-1 em um único eixo ou coordenadas positivas)
+    for px, py in [(-1, 0), (0, -1), (4, 3), (2, 4)]:
+        res = validate_frame(format_frame({**base, "pos_x": px, "pos_y": py}))
+        assert res.valid, f"Esperava válido para ({px}, {py}), obteve erro: {res.error}"
+
+    # Coordenadas inválidas no protocolo (< -1 ou diagonal (-1, -1))
+    assert validate_frame(format_frame({**base, "pos_x": -2, "pos_y": 0})).error == "fora do intervalo: pos_x=-2"
+    assert validate_frame(format_frame({**base, "pos_x": 0, "pos_y": -2})).error == "fora do intervalo: pos_y=-2"
+    assert validate_frame(format_frame({**base, "pos_x": -1, "pos_y": -1})).error == "fora do intervalo: pos_x=-1, pos_y=-1"
 
 
 def test_validacao_evento_fim_regras_contrato():
