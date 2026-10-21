@@ -48,7 +48,7 @@
   stroke-linecap: round;
 }
 
-.maze-map .maze-map__goal {
+.maze-map .maze-map__exit {
   fill: var(--maze-goal);
   stroke: var(--maze-goal-border);
   stroke-width: 2;
@@ -138,7 +138,7 @@
   border-top: 3px dashed var(--maze-trail);
 }
 
-.maze-map .maze-map__key--goal {
+.maze-map .maze-map__key--exit {
   background: var(--maze-goal);
   border-color: var(--maze-goal-border);
 }
