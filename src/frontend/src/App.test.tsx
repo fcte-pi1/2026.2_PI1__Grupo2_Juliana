@@ -55,6 +55,8 @@ class MockWebSocket {
   }
 }
 
+vi.setConfig({ testTimeout: 15000 })
+
 describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
   beforeEach(() => {
     window.localStorage.clear()

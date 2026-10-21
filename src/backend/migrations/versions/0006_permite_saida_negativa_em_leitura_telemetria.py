@@ -24,12 +24,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.drop_constraint(
-        'ck_leitura_telemetria_posicao_nao_negativa',
+        op.f('ck_leitura_telemetria_posicao_nao_negativa'),
         'leitura_telemetria',
         type_='check',
     )
     op.create_check_constraint(
-        'ck_leitura_telemetria_posicao_nao_negativa',
+        op.f('ck_leitura_telemetria_posicao_nao_negativa'),
         'leitura_telemetria',
         'pos_x >= -1 AND pos_y >= -1 AND NOT (pos_x = -1 AND pos_y = -1)',
     )
@@ -37,12 +37,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(
-        'ck_leitura_telemetria_posicao_nao_negativa',
+        op.f('ck_leitura_telemetria_posicao_nao_negativa'),
         'leitura_telemetria',
         type_='check',
     )
     op.create_check_constraint(
-        'ck_leitura_telemetria_posicao_nao_negativa',
+        op.f('ck_leitura_telemetria_posicao_nao_negativa'),
         'leitura_telemetria',
         'pos_x >= 0 AND pos_y >= 0',
     )
