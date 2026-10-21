@@ -268,3 +268,23 @@ def test_telemetria_apos_encerrar_pelo_painel_recebe_ack_sem_encher_o_log(sessao
     detalhe = cliente.get(f"/corridas/{corrida['id']}").json()
     assert detalhe["status"] == "abandonada"
     assert detalhe["leituras"] == []
+
+
+def test_corrida_abandonada_em_outra_conexao_continua_desconhecida(sessao, id_labirinto):
+    # Corrida antiga (abandonada pelo robô) com o mesmo número: o pacote não é confirmado
+    criar(id_labirinto)
+    cab = {"v": 1, "corrida": 7}
+    with cliente.websocket_connect("/ws/telemetria") as ws:
+        for seq, msg in enumerate([
+            {"t": "evt", "tempo_ms": 0, "evento": "inicio", "tensao_bateria": 8.2},
+            {"t": "evt", "tempo_ms": 100, "evento": "fim", "resultado": "abandonada", "motivo": "bateria_critica"},
+        ]):
+            ws.send_text(format_frame({**cab, **msg, "seq": seq}))
+            ws.receive_text()
+    tel = {"t": "tel", "seq": 0, "tempo_ms": 0, "pos_x": 0, "pos_y": 0, "orientacao": "N", "paredes": 11,
+           "velocidade": 0.2, "tensao_bateria": 8.2, "valor_flood": 1, "estado": "explorando"}
+    with cliente.websocket_connect("/ws/telemetria") as ws:
+        ws.send_text(format_frame({**cab, **tel}))
+    erros = sessao.scalars(select(LogEvento.mensagem).where(LogEvento.tipo == "erro")).all()
+    assert "corrida desconhecida: 7" in erros
+    assert sessao.scalars(select(LeituraTelemetria).where(LeituraTelemetria.tempo_ms == 0)).all() == []

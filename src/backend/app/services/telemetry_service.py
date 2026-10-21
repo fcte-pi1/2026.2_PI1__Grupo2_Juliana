@@ -53,6 +53,10 @@ class TelemetryService:
 
             # 7: Associação da corrida (Seção 5 do Contrato 4.4.7)
             corrida, ja_encerrada = self._obter_corrida(db, num_corrida_robo, evento)
+            # Corrida abandonada só é aceita no mesmo socket que a transmitia (encerrada pelo
+            # painel); em outra conexão é uma corrida antiga com o mesmo número.
+            if ja_encerrada and evento != "fim" and (contexto is None or contexto.id_corrida != corrida.id):
+                corrida = None
             if not corrida:
                 self._registrar_erro(
                     db, mensagem=f"corrida desconhecida: {num_corrida_robo}",
@@ -66,7 +70,7 @@ class TelemetryService:
             ack_frame = format_frame({"t": "ack", "corrida": num_corrida_robo, "seq": seq})
 
             if tipo_msg == "tel":
-                # Corrida encerrada pelo painel: o robô não sabe e continua enviando.
+                # Corrida encerrada pelo painel: o robô não sabe e continua enviando pelo mesmo socket.
                 # O ACK evita reenvios e o pacote é ignorado sem gravar erro.
                 if ja_encerrada:
                     if contexto is not None:

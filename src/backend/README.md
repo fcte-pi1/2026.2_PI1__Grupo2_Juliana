@@ -85,8 +85,9 @@ dia 20 em Brasília); as telas devem converter para o horário de Brasília ao
 exibir.
 
 Depois de `POST /corridas/{id}/encerrar` o robô não fica sabendo e continua
-enviando. Os pacotes daquela corrida recebem ACK e são ignorados, sem gravar
-leitura nem erro no log. Os testes ficam em `tests/test_corridas.py`.
+enviando. Os pacotes daquela corrida que chegam pelo mesmo socket recebem ACK
+e são ignorados, sem gravar leitura nem erro no log. Em outra conexão, continuam
+como `corrida desconhecida` (Contrato de Telemetria, seção 5). Os testes ficam em `tests/test_corridas.py`.
 
 ## Exportação CSV
 
