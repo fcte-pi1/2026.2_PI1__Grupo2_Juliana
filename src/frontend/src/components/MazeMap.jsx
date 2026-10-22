@@ -37,11 +37,6 @@ export default function MazeMap({
     Number.isInteger(x) && Number.isInteger(y)
     && x >= 0 && x < largura && y >= 0 && y < altura
   )
-  const ehSaidaValida = (x, y) => (
-    Number.isInteger(x) && Number.isInteger(y)
-    && x >= -1 && x <= largura && y >= -1 && y <= altura
-    && ((x === -1 || x === largura) !== (y === -1 || y === altura))
-  )
   const mapa = new Map()
   const entradas = Array.isArray(celulas)
     ? celulas.map((celula) => [null, celula])
@@ -60,23 +55,13 @@ export default function MazeMap({
 
   const roboX = roboPos?.pos_x
   const roboY = roboPos?.pos_y
-  let ultimaCelula = ultimaCelulaProp && pontoSaidaProp ? ultimaCelulaProp : null
-  let pontoSaida = ultimaCelulaProp && pontoSaidaProp ? pontoSaidaProp : null
-
-  // Props fornecidas pelo Dashboard são a fonte da verdade, inclusive quando nulas.
-  if (ultimaCelulaProp === undefined && pontoSaidaProp === undefined) {
-    const ultimoPonto = trajeto[trajeto.length - 1]
-    const penultimoPonto = trajeto[trajeto.length - 2]
-    if (ehSaidaValida(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
-      && dentroDoMapa(penultimoPonto?.pos_x, penultimoPonto?.pos_y)) {
-      pontoSaida = ultimoPonto
-      ultimaCelula = penultimoPonto
-    } else if (ehSaidaValida(roboX, roboY)
-      && dentroDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)) {
-      pontoSaida = roboPos
-      ultimaCelula = ultimoPonto
-    }
-  }
+  const ehCantoOposto = (ponto) => (
+    ponto?.pos_x === largura - 1 && ponto?.pos_y === altura - 1
+  )
+  // O Dashboard sinaliza a conclusão pelas props; chegar ao canto não basta.
+  const percursoConcluido = ehCantoOposto(ultimaCelulaProp) && ehCantoOposto(pontoSaidaProp)
+  const ultimaCelula = percursoConcluido ? ultimaCelulaProp : null
+  const pontoSaida = percursoConcluido ? pontoSaidaProp : null
 
   const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
@@ -91,7 +76,7 @@ export default function MazeMap({
   const posicao = mostrarRobo
     ? `Robô em (${roboX}, ${roboY}), voltado para ${direcao.nome}.`
     : ultimaCelula
-      ? `Robô saiu do labirinto em (${pontoSaida.pos_x}, ${pontoSaida.pos_y}) a partir da última célula (${ultimaCelula.pos_x}, ${ultimaCelula.pos_y}).`
+      ? `Robô concluiu o percurso na saída (${pontoSaida.pos_x}, ${pontoSaida.pos_y}).`
       : 'Sem posição válida do robô.'
   const larguraMapa = largura * TAMANHO_CELULA
   const alturaMapa = altura * TAMANHO_CELULA
@@ -110,7 +95,7 @@ export default function MazeMap({
       >
         <title id={`${id}-titulo`}>Labirinto de {largura} colunas por {altura} linhas</title>
         <desc id={`${id}-descricao`}>
-          Origem (0, 0) no canto inferior esquerdo. Norte para cima. {mapa.size} de {largura * altura} células observadas. {posicao}
+          Origem (0, 0) no canto inferior esquerdo. Norte para cima. Saída no canto oposto ({largura - 1}, {altura - 1}). {mapa.size} de {largura * altura} células observadas. {posicao}
         </desc>
 
         {colunas.map((x) => (
@@ -190,7 +175,7 @@ export default function MazeMap({
       </svg>
 
       <figcaption className="maze-map__caption">
-        <span>N ↑ · Origem (0, 0) no canto inferior esquerdo</span>
+        <span>N ↑ · Origem (0, 0) no canto inferior esquerdo · Saída em ({largura - 1}, {altura - 1})</span>
         <span>{posicao}</span>
         {ultimaCelula && (
           <span className="maze-map__exit-status" data-testid="status-saida-mapa">
@@ -202,7 +187,7 @@ export default function MazeMap({
           <span><i className="maze-map__key" aria-hidden="true" />Não observada</span>
           <span><i className="maze-map__key maze-map__key--wall" aria-hidden="true" />Parede confirmada</span>
           <span><i className="maze-map__key maze-map__key--trail" aria-hidden="true" />Trajeto</span>
-          <span><i className="maze-map__key maze-map__key--exit" aria-hidden="true" />Saída (última célula)</span>
+          <span><i className="maze-map__key maze-map__key--exit" aria-hidden="true" />Saída ({largura - 1}, {altura - 1})</span>
         </span>
       </figcaption>
     </figure>
