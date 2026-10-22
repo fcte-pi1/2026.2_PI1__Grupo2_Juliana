@@ -83,6 +83,8 @@ void test_objetivos_das_fixtures_sao_alcancaveis()
 }
 
 static const Direcao TODAS[] = {NORTE, LESTE, SUL, OESTE};
+// Borda atras e a esquerda do robo (NORTE) ou atras e a direita (LESTE).
+static const Direcao ORIENTACOES[] = {NORTE, LESTE};
 
 // Desenhos explorados no CT-SE11 e no CT-SE14: os tres tamanhos do roteiro,
 // com e sem armadilha, e o 4x4 com mais de uma rota.
@@ -101,10 +103,10 @@ static const LabirintoTeste &desenho(const char *nome)
     return LABIRINTOS_TESTE[0];
 }
 
-static void carregarDesenho(const char *nome, Labirinto &gabarito)
+static void carregarDesenho(const char *nome, Labirinto &gabarito, Direcao orientacao = NORTE)
 {
     const LabirintoTeste &f = desenho(nome);
-    TEST_ASSERT_TRUE_MESSAGE(carregar(f.ascii, gabarito), nome);
+    TEST_ASSERT_TRUE_MESSAGE(carregar(f.ascii, gabarito, orientacao), nome);
     TEST_ASSERT_TRUE_MESSAGE(gabarito.definirObjetivo(f.objetivoX, f.objetivoY), nome);
 }
 
@@ -185,12 +187,13 @@ static void conferirMapa(const char *nome, const Labirinto &gabarito, const Labi
             }
 }
 
-// CT-SE09: largada pela convencao do labirinto.h (borda atras e a esquerda).
-static void conferirSaidaDaLargada(const char *nome, Direcao saida, uint8_t x, uint8_t y,
-                                   uint16_t giros)
+// CT-SE09: largada pela convencao do labirinto.h, com a borda a esquerda
+// (orientacao NORTE) ou a direita (LESTE).
+static void conferirSaidaDaLargada(const char *nome, Direcao orientacao, Direcao saida, uint8_t x,
+                                   uint8_t y, uint16_t giros)
 {
     Labirinto gabarito;
-    carregarDesenho(nome, gabarito);
+    carregarDesenho(nome, gabarito, orientacao);
     RoboSimulado robo(gabarito);
     robo.floodFill().recalcular(robo.mapa(), EXPLORACAO);
     Direcao d;
@@ -205,29 +208,34 @@ static void conferirSaidaDaLargada(const char *nome, Direcao saida, uint8_t x, u
 
 void test_ct_se09_largada_com_saida_a_frente()
 {
-    conferirSaidaDaLargada("BECO_LARGADA", NORTE, 0, 1, 0);
+    conferirSaidaDaLargada("BECO_LARGADA", NORTE, NORTE, 0, 1, 0);
+    conferirSaidaDaLargada("SAIDA_DIREITA", LESTE, LESTE, 1, 0, 0);
 }
 
-void test_ct_se09_largada_com_saida_a_direita()
+void test_ct_se09_largada_com_saida_oposta_a_borda()
 {
-    conferirSaidaDaLargada("SAIDA_DIREITA", LESTE, 1, 0, 1);
+    conferirSaidaDaLargada("SAIDA_DIREITA", NORTE, LESTE, 1, 0, 1); // borda a esquerda: direita
+    conferirSaidaDaLargada("BECO_LARGADA", LESTE, NORTE, 0, 1, 1);  // borda a direita: esquerda
 }
 
 // CT-SE11: o mapa montado so com os sensores bate com o desenho.
 void test_ct_se11_mapa_montado_igual_ao_desenho()
 {
     for (const char *nome : EXPLORADOS)
-    {
-        Labirinto gabarito;
-        carregarDesenho(nome, gabarito);
-        RoboSimulado robo(gabarito);
-        TEST_ASSERT_TRUE_MESSAGE(robo.explorarAteRotaGarantida(), nome);
-        TEST_ASSERT_TRUE_MESSAGE(robo.sincronizado(), nome);
-        conferirMapa(nome, gabarito, robo.mapa());
-    }
+        for (Direcao orientacao : ORIENTACOES)
+        {
+            Labirinto gabarito;
+            carregarDesenho(nome, gabarito, orientacao);
+            RoboSimulado robo(gabarito);
+            TEST_ASSERT_TRUE_MESSAGE(robo.explorarAteRotaGarantida(), nome);
+            TEST_ASSERT_TRUE_MESSAGE(robo.sincronizado(), nome);
+            conferirMapa(nome, gabarito, robo.mapa());
+        }
 }
 
 // CT-SE11, passo 1: nas armadilhas o robo revisita celulas sem corromper o mapa.
+// So com a borda a esquerda: as armadilhas contam com o robo subindo pela
+// coluna x=0; virado para o Leste ele segue reto e nem passa por elas.
 void test_ct_se11_armadilhas_obrigam_a_revisitar()
 {
     for (const char *nome : ARMADILHAS)
@@ -253,17 +261,18 @@ void test_ct_se11_armadilhas_obrigam_a_revisitar()
 void test_ct_se14_rota_igual_a_referencia()
 {
     for (const char *nome : EXPLORADOS)
-    {
-        Labirinto gabarito;
-        carregarDesenho(nome, gabarito);
-        RoboSimulado robo(gabarito);
-        TEST_ASSERT_TRUE_MESSAGE(robo.explorarAteRotaGarantida(), nome);
-        Direcao rota[64];
-        uint8_t passos = robo.floodFill().rotaMaisCurta(robo.mapa(), rota, 64);
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(menorCaminho(gabarito), passos, nome);
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(desenho(nome).movimentosConferidos, passos, nome);
-        TEST_ASSERT_TRUE_MESSAGE(rotaValida(gabarito, rota, passos), nome);
-    }
+        for (Direcao orientacao : ORIENTACOES)
+        {
+            Labirinto gabarito;
+            carregarDesenho(nome, gabarito, orientacao);
+            RoboSimulado robo(gabarito);
+            TEST_ASSERT_TRUE_MESSAGE(robo.explorarAteRotaGarantida(), nome);
+            Direcao rota[64];
+            uint8_t passos = robo.floodFill().rotaMaisCurta(robo.mapa(), rota, 64);
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(menorCaminho(gabarito), passos, nome);
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(desenho(nome).movimentosConferidos, passos, nome);
+            TEST_ASSERT_TRUE_MESSAGE(rotaValida(gabarito, rota, passos), nome);
+        }
 }
 
 // CT-SE14: a referencia manual e o script de referencia concordam em todos os
@@ -322,7 +331,7 @@ int main()
     RUN_TEST(test_fixtures_tem_dimensoes_bordas_e_simbolos_validos);
     RUN_TEST(test_objetivos_das_fixtures_sao_alcancaveis);
     RUN_TEST(test_ct_se09_largada_com_saida_a_frente);
-    RUN_TEST(test_ct_se09_largada_com_saida_a_direita);
+    RUN_TEST(test_ct_se09_largada_com_saida_oposta_a_borda);
     RUN_TEST(test_ct_se11_mapa_montado_igual_ao_desenho);
     RUN_TEST(test_ct_se11_armadilhas_obrigam_a_revisitar);
     RUN_TEST(test_ct_se14_rota_igual_a_referencia);

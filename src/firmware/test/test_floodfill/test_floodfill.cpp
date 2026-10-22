@@ -172,6 +172,20 @@ void test_largada_com_frente_fechada_sai_pela_direita()
     TEST_ASSERT_EQUAL(girarDireita(lab.orientacao()), d);
 }
 
+void test_largada_com_borda_a_direita_e_frente_fechada_sai_pela_esquerda()
+{
+    // Virado para o Leste, a parede Leste de (0,0) fica à frente.
+    Labirinto lab;
+    carregar(LAB_4X4, lab, LESTE);
+    lab.marcarParede(0, 0, LESTE);
+    FloodFill ff;
+    ff.recalcular(lab, EXPLORACAO);
+    Direcao d;
+    TEST_ASSERT_FALSE(lab.podeAvancar());
+    TEST_ASSERT_TRUE(ff.proximaDirecao(lab, d));
+    TEST_ASSERT_EQUAL(girarEsquerda(LESTE), d);
+}
+
 void test_sem_caminho_nao_escolhe_direcao()
 {
     Labirinto lab;
@@ -245,6 +259,15 @@ void test_carregar_recusa_desenho_malformado()
     TEST_ASSERT_FALSE(carregar("+---+\n|  |\n+---+\n", lab));      // linhas de tamanhos diferentes
     TEST_ASSERT_FALSE(carregar("+--+\n|  |\n+--+\n", lab));        // célula sem 4 colunas
     TEST_ASSERT_FALSE(carregar("+---+\n|   |\n\n+---+\n", lab));   // linha em branco no meio
+}
+
+void test_carregar_com_borda_a_direita()
+{
+    Labirinto lab;
+    TEST_ASSERT_TRUE(carregar(LAB_4X4, lab, LESTE));
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacao());
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacaoInicial());
+    TEST_ASSERT_FALSE(carregar(LAB_4X4, lab, SUL));
 }
 
 void test_carregar_recusa_tamanho_fora_do_roteiro()
@@ -360,6 +383,19 @@ void test_rota_desvia_de_parede_nova()
     TEST_ASSERT_EQUAL_UINT8(6, ff.rotaMaisCurta(lab, rota, 32));
     TEST_ASSERT_EQUAL(LESTE, rota[0]);
     TEST_ASSERT_TRUE(percorre(lab, rota, 6));
+}
+
+void test_rota_mais_curta_parte_da_orientacao_inicial()
+{
+    // Sem paredes internas, o empate prefere seguir reto a partir da largada.
+    Labirinto lab;
+    carregar(LAB_4X4_ABERTO, lab, LESTE);
+    FloodFill ff;
+    Direcao rota[32];
+    TEST_ASSERT_EQUAL_UINT8(6, ff.rotaMaisCurta(lab, rota, 32));
+    const Direcao esperada[] = {LESTE, LESTE, LESTE, NORTE, NORTE, NORTE};
+    for (int i = 0; i < 6; i++)
+        TEST_ASSERT_EQUAL(esperada[i], rota[i]);
 }
 
 void test_rota_so_usa_lados_conhecidos()
@@ -520,11 +556,13 @@ int main()
     RUN_TEST(test_empate_prefere_direita_a_esquerda);
     RUN_TEST(test_beco_sem_saida_volta_por_tras);
     RUN_TEST(test_largada_com_frente_fechada_sai_pela_direita);
+    RUN_TEST(test_largada_com_borda_a_direita_e_frente_fechada_sai_pela_esquerda);
     RUN_TEST(test_sem_caminho_nao_escolhe_direcao);
     RUN_TEST(test_carregar_le_as_paredes_do_desenho);
     RUN_TEST(test_carregar_le_labirinto_retangular);
     RUN_TEST(test_carregar_ignora_linhas_em_branco_nas_pontas);
     RUN_TEST(test_carregar_recusa_desenho_malformado);
+    RUN_TEST(test_carregar_com_borda_a_direita);
     RUN_TEST(test_carregar_recusa_tamanho_fora_do_roteiro);
     RUN_TEST(test_carregar_recusa_labirinto_maior_que_16);
     RUN_TEST(test_imprimir_mapa_com_lados_desconhecidos);
@@ -533,6 +571,7 @@ int main()
     RUN_TEST(test_imprimir_mapa_sem_caminho_e_buffer_pequeno);
     RUN_TEST(test_rota_mais_curta_no_labirinto_conhecido);
     RUN_TEST(test_rota_desvia_de_parede_nova);
+    RUN_TEST(test_rota_mais_curta_parte_da_orientacao_inicial);
     RUN_TEST(test_rota_so_usa_lados_conhecidos);
     RUN_TEST(test_sem_rota_ou_rota_que_nao_cabe_devolve_zero);
     RUN_TEST(test_rota_garantida_com_o_mapa_completo);
