@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from './App'
 import Dashboard from './Dashboard.jsx'
@@ -63,6 +63,16 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     vi.useFakeTimers()
     MockWebSocket.instancias = []
     vi.stubGlobal('WebSocket', MockWebSocket)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([]),
+        }),
+      ),
+    )
   })
 
   afterEach(() => {
@@ -1115,3 +1125,438 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('connection-alert')).toBeTruthy()
   })
 })
+
+describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 e 3.8.7)', () => {
+  const labirintosMock = [
+    { id: 1, nome: '4x4', largura_celula: 4, altura_celula: 4, total_tentativas: 2 },
+    { id: 2, nome: '8x4', largura_celula: 8, altura_celula: 4, total_tentativas: 1 },
+    { id: 3, nome: '12x4', largura_celula: 12, altura_celula: 4, total_tentativas: 0 },
+  ]
+
+  const corridasMock = [
+    {
+      id: 28,
+      id_labirinto: 2,
+      labirinto: '8x4',
+      largura_celula: 8,
+      altura_celula: 4,
+      num_tentativa: 1,
+      num_corrida_robo: 28,
+      status: 'concluida',
+      iniciado_em: '2026-09-25T16:42:00-03:00',
+      tempo_conc_s: 91.0,
+      duracao_s: 91.0,
+      consumo_medio_ma: 412.5,
+      velocidade_media: 0.39,
+      total_leituras: 18,
+    },
+    {
+      id: 27,
+      id_labirinto: 1,
+      labirinto: '4x4',
+      largura_celula: 4,
+      altura_celula: 4,
+      num_tentativa: 2,
+      num_corrida_robo: 27,
+      status: 'concluida',
+      iniciado_em: '2026-09-25T15:10:00-03:00',
+      tempo_conc_s: 38.4,
+      duracao_s: 38.4,
+      consumo_medio_ma: 390.0,
+      velocidade_media: 0.44,
+      total_leituras: 7,
+    },
+    {
+      id: 26,
+      id_labirinto: 1,
+      labirinto: '4x4',
+      largura_celula: 4,
+      altura_celula: 4,
+      num_tentativa: 1,
+      num_corrida_robo: 26,
+      status: 'abandonada',
+      iniciado_em: '2026-09-24T14:00:00-03:00',
+      tempo_conc_s: null,
+      duracao_s: 15.2,
+      consumo_medio_ma: 350.0,
+      velocidade_media: 0.28,
+      total_leituras: 4,
+    },
+  ]
+
+  const detalheCorrida27Mock = {
+    ...corridasMock[1],
+    leituras: [
+      {
+        tempo_ms: 0,
+        pos_x: 0,
+        pos_y: 0,
+        orientacao: 'L',
+        paredes: 12,
+        velocidade: 0.4,
+        tensao_bateria: 8.3,
+        valor_flood: 3,
+      },
+      {
+        tempo_ms: 200,
+        pos_x: 1,
+        pos_y: 0,
+        orientacao: 'N',
+        paredes: 6,
+        velocidade: 0.45,
+        tensao_bateria: 8.2,
+        valor_flood: 2,
+      },
+      {
+        tempo_ms: 400,
+        pos_x: 1,
+        pos_y: 1,
+        orientacao: 'N',
+        paredes: 9,
+        velocidade: 0.47,
+        tensao_bateria: 8.1,
+        valor_flood: 1,
+      },
+    ],
+  }
+
+  const logsMock = [
+    {
+      id: 103,
+      id_corrida: 28,
+      tipo: 'erro',
+      origem: 'backend',
+      mensagem: 'checksum invalido (recebido 0000, calculado 2917)',
+      ocorrido_em: '2026-09-26T19:42:36-03:00',
+    },
+    {
+      id: 102,
+      id_corrida: 28,
+      tipo: 'aviso',
+      origem: 'firmware',
+      mensagem: 'desconexao: conexao WebSocket do robo encerrada',
+      ocorrido_em: '2026-09-26T19:42:35-03:00',
+    },
+    {
+      id: 101,
+      id_corrida: 27,
+      tipo: 'info',
+      origem: 'backend',
+      mensagem: 'Corrida iniciada',
+      ocorrido_em: '2026-09-25T15:10:00-03:00',
+    },
+  ]
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    MockWebSocket.instancias = []
+    vi.stubGlobal('WebSocket', MockWebSocket)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  test('carrega a Consulta Geral dos Resultados (GET /labirintos e GET /corridas), exibe cards de resumo, tentativas por labirinto e tabela completa (RF09-S, RF10-S, CT-S09, CT-S12)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith('/labirintos')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(labirintosMock),
+        })
+      }
+      if (url.includes('/corridas')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(corridasMock),
+        })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+
+    // Navega para a aba Histórico
+    fireEvent.click(screen.getByRole('button', { name: /Histórico/i }))
+    expect(screen.getByRole('heading', { name: 'Histórico de Corridas' })).toBeTruthy()
+    expect(screen.getByTestId('tela-historico')).toBeTruthy()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabela-execucoes-registradas')).toBeTruthy()
+    })
+
+    // Verifica que as rotas da 3.8.2 foram chamadas
+    const urlsChamadas = fetchMock.mock.calls.map((c) => c[0])
+    expect(urlsChamadas).toContain('http://localhost:8000/labirintos')
+    expect(urlsChamadas).toContain('http://localhost:8000/corridas')
+
+    // Verifica cards de resumo e contagem de tentativas por labirinto (CT-S09)
+    expect(screen.getByTestId('valor-total-corridas-historico').textContent).toBe('3')
+    expect(screen.getByTestId('valor-corridas-concluidas').textContent).toBe('2')
+    expect(screen.getByTestId('valor-corridas-abandonadas').textContent).toBe('1')
+    expect(screen.getByTestId('chip-labirinto-4x4').textContent).toContain('4 × 4: 2')
+    expect(screen.getByTestId('chip-labirinto-8x4').textContent).toContain('8 × 4: 1')
+    expect(screen.getByTestId('chip-labirinto-12x4').textContent).toContain('12 × 4: 0')
+
+    // Verifica contador e linhas da tabela de Consulta Geral (CT-S12)
+    expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
+      '3 corridas encontradas',
+    )
+    const linha28 = screen.getByTestId('linha-corrida-28')
+    expect(linha28.textContent).toContain('8 × 4')
+    expect(linha28.textContent).toContain('Tentativa 1')
+    expect(linha28.textContent).toContain('Exploração')
+    expect(linha28.textContent).toContain('01:31 (91,00 s)')
+    expect(linha28.textContent).toContain('0,39 m/s')
+    expect(linha28.textContent).toContain('412,5 mA')
+    expect(linha28.textContent).toContain('Concluído')
+
+    const linha27 = screen.getByTestId('linha-corrida-27')
+    expect(linha27.textContent).toContain('4 × 4')
+    expect(linha27.textContent).toContain('Tentativa 2')
+    expect(linha27.textContent).toContain('Rápido')
+    expect(linha27.textContent).toContain('00:38 (38,40 s)')
+    expect(linha27.textContent).toContain('0,44 m/s')
+    expect(linha27.textContent).toContain('Concluído')
+
+    const linha26 = screen.getByTestId('linha-corrida-26')
+    expect(linha26.textContent).toContain('00:15 (15,20 s)')
+    expect(linha26.textContent).toContain('Não concluído')
+  })
+
+  test('filtra corridas por labirinto enviando query param id_labirinto e exibe "Labirinto sem registros" quando vazio (RF08-S, CT-S10 e CT-S11)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith('/labirintos')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(labirintosMock),
+        })
+      }
+      if (url.includes('/corridas?id_labirinto=1')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(corridasMock.filter((c) => c.id_labirinto === 1)),
+        })
+      }
+      if (url.includes('/corridas?id_labirinto=3')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(corridasMock),
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+    fireEvent.click(screen.getByRole('button', { name: /Histórico/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabela-execucoes-registradas')).toBeTruthy()
+    })
+
+    // Passo 1 (CT-S10): Filtra pelo labirinto 4 × 4 (id=1)
+    const selectLabirinto = screen.getByTestId('filtro-labirinto')
+    fireEvent.change(selectLabirinto, { target: { value: '1' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
+        '2 corridas encontradas',
+      )
+    })
+    expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/corridas?id_labirinto=1')).toBe(
+      true,
+    )
+    expect(screen.getByTestId('linha-corrida-27')).toBeTruthy()
+    expect(screen.getByTestId('linha-corrida-26')).toBeTruthy()
+    expect(screen.queryByTestId('linha-corrida-28')).toBeNull()
+
+    // Passo 2 (CT-S11): Filtra pelo labirinto 12 × 4 (id=3), que não possui corridas registradas
+    fireEvent.change(selectLabirinto, { target: { value: '3' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('estado-labirinto-sem-registros')).toBeTruthy()
+    })
+    expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/corridas?id_labirinto=3')).toBe(
+      true,
+    )
+    expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
+      '0 corridas encontradas',
+    )
+    expect(screen.getByTestId('estado-labirinto-sem-registros').textContent).toContain(
+      'Labirinto sem registros',
+    )
+    expect(screen.getByTestId('estado-labirinto-sem-registros').textContent).toContain(
+      'Nenhuma corrida registrada para este labirinto (12 × 4)',
+    )
+
+    // Limpa os filtros e volta a mostrar as 3 corridas gerais
+    fireEvent.click(screen.getByTestId('botao-limpar-filtros-historico'))
+    await waitFor(() => {
+      expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
+        '3 corridas encontradas',
+      )
+    })
+  })
+
+  test('abre Detalhes da Corrida via GET /corridas/{id} e renderiza o <MazeMap /> com o trajeto reconstruído (RF07-S, CT-S07)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith('/labirintos')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(labirintosMock),
+        })
+      }
+      if (url.endsWith('/corridas/27')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(detalheCorrida27Mock),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(corridasMock),
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+    fireEvent.click(screen.getByRole('button', { name: /Histórico/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('botao-detalhes-corrida-27')).toBeTruthy()
+    })
+
+    // Clica em "Ver detalhes" na corrida #27 (4x4)
+    fireEvent.click(screen.getByTestId('botao-detalhes-corrida-27'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tela-detalhes-corrida')).toBeTruthy()
+    })
+
+    expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/corridas/27')).toBe(true)
+    expect(screen.getByTestId('detalhe-id-corrida').textContent).toBe('#027')
+    expect(screen.getByTestId('detalhe-labirinto').textContent).toContain('4 × 4')
+    expect(screen.getByTestId('detalhe-tentativa').textContent).toBe('2')
+    expect(screen.getByTestId('detalhe-resultado').textContent).toContain('Concluído')
+    expect(screen.getByTestId('detalhe-tempo-conclusao').textContent).toContain('00:38 (38,40 s)')
+    expect(screen.getByTestId('detalhe-velocidade-media').textContent).toBe('0,44 m/s')
+    expect(screen.getByTestId('detalhe-consumo-medio').textContent).toBe('390,0 mA')
+
+    // Verifica que o <MazeMap /> foi renderizado com as 3 células e o trajeto 0,0;1,0;1,1
+    const containerMapaDetalhe = screen.getByTestId('espaco-mapa-detalhe-corrida')
+    expect(containerMapaDetalhe.getAttribute('data-celulas-count')).toBe('3')
+    expect(containerMapaDetalhe.getAttribute('data-trajeto-count')).toBe('3')
+    expect(containerMapaDetalhe.getAttribute('data-trajeto')).toBe('0,0;1,0;1,1')
+    expect(containerMapaDetalhe.querySelector('.maze-map')).toBeTruthy()
+    expect(containerMapaDetalhe.querySelector('[data-celula="1,1"].maze-map__cell--observed')).toBeTruthy()
+
+    // Volta ao histórico de corridas
+    fireEvent.click(screen.getByTestId('botao-voltar-historico'))
+    expect(screen.getByTestId('tabela-execucoes-registradas')).toBeTruthy()
+  })
+
+  test('trata erro de rede na consulta de histórico e permite tentar novamente', async () => {
+    let falhar = true
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith('/labirintos')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(labirintosMock) })
+      }
+      if (falhar) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(corridasMock) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+    fireEvent.click(screen.getByRole('button', { name: /Histórico/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('erro-historico')).toBeTruthy()
+    })
+
+    falhar = false
+    fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabela-execucoes-registradas')).toBeTruthy()
+    })
+  })
+
+  test('integra a aba Logs e Eventos com GET /logs, filtros de tipo/origem/busca e painel Detalhes do evento (3.8.7, RF20-S, CT-S03 e CT-S14)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/logs?tipo=erro')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(logsMock.filter((l) => l.tipo === 'erro')),
+        })
+      }
+      if (url.includes('/logs')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(logsMock),
+        })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+    fireEvent.click(screen.getByRole('button', { name: /Logs/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabela-registro-eventos')).toBeTruthy()
+    })
+
+    expect(screen.getByTestId('valor-logs-total').textContent).toBe('3')
+    expect(screen.getByTestId('valor-logs-avisos').textContent).toBe('1')
+    expect(screen.getByTestId('valor-logs-erros').textContent).toBe('1')
+
+    // Filtra por Tipo de evento = "Erro" (CT-S03)
+    fireEvent.change(screen.getByTestId('filtro-tipo-log'), { target: { value: 'erro' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('contador-logs-encontrados').textContent).toContain(
+        '1 eventos encontrados',
+      )
+    })
+    expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/logs?tipo=erro')).toBe(
+      true,
+    )
+
+    // Clica no evento de descarte para abrir o painel "Detalhes do evento" e confere o campo "Motivo"
+    fireEvent.click(screen.getByTestId('botao-detalhe-log-103'))
+    const painelDetalhes = screen.getByTestId('painel-detalhes-evento')
+    expect(painelDetalhes).toBeTruthy()
+    expect(painelDetalhes.textContent).toContain('Descartado')
+    expect(screen.getByTestId('detalhe-evento-motivo').textContent).toContain(
+      'checksum invalido (recebido 0000, calculado 2917)',
+    )
+
+    // Limpa os filtros de logs (CT-S14)
+    fireEvent.click(screen.getByTestId('botao-limpar-filtros-logs'))
+    await waitFor(() => {
+      expect(screen.getByTestId('contador-logs-encontrados').textContent).toContain(
+        '3 eventos encontrados',
+      )
+    })
+  })
+})
+
