@@ -261,7 +261,7 @@ bool BufferTelemetria::obterProximoEnvio(uint32_t agora_ms, MensagemTelemetria &
   for (size_t i = 0; i < quantidade_; i++) {
     const ItemBuffer &item = itens_[indice(i)];
     if (!item.encerrado() && (item.flags & ItemBuffer::FLAG_RETOMADA)) {
-      if (item.enviado() && item.tentativas >= max_tentativas_) return false;
+      if (item.enviado() && item.tentativas >= max_tentativas_) continue;
       msg = paraMensagem(item);
       ehReenvio = item.enviado();
       return true;
@@ -330,7 +330,9 @@ bool BufferTelemetria::gerarEventoReconexao(uint32_t agora_ms, uint32_t tempo_ms
   for (size_t i = 0; i < quantidade_; i++) {
     ItemBuffer &retido = itens_[indice(i)];
     if (retido.encerrado()) continue;
-    retido.flags |= ItemBuffer::FLAG_RETOMADA;
+    if (!retido.enviado() || retido.tentativas < max_tentativas_) {
+      retido.flags |= ItemBuffer::FLAG_RETOMADA;
+    }
     // Pausa a janela de ACK durante a desconexão, sem renovar tentativas.
     if (retido.enviado()) retido.ultimo_envio_ms += duracao;
   }
