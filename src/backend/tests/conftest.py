@@ -28,6 +28,9 @@ def conexao(engine):
     """Conexão dentro de uma transação desfeita no fim do teste: nenhum teste deixa dados no banco."""
     with engine.connect() as conn:
         trans = conn.begin()
+        # Começa sem corridas, leituras e logs de outras execuções (ex.: uma corrida em_andamento
+        # deixada pelos testes E2E). O DELETE também é desfeito no rollback.
+        conn.execute(text("DELETE FROM leitura_telemetria; DELETE FROM log_evento; DELETE FROM corrida"))
         yield conn
         trans.rollback()
 
