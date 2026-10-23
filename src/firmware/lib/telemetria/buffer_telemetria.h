@@ -7,7 +7,7 @@
 
 // Parâmetros de retransmissão conforme a seção 6 do Contrato de Telemetria
 const uint32_t TIMEOUT_ACK_PADRAO_MS = 2000; // 2 segundos sem ack -> reenvia
-const uint8_t MAX_TENTATIVAS_PADRAO = 3;     // Descarte após 3 tentativas sem ack
+const uint8_t MAX_TENTATIVAS_PADRAO = 3;     // 3 envios no total: inicial + 2 reenvios; descarta após o último timeout
 
 // RF25-S / CT-SE17: uma corrida completa sem nenhuma conexão no maior labirinto, que dura
 // até 10 min. A 5 Hz são 3000 pacotes de telemetria; os 200 restantes são margem para os
@@ -47,7 +47,7 @@ struct DadosFimCompactos {
 
 // Registro de uma mensagem retida no buffer (32 B, sem ponteiros nem alocação dinâmica).
 struct ItemBuffer {
-  enum : uint8_t { FLAG_ENVIADO = 0x01, FLAG_ENCERRADO = 0x02 };
+  enum : uint8_t { FLAG_ENVIADO = 0x01, FLAG_ENCERRADO = 0x02, FLAG_RETOMADA = 0x04 };
 
   uint32_t corrida;
   uint32_t seq;
@@ -81,9 +81,9 @@ public:
 
   // Enfileira uma nova mensagem para envio.
   // Se o buffer estiver cheio, primeiro reaproveita os slots já encerrados (ACK fora de
-  // ordem); só se todos estiverem pendentes descarta o mais antigo (FIFO) e incrementa
-  // o contador de descartes por overflow.
-  // Retorna false (sem enfileirar) se a mensagem tiver tipo ou estado fora do contrato.
+  // ordem); depois descarta a telemetria mais antiga, preservando eventos.
+  // Se só houver eventos, recusa a inserção e contabiliza o descarte por overflow.
+  // Retorna false se não houver espaço seguro ou se tipo/estado forem inválidos.
   bool enfileirar(const MensagemTelemetria &msg);
 
   // Confirma o recebimento de ACK do servidor para a mensagem (corrida, seq).
@@ -91,6 +91,8 @@ public:
   bool confirmarAck(uint32_t corrida, uint32_t seq);
 
   // Seleciona a próxima mensagem que deve ser transmitida:
+  // Offline: não envia nem expira mensagens. Na retomada, envia primeiro reconexao
+  // e os pendentes da queda em ordem, antes de voltar à prioridade normal.
   // 0. Descarta as mensagens que esgotaram as tentativas sem ACK.
   // 1. Prioriza mensagens novas ainda não enviadas (enviado == false), da mais antiga
   //    para a mais nova.
@@ -100,6 +102,7 @@ public:
 
   // Registra que a mensagem (corrida, seq) foi enviada no instante agora_ms,
   // incrementando o número de tentativas e atualizando o tempo do último envio.
+  // Chamar somente após envio bem-sucedido; chamadas offline são ignoradas.
   // O seq reinicia a cada corrida, então a corrida faz parte da identificação.
   void registrarEnvio(uint32_t corrida, uint32_t seq, uint32_t agora_ms);
 
@@ -110,7 +113,8 @@ public:
   // na frente da fila, para ser enviado antes dos pendentes (e reenviado se ficar sem ACK).
   //  - agora_ms: relógio do sistema, o mesmo usado em obterProximoEnvio (mede offline_ms).
   //  - tempo_ms: tempo desde a largada, que vai no campo 'tempo_ms' da mensagem.
-  // Retorna false (sem gerar evento) se nenhuma queda foi registrada.
+  // Retorna false se nenhuma queda foi registrada ou não houver espaço para o evento.
+  // Neste último caso permanece offline; o chamador pode liberar espaço por ACK e tentar novamente.
   bool gerarEventoReconexao(uint32_t agora_ms, uint32_t tempo_ms, uint32_t corrida,
                             uint32_t seq, MensagemTelemetria &eventoReconexao);
 
@@ -140,9 +144,9 @@ private:
 
   void avancarCabeca();      // remove os itens encerrados do início do anel
   void compactar();          // remove os itens encerrados do meio, preservando a ordem
-  void liberarEspaco();      // garante um slot livre (compacta ou descarta o mais antigo)
-  void inserirNaCauda(const ItemBuffer &item);
-  void inserirNaFrente(const ItemBuffer &item);
+  bool liberarEspaco();      // reaproveita slots ou descarta a telemetria mais antiga
+  bool inserirNaCauda(const ItemBuffer &item);
+  bool inserirNaFrente(const ItemBuffer &item);
   void registrarInsercao();
 
   ItemBuffer itens_[CAPACIDADE_BUFFER_PADRAO];

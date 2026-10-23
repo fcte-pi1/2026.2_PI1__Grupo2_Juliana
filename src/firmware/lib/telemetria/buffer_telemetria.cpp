@@ -167,22 +167,25 @@ void BufferTelemetria::compactar() {
   quantidade_ = escrita;
 }
 
-void BufferTelemetria::liberarEspaco() {
-  if (quantidade_ < CAPACIDADE_BUFFER_PADRAO) {
-    return;
-  }
-
-  // ACKs fora de ordem deixam slots encerrados no meio do anel: reaproveita antes de descartar
+bool BufferTelemetria::liberarEspaco() {
+  if (quantidade_ < CAPACIDADE_BUFFER_PADRAO) return true;
   compactar();
-  if (quantidade_ < CAPACIDADE_BUFFER_PADRAO) {
-    return;
-  }
+  if (quantidade_ < CAPACIDADE_BUFFER_PADRAO) return true;
 
-  // Todos os slots têm pendência: descarta o mais antigo (FIFO)
-  inicio_ = (inicio_ + 1) % CAPACIDADE_BUFFER_PADRAO;
-  quantidade_--;
-  pendentes_--;
+  // Preserva eventos: perder inicio impede a associação da corrida no backend.
+  for (size_t i = 0; i < quantidade_; i++) {
+    ItemBuffer &item = itens_[indice(i)];
+    if (item.tipo == TIPO_TEL) {
+      item.encerrar();
+      pendentes_--;
+      descartes_overflow_++;
+      compactar();
+      return true;
+    }
+  }
+  // Memória finita: sem telemetria descartável, recusa o novo item.
   descartes_overflow_++;
+  return false;
 }
 
 void BufferTelemetria::registrarInsercao() {
@@ -194,17 +197,19 @@ void BufferTelemetria::registrarInsercao() {
   }
 }
 
-void BufferTelemetria::inserirNaCauda(const ItemBuffer &item) {
-  liberarEspaco();
+bool BufferTelemetria::inserirNaCauda(const ItemBuffer &item) {
+  if (!liberarEspaco()) return false;
   itens_[indice(quantidade_)] = item;
   registrarInsercao();
+  return true;
 }
 
-void BufferTelemetria::inserirNaFrente(const ItemBuffer &item) {
-  liberarEspaco();
+bool BufferTelemetria::inserirNaFrente(const ItemBuffer &item) {
+  if (!liberarEspaco()) return false;
   inicio_ = (inicio_ + CAPACIDADE_BUFFER_PADRAO - 1) % CAPACIDADE_BUFFER_PADRAO;
   itens_[inicio_] = item;
   registrarInsercao();
+  return true;
 }
 
 bool BufferTelemetria::enfileirar(const MensagemTelemetria &msg) {
@@ -212,8 +217,7 @@ bool BufferTelemetria::enfileirar(const MensagemTelemetria &msg) {
   if (!paraItem(msg, item)) {
     return false;
   }
-  inserirNaCauda(item);
-  return true;
+  return inserirNaCauda(item);
 }
 
 bool BufferTelemetria::confirmarAck(uint32_t corrida, uint32_t seq) {
@@ -231,6 +235,8 @@ bool BufferTelemetria::confirmarAck(uint32_t corrida, uint32_t seq) {
 }
 
 bool BufferTelemetria::obterProximoEnvio(uint32_t agora_ms, MensagemTelemetria &msg, bool &ehReenvio) {
+  if (offline_) return false;
+
   // 0. Descarta quem esgotou as tentativas e deixou vencer o timeout do último envio.
   //    Só marca aqui e avança a cabeça uma vez ao final, para não deslocar os índices do loop.
   for (size_t i = 0; i < quantidade_; i++) {
@@ -243,6 +249,18 @@ bool BufferTelemetria::obterProximoEnvio(uint32_t agora_ms, MensagemTelemetria &
     }
   }
   avancarCabeca();
+
+  // Uma passagem FIFO pelos retidos na queda, incluindo os já enviados.
+  // A marca é retirada no envio; ACKs e descartes também encerram a pendência.
+  for (size_t i = 0; i < quantidade_; i++) {
+    const ItemBuffer &item = itens_[indice(i)];
+    if (!item.encerrado() && (item.flags & ItemBuffer::FLAG_RETOMADA)) {
+      if (item.enviado() && item.tentativas >= max_tentativas_) return false;
+      msg = paraMensagem(item);
+      ehReenvio = item.enviado();
+      return true;
+    }
+  }
 
   // 1. Prioridade: mensagens novas ainda não enviadas, da mais antiga para a mais nova
   for (size_t i = 0; i < quantidade_; i++) {
@@ -269,9 +287,11 @@ bool BufferTelemetria::obterProximoEnvio(uint32_t agora_ms, MensagemTelemetria &
 }
 
 void BufferTelemetria::registrarEnvio(uint32_t corrida, uint32_t seq, uint32_t agora_ms) {
+  if (offline_) return;
   for (size_t i = 0; i < quantidade_; i++) {
     ItemBuffer &item = itens_[indice(i)];
     if (!item.encerrado() && item.corrida == corrida && item.seq == seq) {
+      item.flags &= (uint8_t)~ItemBuffer::FLAG_RETOMADA;
       item.marcarEnviado();
       item.ultimo_envio_ms = agora_ms;
       item.tentativas++;
@@ -299,7 +319,15 @@ bool BufferTelemetria::gerarEventoReconexao(uint32_t agora_ms, uint32_t tempo_ms
                                          (uint16_t)pendentes_);
   ItemBuffer item;
   paraItem(eventoReconexao, item);
-  inserirNaFrente(item);
+  if (!inserirNaFrente(item)) return false;
+  const uint32_t duracao = decorridoMs(agora_ms, instante_queda_ms_);
+  for (size_t i = 0; i < quantidade_; i++) {
+    ItemBuffer &retido = itens_[indice(i)];
+    if (retido.encerrado()) continue;
+    retido.flags |= ItemBuffer::FLAG_RETOMADA;
+    // Pausa a janela de ACK durante a desconexão, sem renovar tentativas.
+    if (retido.enviado()) retido.ultimo_envio_ms += duracao;
+  }
   offline_ = false;
   return true;
 }
