@@ -7,24 +7,37 @@
 const uint8_t MAX_LARG = 16;
 const uint8_t MAX_ALT = 16;
 
+// De que lado do robô fica a borda do labirinto na largada. A equipe informa.
+enum LadoBorda : uint8_t
+{
+    BORDA_ESQUERDA,
+    BORDA_DIREITA
+};
+
 // Mapa do labirinto em memória fixa (RNF03).
 //
-// Convenção de largada (Tema PI1, slide 9: o robô começa num beco sem saída
-// em um canto e o objetivo é o canto oposto). A equipe posiciona o robô na
-// célula de largada com a borda do labirinto atrás e à esquerda dele. As
-// direções valem a partir dessa pose:
-//   - Norte é para onde o robô aponta na largada e Leste é a direita dele;
-//   - a largada é (0,0); x cresce para Leste e y para Norte;
-//   - largura = células à direita do robô, altura = células à frente.
-// Se a saída do beco não estiver à frente, está à direita: o robô larga de
-// frente para a parede interna e gira para sair.
+// Convenção de largada (Tema PI1, slide 9): o robô começa num beco em
+// qualquer canto, com a borda atrás dele, e o objetivo é o canto
+// diagonalmente oposto. A largada é sempre (0,0), no canto Sudoeste do mapa;
+// x cresce para Leste e y para Norte. O que muda com o canto é para onde o
+// robô aponta:
+//   - borda atrás e à esquerda: larga virado para o Norte;
+//   - borda atrás e à direita: larga virado para o Leste.
+// Assim a borda de trás e a lateral são sempre o Sul e o Oeste de (0,0), e o
+// objetivo fica em (largura-1, altura-1), como no frontend e na telemetria.
+// Se a frente estiver fechada, a saída do beco fica do lado oposto à borda.
+// Todas as bordas são fechadas.
 class Labirinto
 {
 public:
     // Zera tudo e fecha as bordas. Só aceita os labirintos do TAP (4x4, 8x4 e
-    // 12x4, ou 4x8 e 4x12 se girados em relação ao robô); com outro tamanho
-    // devolve false e não altera nada.
-    bool iniciar(uint8_t largura, uint8_t altura);
+    // 12x4, ou 4x8 e 4x12 se girados em relação ao robô) e orientação inicial
+    // NORTE ou LESTE; senão devolve false e não altera nada.
+    bool iniciar(uint8_t largura, uint8_t altura, Direcao orientacaoInicial = NORTE);
+    // O mesmo, a partir do que a equipe informa olhando o robô na largada:
+    // o lado da borda e quantas células há à frente e ao lado dele.
+    bool iniciarNaLargada(LadoBorda borda, uint8_t celulasAFrente, uint8_t celulasAoLado);
+
     void marcarParede(uint8_t x, uint8_t y, Direcao d); // grava nos dois lados
     void marcarAberta(uint8_t x, uint8_t y, Direcao d); // lado conhecido e sem parede
     bool temParede(uint8_t x, uint8_t y, Direcao d) const;
@@ -43,6 +56,7 @@ public:
     uint8_t x() const { return x_; }
     uint8_t y() const { return y_; }
     Direcao orientacao() const { return orientacao_; }
+    Direcao orientacaoInicial() const { return orientacaoInicial_; }
     void marcarVisitada(uint8_t x, uint8_t y);
     bool visitada(uint8_t x, uint8_t y) const;
 
@@ -65,6 +79,7 @@ private:
     uint8_t x_ = 0;
     uint8_t y_ = 0;
     Direcao orientacao_ = NORTE;
+    Direcao orientacaoInicial_ = NORTE;
     uint8_t objetivoX_ = 0;
     uint8_t objetivoY_ = 0;
 };

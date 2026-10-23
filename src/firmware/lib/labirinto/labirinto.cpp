@@ -10,9 +10,11 @@ static bool tamanhoDoRoteiro(uint8_t largura, uint8_t altura)
     return menor == 4 && (maior == 4 || maior == 8 || maior == 12);
 }
 
-bool Labirinto::iniciar(uint8_t largura, uint8_t altura)
+bool Labirinto::iniciar(uint8_t largura, uint8_t altura, Direcao orientacaoInicial)
 {
     if (!tamanhoDoRoteiro(largura, altura))
+        return false;
+    if (orientacaoInicial != NORTE && orientacaoInicial != LESTE)
         return false;
     largura_ = largura;
     altura_ = altura;
@@ -32,11 +34,23 @@ bool Labirinto::iniciar(uint8_t largura, uint8_t altura)
 
     x_ = 0;
     y_ = 0;
-    orientacao_ = NORTE;
+    orientacaoInicial_ = orientacaoInicial;
+    orientacao_ = orientacaoInicial;
     marcarVisitada(0, 0);
     objetivoX_ = largura_ - 1;
     objetivoY_ = altura_ - 1;
     return true;
+}
+
+// Virado para o Norte, a direita é o Leste (largura); virado para o Leste, a
+// esquerda é o Norte (altura). Ver labirinto.h.
+bool Labirinto::iniciarNaLargada(LadoBorda borda, uint8_t celulasAFrente, uint8_t celulasAoLado)
+{
+    if (borda == BORDA_ESQUERDA)
+        return iniciar(celulasAoLado, celulasAFrente, NORTE);
+    if (borda == BORDA_DIREITA)
+        return iniciar(celulasAFrente, celulasAoLado, LESTE);
+    return false;
 }
 
 void Labirinto::marcarParede(uint8_t x, uint8_t y, Direcao d) { gravar(x, y, d, true); }
