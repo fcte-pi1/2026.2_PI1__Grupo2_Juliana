@@ -40,7 +40,7 @@ export default defineConfig({
     {
       command: `npm run dev -- --port ${FRONTEND_PORTA} --strictPort`,
       cwd: FRONTEND_DIR,
-      env: { VITE_WS_URL: `ws://${BACKEND_HOST}/ws/painel` },
+      env: { VITE_WS_URL: `ws://${BACKEND_HOST}/ws/painel`, VITE_API_URL: BACKEND_URL },
       url: `http://localhost:${FRONTEND_PORTA}`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

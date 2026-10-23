@@ -1,5 +1,6 @@
 // CT-S02 - Aceitação de pacote de telemetria válido (RF24-S / HU #107; RF05-S / HU #88, CA2)
-import { consultar, criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
+import { consultar } from '../helpers/banco'
 import { capturarTela, csv, salvarEvidencia } from '../helpers/evidencia'
 import { abrirPainel } from '../helpers/painel'
 import { RoboFalso } from '../helpers/robo'
@@ -42,7 +43,7 @@ test('CT-S02 - pacote válido é aceito, gravado na corrida certa e exibido na T
   await expect(page.getByTestId('texto-status-execucao')).toHaveText('Explorando labirinto')
   await capturarTela(page, testInfo, 'monitoramento')
 
-  // Nenhum evento de nível "Erro" registrado (tela Logs e Eventos ainda não existe: conferido no banco)
+  // Nenhum evento de nível "Erro" registrado (a tela Logs e Eventos é conferida no CT-S03 e no CT-S14)
   const erros = await consultar("SELECT mensagem FROM log_evento WHERE tipo = 'erro'")
   expect(erros).toEqual([])
 })

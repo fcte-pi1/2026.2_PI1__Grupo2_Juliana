@@ -1,5 +1,5 @@
 // CT-S06 - Alerta de perda de conexão (RF19-S / HU #102, CA2)
-import { criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
 import { capturarTela, csv, salvarEvidencia } from '../helpers/evidencia'
 import { abrirPainel, irPara } from '../helpers/painel'
 import { RoboFalso } from '../helpers/robo'

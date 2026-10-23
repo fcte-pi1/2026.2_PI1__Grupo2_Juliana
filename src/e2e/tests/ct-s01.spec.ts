@@ -1,5 +1,6 @@
 // CT-S01 - Recepção de telemetria do Micromouse (RF05-S / HU #88, CA1 e CA2)
-import { consultar, criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
+import { consultar } from '../helpers/banco'
 import { csv, salvarEvidencia } from '../helpers/evidencia'
 import { ouvirPainel } from '../helpers/robo'
 import { rodarSimulador } from '../helpers/simulador'

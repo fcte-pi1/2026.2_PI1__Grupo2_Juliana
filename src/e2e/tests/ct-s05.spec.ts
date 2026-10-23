@@ -1,6 +1,6 @@
 // CT-S05 - Alerta de bateria em nível crítico (RF19-S / HU #102, CA1)
 // Limiar crítico 7,0 V (3,5 V por célula); o alerta só sai acima de 7,2 V (rearme do contrato 4.4.7).
-import { criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
 import { capturarTela, csv, salvarEvidencia } from '../helpers/evidencia'
 import { abrirPainel } from '../helpers/painel'
 import { RoboFalso } from '../helpers/robo'

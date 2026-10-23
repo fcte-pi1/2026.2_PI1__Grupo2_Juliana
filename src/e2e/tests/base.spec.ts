@@ -1,7 +1,8 @@
 // Fumaça da infraestrutura E2E: banco, backend, site e simulador conversam entre si.
 // Os casos CT-S ficam em arquivos próprios (ct-s01.spec.ts, ...).
 import { BACKEND_URL } from '../helpers/ambiente'
-import { consultar, criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
+import { consultar } from '../helpers/banco'
 import { rodarSimulador } from '../helpers/simulador'
 import { expect, test } from '../helpers/teste'
 

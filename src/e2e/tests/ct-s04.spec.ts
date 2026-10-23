@@ -1,5 +1,5 @@
 // CT-S04 - Monitoramento da corrida em tempo real (RF06-S / HU #89, CA1 e CA2; RNF06-S)
-import { criarCorrida } from '../helpers/banco'
+import { criarCorrida } from '../helpers/api'
 import { capturarTela, csv, salvarEvidencia } from '../helpers/evidencia'
 import { abrirPainel, celulaDoMapa } from '../helpers/painel'
 import { RoboFalso, type Tel } from '../helpers/robo'
