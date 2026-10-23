@@ -642,8 +642,110 @@ void test_buffer_memoria_estatica_cabe_na_ram() {
 // Execução dos Testes Unity
 // ==============================================================================
 
+void test_offline_preserva_mensagens_com_loop_ativo() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8.0f));
+  for (uint32_t i = 1; i <= 50; i++)
+    buf.enfileirar(criarTelemetria(1, i, i * 200, 0, 0, 'N', 0, 0, 8, 0, "parado"));
+  buf.registrarQuedaConexao(0);
+  MensagemTelemetria msg;
+  bool reenvio;
+  for (uint32_t t = 0; t < 20000; t += 200) {
+    TEST_ASSERT_FALSE(buf.obterProximoEnvio(t, msg, reenvio));
+    // Mesmo uma chamada indevida não pode consumir tentativas offline.
+    buf.registrarEnvio(1, 0, t);
+  }
+  TEST_ASSERT_EQUAL_UINT32(51, buf.pendentes());
+  TEST_ASSERT_EQUAL_UINT32(0, buf.totalDescartesTentativas());
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(20000, 20000, 1, 51, msg));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(20000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT8(EVT_RECONEXAO, msg.tipo);
+  buf.registrarEnvio(1, 51, 20000);
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(20000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT8(EVT_INICIO, msg.tipo);
+  TEST_ASSERT_FALSE(reenvio);
+}
+
+void test_retomada_ordena_enviados_e_novos() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.registrarEnvio(1, 0, 0);
+  buf.registrarQuedaConexao(100);
+  buf.enfileirar(criarEventoBateriaCritica(1, 1, 200, 6.9f));
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(10000, 10000, 1, 2, msg));
+  buf.enfileirar(criarEventoFimConcluida(1, 3, 10100, 10.1f, 100));
+  const uint32_t ordem[] = {2, 0, 1, 3};
+  for (uint32_t seq : ordem) {
+    TEST_ASSERT_TRUE(buf.obterProximoEnvio(10100, msg, reenvio));
+    TEST_ASSERT_EQUAL_UINT32(seq, msg.seq);
+    TEST_ASSERT_EQUAL(seq == 0, reenvio);
+    buf.registrarEnvio(1, seq, 10100);
+  }
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(10100, msg, reenvio));
+}
+
+void test_offline_pausa_timeout_da_ultima_tentativa() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.registrarEnvio(1, 0, 0);
+  buf.registrarEnvio(1, 0, 2000);
+  buf.registrarEnvio(1, 0, 4000);
+  buf.registrarQuedaConexao(4500);
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(20000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(0, buf.totalDescartesTentativas());
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(20000, 20000, 1, 1, msg));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(20000, msg, reenvio));
+  buf.registrarEnvio(1, 1, 20000);
+  buf.confirmarAck(1, 1);
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(21499, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(1, buf.pendentes());
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(21500, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(1, buf.totalDescartesTentativas());
+}
+
+void test_overflow_preserva_eventos_e_recusa_buffer_so_de_eventos() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.enfileirar(criarEventoBateriaCritica(1, 1, 200, 6.9f));
+  buf.enfileirar(criarEventoFimConcluida(1, 2, 400, 0.4f, 100));
+  for (uint32_t i = 3; i < buf.capacidade(); i++)
+    buf.enfileirar(criarTelemetria(1, i, i * 200, 0, 0, 'N', 0, 0, 8, 0, "parado"));
+  TEST_ASSERT_TRUE(buf.enfileirar(criarEventoInicio(2, 0, 0, 8)));
+  TEST_ASSERT_EQUAL_UINT32(1, buf.totalDescartesOverflow());
+  TEST_ASSERT_FALSE(buf.confirmarAck(1, 3));
+  for (uint32_t seq = 0; seq < 3; seq++) TEST_ASSERT_TRUE(buf.confirmarAck(1, seq));
+  TEST_ASSERT_TRUE(buf.confirmarAck(2, 0));
+
+  buf.limpar();
+  for (uint32_t i = 0; i < buf.capacidade(); i++)
+    TEST_ASSERT_TRUE(buf.enfileirar(criarEventoInicio(i + 1, 0, 0, 8)));
+  TEST_ASSERT_FALSE(buf.enfileirar(criarTelemetria(1, 1, 200, 0, 0, 'N', 0, 0, 8, 0, "parado")));
+  buf.registrarQuedaConexao(0);
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_FALSE(buf.gerarEventoReconexao(1000, 1000, 1, 2, msg));
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(1000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(2, buf.totalDescartesOverflow());
+  TEST_ASSERT_TRUE(buf.confirmarAck(1, 0));
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(1000, 1000, 1, 2, msg));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(1000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT8(EVT_RECONEXAO, msg.tipo);
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_offline_preserva_mensagens_com_loop_ativo);
+  RUN_TEST(test_retomada_ordena_enviados_e_novos);
+  RUN_TEST(test_offline_pausa_timeout_da_ultima_tentativa);
+  RUN_TEST(test_overflow_preserva_eventos_e_recusa_buffer_so_de_eventos);
 
   // Serialização e formato
   RUN_TEST(test_serializar_telemetria_exemplo_contrato);
