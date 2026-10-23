@@ -780,8 +780,29 @@ void test_buffer_timeout_e_reconexao_com_rollover() {
   TEST_ASSERT_EQUAL_UINT32(1, buf.totalDescartesTentativas());
 }
 
+void test_retomada_com_item_esgotado_nao_bloqueia_demais() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.registrarEnvio(1, 0, 0);
+  buf.registrarEnvio(1, 0, 2000);
+  buf.registrarEnvio(1, 0, 4000);
+  buf.registrarQuedaConexao(4500);
+  buf.enfileirar(criarEventoBateriaCritica(1, 1, 4600, 6.9f));
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(20000, 20000, 1, 2, msg));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(20000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(2, msg.seq);
+  buf.registrarEnvio(1, 2, 20000);
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(20000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(1, msg.seq);
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_retomada_com_item_esgotado_nao_bloqueia_demais);
+
   RUN_TEST(test_buffer_arredondamento_identico_ao_serializador);
   RUN_TEST(test_buffer_timeout_e_reconexao_com_rollover);
   RUN_TEST(test_offline_preserva_mensagens_com_loop_ativo);
