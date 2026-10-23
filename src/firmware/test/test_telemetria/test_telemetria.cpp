@@ -799,8 +799,80 @@ void test_retomada_com_item_esgotado_nao_bloqueia_demais() {
   TEST_ASSERT_EQUAL_UINT32(1, msg.seq);
 }
 
+static bool lerAckComCrc(const char *json, uint32_t &corrida, uint32_t &seq) {
+  char frame[256];
+  snprintf(frame, sizeof(frame), "%s|%04X", json,
+           (unsigned)crc16_ccitt((const uint8_t *)json, strlen(json)));
+  return processarAck(frame, corrida, seq);
+}
+
+void test_ack_recusa_json_e_numeros_invalidos_com_crc_correto() {
+  const char *invalidos[] = {
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":null}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":-1}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":4294967296}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":1.5}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":1e2}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":01}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":+1}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":\"42\"}",
+    "{\"t\":\"ack\",\"corrida\":0,\"seq\":0}",
+    "{\"t\":\"ack\",\"corrida\":4294967297,\"seq\":0}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":0,\"seq\":42}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":0,}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":0} lixo",
+    "[{\"t\":\"ack\",\"corrida\":7,\"seq\":0}]",
+    "{\"t\":\"ack\",\"corrida\":7}",
+    "{\"t\":\"tel\",\"corrida\":7,\"seq\":0}",
+    "{\"t\":\"ack\",\"corrida\":7,\"seq\":0",
+  };
+  for (const char *json : invalidos) {
+    uint32_t corrida = 99, seq = 88;
+    TEST_ASSERT_FALSE_MESSAGE(lerAckComCrc(json, corrida, seq), json);
+    TEST_ASSERT_EQUAL_UINT32(99, corrida);
+    TEST_ASSERT_EQUAL_UINT32(88, seq);
+  }
+}
+
+void test_ack_aceita_espacos_ordem_e_limites() {
+  uint32_t corrida = 0, seq = 1;
+  TEST_ASSERT_TRUE(lerAckComCrc(" { \"seq\" : 0, \"corrida\" : 7, \"t\" : \"ack\" } ", corrida, seq));
+  TEST_ASSERT_EQUAL_UINT32(7, corrida);
+  TEST_ASSERT_EQUAL_UINT32(0, seq);
+  TEST_ASSERT_TRUE(lerAckComCrc("{\"t\":\"ack\",\"corrida\":4294967295,\"seq\":4294967295}", corrida, seq));
+  TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, corrida);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, seq);
+}
+
+void test_fim_preserva_consumo_acima_de_uint16_escalado() {
+  conferirIdaEVolta(criarEventoFimConcluida(1, 9, 600000, 600, 7000.1f));
+  conferirIdaEVolta(criarEventoFimAbandonada(1, 9, 600000, MOTIVO_MANUAL, 99999.9f));
+}
+
+void test_reconexao_reporta_apenas_pendentes_retidos_apos_overflow() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  for (uint32_t i = 1; i < buf.capacidade(); i++)
+    buf.enfileirar(criarTelemetria(1, i, i * 200, 0, 0, 'N', 0, 0, 8, 0, "parado"));
+  buf.registrarQuedaConexao(0);
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(10000, 10000, 1, 3200, msg));
+  TEST_ASSERT_EQUAL_UINT32(buf.pendentes() - 1, msg.pendentes);
+  TEST_ASSERT_EQUAL_UINT32(1, buf.totalDescartesOverflow());
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(10000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(buf.pendentes() - 1, msg.pendentes);
+  TEST_ASSERT_TRUE(buf.confirmarAck(1, 0));
+  TEST_ASSERT_FALSE(buf.confirmarAck(1, 1));
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_ack_recusa_json_e_numeros_invalidos_com_crc_correto);
+  RUN_TEST(test_ack_aceita_espacos_ordem_e_limites);
+  RUN_TEST(test_fim_preserva_consumo_acima_de_uint16_escalado);
+  RUN_TEST(test_reconexao_reporta_apenas_pendentes_retidos_apos_overflow);
   RUN_TEST(test_retomada_com_item_esgotado_nao_bloqueia_demais);
 
   RUN_TEST(test_buffer_arredondamento_identico_ao_serializador);

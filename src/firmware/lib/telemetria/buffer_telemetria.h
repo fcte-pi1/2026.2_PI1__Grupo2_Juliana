@@ -15,9 +15,9 @@ const uint8_t MAX_TENTATIVAS_PADRAO = 3;     // 3 envios no total: inicial + 2 r
 // Com ItemBuffer de 32 B o buffer ocupa ~100 KB (~31% da RAM do ESP32).
 const size_t CAPACIDADE_BUFFER_PADRAO = 3200;
 
-// Dados específicos de cada tipo de mensagem. Os valores decimais são guardados como
-// inteiros na mesma resolução do contrato (velocidade 3 casas, tensão 2, tempo 2, consumo 1),
-// então a mensagem reconstruída é serializada exatamente como a original.
+// Dados específicos de cada tipo de mensagem. Velocidade e tensão usam inteiros
+// na resolução do contrato (3 e 2 casas), preservando a serialização nas faixas válidas.
+// O evento fim guarda os floats originais, evitando limites artificiais de escala.
 struct DadosTelemetriaCompactos {
   int8_t pos_x;
   int8_t pos_y;
@@ -39,8 +39,8 @@ struct DadosReconexaoCompactos {
 };
 
 struct DadosFimCompactos {
-  uint32_t tempo_conc_cs;
-  uint16_t consumo_dma;  // décimos de mA
+  float tempo_conc_s;
+  float consumo_medio_ma;
   uint8_t resultado;
   uint8_t motivo;
 };

@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 static const char* motivoParaTexto(MotivoAbandono motivo) {
   switch (motivo) {
@@ -195,67 +194,81 @@ size_t serializarQuadro(const MensagemTelemetria &msg, char *buffer, size_t maxL
   return tamJson + 5;
 }
 
+namespace {
+
+void pularEspacos(const char *&p, const char *fim) {
+  while (p < fim && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+}
+
+bool consumir(const char *&p, const char *fim, const char *literal) {
+  pularEspacos(p, fim);
+  const size_t n = strlen(literal);
+  if ((size_t)(fim - p) < n || strncmp(p, literal, n) != 0) return false;
+  p += n;
+  return true;
+}
+
+bool lerUint32(const char *&p, const char *fim, uint32_t &valor) {
+  pularEspacos(p, fim);
+  if (p == fim || *p < '0' || *p > '9') return false;
+  const bool zeroInicial = *p == '0';
+  valor = 0;
+  size_t digitos = 0;
+  while (p < fim && *p >= '0' && *p <= '9') {
+    if (zeroInicial && digitos != 0) return false;
+    const uint32_t digito = (uint32_t)(*p - '0');
+    if (valor > (UINT32_MAX - digito) / 10) return false;
+    valor = valor * 10 + digito;
+    ++p;
+    ++digitos;
+  }
+  return true;
+}
+
+} // namespace
+
 bool processarAck(const char *frame, uint32_t &corrida, uint32_t &seq) {
-  if (frame == nullptr) {
-    return false;
-  }
-
-  size_t len = strlen(frame);
-  if (len < 6) { // Menor frame possível: {}|XXXX
-    return false;
-  }
-
-  // Localiza o delimitador '|'
+  if (frame == nullptr) return false;
   const char *delimitador = strrchr(frame, '|');
-  if (delimitador == nullptr) {
+  if (delimitador == nullptr || strlen(delimitador + 1) != 4) return false;
+
+  uint16_t crcRecebido = 0;
+  for (const char *p = delimitador + 1; *p; ++p) {
+    unsigned digito;
+    if (*p >= '0' && *p <= '9') digito = (unsigned)(*p - '0');
+    else if (*p >= 'A' && *p <= 'F') digito = (unsigned)(*p - 'A' + 10);
+    else if (*p >= 'a' && *p <= 'f') digito = (unsigned)(*p - 'a' + 10);
+    else return false;
+    crcRecebido = (uint16_t)((crcRecebido << 4) | digito);
+  }
+  if (crc16_ccitt((const uint8_t *)frame, (size_t)(delimitador - frame)) != crcRecebido)
     return false;
-  }
 
-  size_t tamJson = delimitador - frame;
-  const char *crcStr = delimitador + 1;
-  if (strlen(crcStr) != 4) {
-    return false;
+  // ACK do contrato: objeto com t, corrida e seq, sem repetição de chaves.
+  // Não basta procurar substrings: null, negativos e overflow não podem confirmar seq=0.
+  const char *p = frame;
+  if (!consumir(p, delimitador, "{")) return false;
+  uint8_t campos = 0;
+  uint32_t corridaLida = 0, seqLido = 0;
+  for (unsigned i = 0; i < 3; i++) {
+    uint8_t campo;
+    if (consumir(p, delimitador, "\"t\"")) campo = 1;
+    else if (consumir(p, delimitador, "\"corrida\"")) campo = 2;
+    else if (consumir(p, delimitador, "\"seq\"")) campo = 4;
+    else return false;
+    if ((campos & campo) || !consumir(p, delimitador, ":")) return false;
+    campos |= campo;
+    if (campo == 1) {
+      if (!consumir(p, delimitador, "\"ack\"")) return false;
+    } else if (campo == 2) {
+      if (!lerUint32(p, delimitador, corridaLida) || corridaLida == 0) return false;
+    } else if (!lerUint32(p, delimitador, seqLido)) return false;
+    if (!consumir(p, delimitador, i < 2 ? "," : "}")) return false;
   }
-
-  // Validação do checksum
-  char *endptr = nullptr;
-  unsigned long crcRecebido = strtoul(crcStr, &endptr, 16);
-  if (endptr == nullptr || *endptr != '\0') {
-    return false;
-  }
-
-  uint16_t crcCalculado = crc16_ccitt((const uint8_t*)frame, tamJson);
-  if ((uint16_t)crcRecebido != crcCalculado) {
-    return false;
-  }
-
-  // Parsing dos campos do ACK: {"t":"ack","corrida":7,"seq":42}
-  // Confirma presença de "t":"ack"
-  if (strstr(frame, "\"t\":\"ack\"") == nullptr && strstr(frame, "\"t\": \"ack\"") == nullptr) {
-    return false;
-  }
-
-  // Extração de "corrida":
-  const char *posCorrida = strstr(frame, "\"corrida\":");
-  if (posCorrida == nullptr) {
-    posCorrida = strstr(frame, "\"corrida\": ");
-    if (posCorrida == nullptr) return false;
-    posCorrida += 11;
-  } else {
-    posCorrida += 10;
-  }
-  corrida = (uint32_t)strtoul(posCorrida, nullptr, 10);
-
-  // Extração de "seq":
-  const char *posSeq = strstr(frame, "\"seq\":");
-  if (posSeq == nullptr) {
-    posSeq = strstr(frame, "\"seq\": ");
-    if (posSeq == nullptr) return false;
-    posSeq += 7;
-  } else {
-    posSeq += 6;
-  }
-  seq = (uint32_t)strtoul(posSeq, nullptr, 10);
-
+  pularEspacos(p, delimitador);
+  if (p != delimitador || campos != 7) return false;
+  // Saídas só mudam após validação completa.
+  corrida = corridaLida;
+  seq = seqLido;
   return true;
 }

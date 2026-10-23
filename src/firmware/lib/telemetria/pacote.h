@@ -88,5 +88,7 @@ size_t serializarQuadro(const MensagemTelemetria &msg, char *buffer, size_t maxL
 
 // Faz o parsing e validação de um frame de confirmação ACK do servidor:
 // Formato esperado: {"t":"ack","corrida":7,"seq":42}|7278
-// Retorna true se o frame for um ACK com CRC correto, preenchendo corrida e seq
+// Aceita os três campos do ACK em qualquer ordem, com espaços JSON opcionais.
+// Recusa chaves duplicadas, campos extras e inteiros fora de uint32_t (corrida >= 1).
+// Retorna true se o frame for válido; em falha, preserva corrida e seq.
 bool processarAck(const char *frame, uint32_t &corrida, uint32_t &seq);

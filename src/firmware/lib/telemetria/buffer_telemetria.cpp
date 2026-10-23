@@ -73,8 +73,8 @@ bool paraItem(const MensagemTelemetria &msg, ItemBuffer &item) {
       item.dados.reconexao.pendentes = msg.pendentes;
       return true;
     case EVT_FIM:
-      item.dados.fim.tempo_conc_cs = escalarDecimal(msg.tempo_conc_s, 2, UINT32_MAX);
-      item.dados.fim.consumo_dma = (uint16_t)escalarDecimal(msg.consumo_medio_ma, 1, UINT16_MAX);
+      item.dados.fim.tempo_conc_s = msg.tempo_conc_s;
+      item.dados.fim.consumo_medio_ma = msg.consumo_medio_ma;
       item.dados.fim.resultado = (uint8_t)msg.resultado;
       item.dados.fim.motivo = (uint8_t)msg.motivo;
       return true;
@@ -115,8 +115,8 @@ MensagemTelemetria paraMensagem(const ItemBuffer &item) {
       msg.pendentes = item.dados.reconexao.pendentes;
       break;
     case EVT_FIM:
-      msg.tempo_conc_s = (float)item.dados.fim.tempo_conc_cs / 100.0f;
-      msg.consumo_medio_ma = (float)item.dados.fim.consumo_dma / 10.0f;
+      msg.tempo_conc_s = item.dados.fim.tempo_conc_s;
+      msg.consumo_medio_ma = item.dados.fim.consumo_medio_ma;
       msg.resultado = (ResultadoCorrida)item.dados.fim.resultado;
       msg.motivo = (MotivoAbandono)item.dados.fim.motivo;
       break;
@@ -326,6 +326,10 @@ bool BufferTelemetria::gerarEventoReconexao(uint32_t agora_ms, uint32_t tempo_ms
   ItemBuffer item;
   paraItem(eventoReconexao, item);
   if (!inserirNaFrente(item)) return false;
+  // A inserção pode descartar uma telemetria para liberar espaço. Reporta só os
+  // retidos de fato e exclui o próprio evento, tanto na saída quanto no buffer.
+  eventoReconexao.pendentes = (uint16_t)(pendentes_ - 1);
+  itens_[inicio_].dados.reconexao.pendentes = eventoReconexao.pendentes;
   const uint32_t duracao = decorridoMs(agora_ms, instante_queda_ms_);
   for (size_t i = 0; i < quantidade_; i++) {
     ItemBuffer &retido = itens_[indice(i)];
