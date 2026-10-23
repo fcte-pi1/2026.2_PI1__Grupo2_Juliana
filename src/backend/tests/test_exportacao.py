@@ -85,6 +85,39 @@ def test_filtro_por_labirinto_nao_mistura_corridas(sessao_exportacao, id_corrida
     assert linhas[0]["tempo_conc_s"] == "12.500"
 
 
+def test_corridas_filtram_por_status_tentativa_e_data(sessao_exportacao, id_labirinto):
+    c1 = Corrida(id_labirinto=id_labirinto, num_tentativa=1, status="concluida", tempo_conc_s=Decimal("10.0"))
+    c2 = Corrida(id_labirinto=id_labirinto, num_tentativa=2, status="abandonada")
+    sessao_exportacao.add_all([c1, c2])
+    sessao_exportacao.commit()
+
+    _, linhas_concluida = baixar({"status": "concluida"})
+    assert all(l["status"] == "concluida" for l in linhas_concluida)
+    assert any(l["id_corrida"] == str(c1.id) for l in linhas_concluida)
+    assert not any(l["id_corrida"] == str(c2.id) for l in linhas_concluida)
+
+    _, linhas_tentativa2 = baixar({"num_tentativa": 2})
+    assert all(l["num_tentativa"] == "2" for l in linhas_tentativa2)
+
+
+def test_logs_filtram_por_tipo_origem_e_busca(sessao_exportacao, id_corrida):
+    sessao_exportacao.add_all([
+        LogEvento(id_corrida=id_corrida, tipo="info", origem="backend", mensagem="Corrida iniciada com sucesso"),
+        LogEvento(id_corrida=id_corrida, tipo="erro", origem="firmware", mensagem="Falha de sensor frontal"),
+    ])
+    sessao_exportacao.commit()
+
+    _, linhas_erro = baixar({"tipo": "erro"}, "logs.csv")
+    assert all(l["tipo"] == "erro" for l in linhas_erro)
+
+    _, linhas_origem = baixar({"origem": "firmware"}, "logs.csv")
+    assert all(l["origem"] == "firmware" for l in linhas_origem)
+
+    _, linhas_busca = baixar({"busca": "sensor"}, "logs.csv")
+    assert len(linhas_busca) == 1
+    assert "sensor" in linhas_busca[0]["mensagem"].lower()
+
+
 def test_logs_sem_resultados_saem_so_com_cabecalho(sessao_exportacao):
     resposta, linhas = baixar({"id_corrida": 999999}, "logs.csv")
     assert resposta.headers["content-type"].startswith("text/csv")
