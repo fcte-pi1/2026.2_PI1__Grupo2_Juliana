@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import MazeMap from './components/MazeMap.jsx'
-import MazeHistory from './components/MazeHistory.jsx'
 import ConnectionAlert from './components/ConnectionAlert.jsx'
 
 const LIMIAR_BATERIA_CRITICA_V = 7.0
@@ -311,12 +310,6 @@ function formatarHorario(timestampMs) {
   return `${h}:${m}:${s}`
 }
 
-const LABIRINTOS_PADRAO_HISTORICO = [
-  { id: 1, nome: '4x4', largura_celula: 4, altura_celula: 4, total_tentativas: 0 },
-  { id: 2, nome: '8x4', largura_celula: 8, altura_celula: 4, total_tentativas: 0 },
-  { id: 3, nome: '12x4', largura_celula: 12, altura_celula: 4, total_tentativas: 0 },
-]
-
 /**
  * Formata uma string ISO de data/hora no fuso America/Sao_Paulo em DD/MM/AAAA HH:MM(:SS).
  */
@@ -367,24 +360,6 @@ function extrairDataIso(isoString) {
   const mes = partes.find((p) => p.type === 'month')?.value || ''
   const dia = partes.find((p) => p.type === 'day')?.value || ''
   return `${ano}-${mes}-${dia}`
-}
-
-/**
- * Determina o rótulo do modo da corrida exclusivamente a partir do campo modo retornado.
- */
-function resolverModoCorrida(corrida) {
-  const modo = corrida?.modo
-  if (!modo) {
-    return 'Não informado'
-  }
-  const chave = String(modo).toLowerCase()
-  if (chave === 'exploracao' || chave === 'explorando') {
-    return 'Exploração'
-  }
-  if (chave === 'otimizado') {
-    return 'Otimizado'
-  }
-  return String(modo)
 }
 
 /**
@@ -473,6 +448,7 @@ export default function Dashboard({
 
   // Estados da aba Histórico (3.8.5 / 3.8.2 - RF07-S, RF08-S, RF09-S, RF10-S)
   const [labirintosHistorico, setLabirintosHistorico] = useState([])
+  const [erroLabirintos, setErroLabirintos] = useState(null)
   const [corridasHistorico, setCorridasHistorico] = useState([])
   const [carregandoHistorico, setCarregandoHistorico] = useState(false)
   const [erroHistorico, setErroHistorico] = useState(null)
@@ -801,6 +777,7 @@ export default function Dashboard({
     async function carregarHistorico() {
       setCarregandoHistorico(true)
       setErroHistorico(null)
+      setErroLabirintos(null)
 
       const params = new URLSearchParams()
       if (filtroLabirintoId) {
@@ -831,9 +808,18 @@ export default function Dashboard({
 
         if (resLabirintos && typeof resLabirintos.json === 'function' && resLabirintos.ok) {
           const dadosLabirintos = await resLabirintos.json()
-          if (!cancelado && Array.isArray(dadosLabirintos) && dadosLabirintos.length > 0) {
-            setLabirintosHistorico(dadosLabirintos)
+          if (!cancelado) {
+            if (Array.isArray(dadosLabirintos) && dadosLabirintos.length > 0) {
+              setLabirintosHistorico(dadosLabirintos)
+              setErroLabirintos(null)
+            } else {
+              setLabirintosHistorico([])
+              setErroLabirintos('Erro ao carregar labirintos')
+            }
           }
+        } else if (!cancelado) {
+          setLabirintosHistorico([])
+          setErroLabirintos('Erro ao carregar labirintos')
         }
 
         if (!resCorridas || !resCorridas.ok) {
@@ -1032,8 +1018,7 @@ export default function Dashboard({
   const onlineAtivo = roboOnline || (conectadoWs && ultimoPacoteEm === null)
 
   // Cálculos derivados para a aba Histórico (3.8.5 / 3.8.2)
-  const labirintosDisponiveis =
-    labirintosHistorico.length > 0 ? labirintosHistorico : LABIRINTOS_PADRAO_HISTORICO
+  const labirintosDisponiveis = labirintosHistorico
 
   const totalCorridasEncontradas = corridasHistorico.length
   const totalCorridasConcluidas = corridasHistorico.filter((c) => c.status === 'concluida').length
@@ -1055,27 +1040,29 @@ export default function Dashboard({
       ? NOMES_ORIENTACAO[dadosMapaDetalhe.roboPos.orientacao].nome
       : '--'
 
+  // URL para exportação geral com base nos filtros da tabela
   const paramsCorridasCsv = new URLSearchParams()
-  if (corridaDetalhe?.id) {
-    paramsCorridasCsv.set('id_corrida', String(corridaDetalhe.id))
-  } else {
-    if (filtroLabirintoId) {
-      paramsCorridasCsv.set('id_labirinto', String(filtroLabirintoId))
-    }
-    if (filtroStatus) {
-      paramsCorridasCsv.set('status', filtroStatus)
-    }
-    if (filtroTentativa) {
-      paramsCorridasCsv.set('num_tentativa', String(filtroTentativa))
-    }
-    if (filtroData) {
-      paramsCorridasCsv.set('data', filtroData)
-    }
+  if (filtroLabirintoId) {
+    paramsCorridasCsv.set('id_labirinto', String(filtroLabirintoId))
+  }
+  if (filtroStatus) {
+    paramsCorridasCsv.set('status', filtroStatus)
+  }
+  if (filtroTentativa) {
+    paramsCorridasCsv.set('num_tentativa', String(filtroTentativa))
+  }
+  if (filtroData) {
+    paramsCorridasCsv.set('data', filtroData)
   }
   const queryCorridasCsv = paramsCorridasCsv.toString()
   const urlExportarCorridasCsv = `${baseUrlLimpa}/exportacao/corridas.csv${
     queryCorridasCsv ? `?${queryCorridasCsv}` : ''
   }`
+
+  // URL para exportação exclusiva da corrida aberta em Detalhes
+  const urlExportarCorridaDetalheCsv = corridaDetalhe?.id
+    ? `${baseUrlLimpa}/exportacao/corridas.csv?id_corrida=${encodeURIComponent(corridaDetalhe.id)}`
+    : ''
 
   // Cálculos derivados para a aba Logs (3.8.7)
   const logsFiltrados = logsEventos.filter((log) => {
@@ -1103,9 +1090,6 @@ export default function Dashboard({
   const totalLogsAvisos = logsFiltrados.filter((l) => l.tipo === 'aviso').length
   const totalLogsErros = logsFiltrados.filter((l) => l.tipo === 'erro').length
   const paramsLogsCsv = new URLSearchParams()
-  if (filtroLabirintoId) {
-    paramsLogsCsv.set('id_labirinto', String(filtroLabirintoId))
-  }
   if (filtroTipoLog) {
     paramsLogsCsv.set('tipo', filtroTipoLog)
   }
@@ -1892,12 +1876,12 @@ export default function Dashboard({
 
                   <div className="acoes-cabecalho-historico">
                     <a
-                      href={urlExportarCorridasCsv}
-                      download="corridas.csv"
+                      href={urlExportarCorridaDetalheCsv}
+                      download={`corrida_${corridaDetalhe.id}.csv`}
                       className="botao-acao-secundario"
                       data-testid="botao-exportar-csv-detalhe"
                     >
-                      Exportar CSV
+                      Exportar Corrida
                     </a>
                     <button
                       type="button"
@@ -2031,10 +2015,6 @@ export default function Dashboard({
                           <strong data-testid="detalhe-celulas-percorridas">{qtdCelulasDetalhe}</strong>
                         </div>
                         <div className="linha-indicador">
-                          <span>Modo da tentativa</span>
-                          <strong>{resolverModoCorrida(corridaDetalhe)}</strong>
-                        </div>
-                        <div className="linha-indicador">
                           <span>Desafio cumprido</span>
                           <strong className={corridaDetalhe.status === 'concluida' ? 'texto-verde' : 'texto-vermelho'}>
                             {corridaDetalhe.status === 'concluida' ? 'Sim' : 'Não'}
@@ -2128,25 +2108,31 @@ export default function Dashboard({
                     </div>
                     <div className="card-topo-conteudo">
                       <span className="card-topo-rotulo">Tentativas por Labirinto</span>
-                      <div className="lista-chips-labirintos" data-testid="resumo-tentativas-labirintos">
-                        {labirintosDisponiveis.map((lab) => {
-                          const dimTexto = `${lab.largura_celula} × ${lab.altura_celula}`
-                          const ativo = String(filtroLabirintoId) === String(lab.id)
-                          return (
-                            <button
-                              key={lab.id}
-                              type="button"
-                              className={`chip-labirinto-tentativa ${ativo ? 'ativo' : ''}`}
-                              onClick={() =>
-                                setFiltroLabirintoId(ativo ? '' : String(lab.id))
-                              }
-                              data-testid={`chip-labirinto-${lab.largura_celula}x${lab.altura_celula}`}
-                            >
-                              <strong>{dimTexto}:</strong> {lab.total_tentativas ?? 0}
-                            </button>
-                          )
-                        })}
-                      </div>
+                      {erroLabirintos ? (
+                        <span className="texto-vermelho" data-testid="falha-resumo-labirintos">
+                          Erro ao carregar labirintos
+                        </span>
+                      ) : (
+                        <div className="lista-chips-labirintos" data-testid="resumo-tentativas-labirintos">
+                          {labirintosDisponiveis.map((lab) => {
+                            const dimTexto = `${lab.largura_celula} × ${lab.altura_celula}`
+                            const ativo = String(filtroLabirintoId) === String(lab.id)
+                            return (
+                              <button
+                                key={lab.id}
+                                type="button"
+                                className={`chip-labirinto-tentativa ${ativo ? 'ativo' : ''}`}
+                                onClick={() =>
+                                  setFiltroLabirintoId(ativo ? '' : String(lab.id))
+                                }
+                                data-testid={`chip-labirinto-${lab.largura_celula}x${lab.altura_celula}`}
+                              >
+                                <strong>{dimTexto}:</strong> {lab.total_tentativas ?? 0}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </article>
                 </section>
@@ -2188,12 +2174,23 @@ export default function Dashboard({
                         onChange={(e) => setFiltroLabirintoId(e.target.value)}
                       >
                         <option value="">Todos</option>
-                        {labirintosDisponiveis.map((lab) => (
-                          <option key={lab.id} value={String(lab.id)}>
-                            {lab.largura_celula} × {lab.altura_celula} ({lab.nome})
+                        {erroLabirintos ? (
+                          <option value="" disabled data-testid="erro-labirintos-opcao">
+                            Erro ao carregar labirintos
                           </option>
-                        ))}
+                        ) : (
+                          labirintosDisponiveis.map((lab) => (
+                            <option key={lab.id} value={String(lab.id)}>
+                              {lab.largura_celula} × {lab.altura_celula} ({lab.nome})
+                            </option>
+                          ))
+                        )}
                       </select>
+                      {erroLabirintos && (
+                        <span className="texto-erro-campo" role="alert" data-testid="alerta-erro-labirintos">
+                          ⚠ {erroLabirintos}
+                        </span>
+                      )}
                     </label>
 
                     <label className="campo-filtro">
@@ -2308,7 +2305,17 @@ export default function Dashboard({
                       Carregando dados do histórico...
                     </div>
                   ) : corridasHistorico.length === 0 ? (
-                    !filtroLabirintoId ? (
+                    filtroLabirintoId ? (
+                      <div className="estado-vazio-historico" data-testid="estado-labirinto-sem-registros">
+                        <span className="icone-secao-grande" aria-hidden="true">
+                          ⊞
+                        </span>
+                        <strong className="titulo-vazio-historico">Labirinto sem registros</strong>
+                        <p className="texto-secundario">
+                          Nenhuma corrida registrada para este labirinto.
+                        </p>
+                      </div>
+                    ) : (
                       <div className="estado-vazio-historico" data-testid="estado-historico-vazio">
                         <span className="icone-secao-grande" aria-hidden="true">
                           ◷
@@ -2318,7 +2325,7 @@ export default function Dashboard({
                           Nenhuma corrida registrada para os filtros selecionados.
                         </p>
                       </div>
-                    ) : null
+                    )
                   ) : (
                     <>
                       <div className="tabela-historico-container">
@@ -2328,7 +2335,6 @@ export default function Dashboard({
                               <th>DATA E HORA</th>
                               <th>LABIRINTO</th>
                               <th>TENTATIVA</th>
-                              <th>MODO</th>
                               <th>TEMPO DE CONCLUSÃO</th>
                               <th>VELOCIDADE MÉDIA</th>
                               <th>CONSUMO DE BATERIA</th>
@@ -2340,7 +2346,6 @@ export default function Dashboard({
                             {corridasHistorico.map((corrida) => {
                               const tempoSegundos = corrida.tempo_conc_s ?? corrida.duracao_s
                               const dimensaoTexto = `${corrida.largura_celula} × ${corrida.altura_celula}`
-                              const modoCorrida = resolverModoCorrida(corrida)
                               return (
                                 <tr key={corrida.id} data-testid={`linha-corrida-${corrida.id}`}>
                                   <td>{formatarDataHoraBr(corrida.iniciado_em)}</td>
@@ -2355,9 +2360,6 @@ export default function Dashboard({
                                     </span>
                                   </td>
                                   <td>Tentativa {corrida.num_tentativa}</td>
-                                  <td>
-                                    <span className="badge-modo-corrida">{modoCorrida}</span>
-                                  </td>
                                   <td>
                                     {tempoSegundos !== null && tempoSegundos !== undefined
                                       ? `${formatarCronometro(tempoSegundos * 1000)} (${formatarDecimalBr(tempoSegundos, 2)} s)`
@@ -2417,19 +2419,6 @@ export default function Dashboard({
                     </>
                   )}
                 </section>
-
-                {/* Integração do componente MazeHistory (José Eduardo - 3.8.5 / RF08-S) */}
-                <div className="card-painel" data-testid="secao-maze-history">
-                  <MazeHistory
-                    labirintos={labirintosDisponiveis}
-                    corridas={corridasHistorico}
-                    labirintoSelecionado={filtroLabirintoId || null}
-                    onSelectLabirinto={(id) =>
-                      setFiltroLabirintoId(id !== null && id !== undefined ? String(id) : '')
-                    }
-                    loading={carregandoHistorico}
-                  />
-                </div>
               </>
             )}
           </div>

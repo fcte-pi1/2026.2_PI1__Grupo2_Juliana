@@ -1304,10 +1304,6 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(urlsChamadas).toContain('http://localhost:8000/labirintos')
     expect(urlsChamadas).toContain('http://localhost:8000/corridas')
 
-    // Verifica integração do componente <MazeHistory />
-    expect(screen.getByTestId('secao-maze-history')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Histórico por labirinto' })).toBeTruthy()
-
     // Verifica cards de resumo e contagem de tentativas por labirinto (CT-S09)
     expect(screen.getByTestId('valor-total-corridas-historico').textContent).toBe('3')
     expect(screen.getByTestId('valor-corridas-concluidas').textContent).toBe('2')
@@ -1323,24 +1319,19 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     const linha28 = screen.getByTestId('linha-corrida-28')
     expect(linha28.textContent).toContain('8 × 4')
     expect(linha28.textContent).toContain('Tentativa 1')
-    expect(linha28.textContent).toContain('Exploração')
     expect(linha28.textContent).toContain('01:31 (91,00 s)')
     expect(linha28.textContent).toContain('0,39 m/s')
     expect(linha28.textContent).toContain('412,5 mA')
     expect(linha28.textContent).toContain('Concluído')
 
-    // Corrida 27 não informa modo -> exibe "Não informado" (sem inventar "Rápido" a partir de num_tentativa)
     const linha27 = screen.getByTestId('linha-corrida-27')
     expect(linha27.textContent).toContain('4 × 4')
     expect(linha27.textContent).toContain('Tentativa 2')
-    expect(linha27.textContent).toContain('Não informado')
-    expect(linha27.textContent).not.toContain('Rápido')
     expect(linha27.textContent).toContain('00:38 (38,40 s)')
     expect(linha27.textContent).toContain('0,44 m/s')
     expect(linha27.textContent).toContain('Concluído')
 
     const linha26 = screen.getByTestId('linha-corrida-26')
-    expect(linha26.textContent).toContain('Otimizado')
     expect(linha26.textContent).toContain('00:15 (15,20 s)')
     expect(linha26.textContent).toContain('Não concluído')
 
@@ -1352,7 +1343,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(rodapeHistorico.textContent).toContain('Consulta sob demanda ao banco de dados')
   })
 
-  test('filtra corridas por labirinto via MazeHistory, concatena query params no CSV e exibe "Labirinto sem registros" APENAS quando há filtroLabirintoId selecionado (RF08-S, CT-S10 e CT-S11)', async () => {
+  test('filtra corridas por labirinto, concatena query params no CSV e exibe "Labirinto sem registros" APENAS quando há filtroLabirintoId selecionado (RF08-S, CT-S10 e CT-S11)', async () => {
     let retornarVazioGeral = false
     const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.endsWith('/labirintos')) {
@@ -1407,9 +1398,6 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(screen.getByTestId('linha-corrida-26')).toBeTruthy()
     expect(screen.queryByTestId('linha-corrida-28')).toBeNull()
 
-    // Verifica que o <MazeHistory /> renderizou a tabela de tentativas do labirinto filtrado
-    expect(screen.getByRole('table', { name: 'Tentativas de 4x4' })).toBeTruthy()
-
     // Verifica que o link de CSV concatena os filtros ativos (Ponto 5)
     fireEvent.change(screen.getByTestId('filtro-resultado'), { target: { value: 'concluida' } })
     expect(screen.getByTestId('botao-exportar-csv').getAttribute('href')).toBe(
@@ -1429,7 +1417,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
       '0 corridas encontradas',
     )
-    expect(screen.getByText('Nenhuma corrida registrada para este labirinto')).toBeTruthy()
+    expect(screen.getByText(/Nenhuma corrida registrada para este labirinto/i)).toBeTruthy()
 
     // Passo 3: Sem filtroLabirintoId selecionado e lista vazia, NÃO deve exibir "Labirinto sem registros"
     retornarVazioGeral = true
@@ -1514,6 +1502,12 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(screen.getByTestId('detalhe-tempo-conclusao').textContent).toContain('00:38 (38,40 s)')
     expect(screen.getByTestId('detalhe-velocidade-media').textContent).toBe('0,44 m/s')
     expect(screen.getByTestId('detalhe-consumo-medio').textContent).toBe('390,0 mA')
+
+    // Verifica que o botão de exportação individual passa apenas o id_corrida (Item 6)
+    expect(screen.getByTestId('botao-exportar-csv-detalhe').getAttribute('href')).toBe(
+      'http://localhost:8000/exportacao/corridas.csv?id_corrida=27',
+    )
+    expect(screen.getByTestId('botao-exportar-csv-detalhe').textContent).toBe('Exportar Corrida')
 
     // Verifica que o <MazeMap /> foi renderizado com as 3 células e o trajeto 0,0;1,0;1,1
     const containerMapaDetalhe = screen.getByTestId('espaco-mapa-detalhe-corrida')
@@ -1625,6 +1619,28 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
         '4 eventos encontrados',
       )
     })
+  })
+
+  test('exibe alerta de erro ao falhar carregamento de labirintos (Item 7)', async () => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url.endsWith('/labirintos')) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve([]) })
+      }
+      if (url.includes('/corridas')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(corridasMock) })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Dashboard apiBaseUrl="http://localhost:8000" />)
+    fireEvent.click(screen.getByRole('button', { name: /Histórico/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alerta-erro-labirintos')).toBeTruthy()
+    })
+    expect(screen.getByTestId('alerta-erro-labirintos').textContent).toContain('Erro ao carregar labirintos')
+    expect(screen.getByTestId('falha-resumo-labirintos').textContent).toContain('Erro ao carregar labirintos')
   })
 })
 
