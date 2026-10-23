@@ -42,9 +42,9 @@ test('CT-S07 - corrida concluída é gravada e aparece completa no Histórico e 
   expect(Number(corrida.consumo_medio_ma)).toBe(fim.consumo_medio_ma)
   expect(leituras.map((l) => [l.pos_x, l.pos_y])).toEqual(TRAJETO_CURTO.map((l) => [l.pos_x, l.pos_y]))
 
-  // 4. Histórico de Corridas. Página nova: a anterior mostraria o alerta de conexão perdida
-  // (3 s sem pacotes depois do fim) por cima dos botões.
-  await abrirPainel(page, 'Histórico')
+  // 4. Histórico de Corridas, na mesma página que acompanhou a corrida
+  await irPara(page, 'Histórico')
+  await expect(page.getByTestId('connection-alert')).toHaveCount(0)
   const linha = page.getByTestId(`linha-corrida-${idCorrida}`)
   const celulas = linha.locator('td')
   await expect(celulas.nth(0)).toHaveText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)

@@ -100,6 +100,7 @@ test('CT-S03 - descartes aparecem em Logs e Eventos com nível Erro, origem Back
     await expect(detalhes.getByText('Nível').locator('..')).toContainText('Erro')
     await expect(detalhes.getByText('Origem').locator('..')).toContainText('Backend')
     await expect(page.getByTestId('detalhe-evento-motivo').getByRole('paragraph')).toHaveText(motivo)
+    await expect(page.getByTestId('detalhe-evento-status')).toHaveText('Descartado')
     await capturarTela(page, testInfo, `detalhes-evento-${4 - i}`)
   }
 })

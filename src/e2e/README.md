@@ -103,8 +103,6 @@ Sem a variável nada é escrito em `docs/`, para o CI e as execuções do dia a 
 
 **Massa de dados das consultas.** `correrComRoboFalso` faz uma tentativa inteira em ~1 s (rota de criar corrida, `inicio`, leituras, `fim`) e `massaDoCtS09` monta a massa do CT-S09 (4x4, 4x4, 8x4, 4x4), reaproveitada no CT-S10, CT-S12 e CT-S13.
 
-**Histórico e Logs abrem numa página nova.** Depois do fim da corrida o painel fica 3 s sem pacotes e mostra o alerta de conexão perdida no canto inferior direito, por cima dos botões. Abra a tela com `abrirPainel(page, 'Histórico')` em vez de navegar pela página que acompanhou a corrida.
-
 ## No CI
 
 O job `e2e` do [ci.yml](../../.github/workflows/ci.yml) roda a suíte em todo Pull Request com um PostgreSQL de serviço. Se um teste falhar, ele é repetido uma vez; se passar na segunda, aparece como **flaky** no relatório, e isso é sinal para corrigir o teste, não para ignorar. O relatório HTML (com trace, print e vídeo das falhas) fica nos artefatos da execução, como `playwright-report`.
