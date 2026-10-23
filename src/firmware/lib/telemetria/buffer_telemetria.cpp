@@ -1,6 +1,8 @@
 #include "buffer_telemetria.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <math.h>
 
 namespace {
 
@@ -18,19 +20,22 @@ bool codificarEstado(const char *texto, uint8_t &codigo) {
   return false;
 }
 
-// Converte para inteiro na escala do contrato, com arredondamento e saturação
-uint16_t escalarU16(float valor, float fator) {
-  const float x = valor * fator + 0.5f;
-  if (!(x > 0.0f)) return 0; // negativos e NaN
-  if (x >= 65535.0f) return 65535;
-  return (uint16_t)x;
-}
-
-uint32_t escalarU32(float valor, float fator) {
-  const float x = valor * fator + 0.5f;
-  if (!(x > 0.0f)) return 0;
-  if (x >= 4294967040.0f) return 4294967040u; // maior float abaixo de 2^32
-  return (uint32_t)x;
+// Usa a mesma conversão decimal de serializarJson, inclusive nos empates.
+// Extrai os dígitos sem uma segunda operação de arredondamento em float.
+uint32_t escalarDecimal(float valor, unsigned casas, uint32_t limite) {
+  if (!(valor > 0.0f)) return 0;
+  if (!isfinite(valor)) return limite;
+  char decimal[64];
+  const int n = snprintf(decimal, sizeof(decimal), "%.*f", (int)casas, (double)valor);
+  if (n < 0 || (size_t)n >= sizeof(decimal)) return limite;
+  uint32_t resultado = 0;
+  for (int i = 0; i < n; i++) {
+    if (decimal[i] < '0' || decimal[i] > '9') continue;
+    const uint32_t digito = (uint32_t)(decimal[i] - '0');
+    if (resultado > (limite - digito) / 10) return limite;
+    resultado = resultado * 10 + digito;
+  }
+  return resultado;
 }
 
 // Retorna false se o tipo ou o estado estiverem fora do contrato
@@ -53,23 +58,23 @@ bool paraItem(const MensagemTelemetria &msg, ItemBuffer &item) {
       d.pos_y = msg.pos_y;
       d.orientacao = msg.orientacao;
       d.paredes = msg.paredes;
-      d.velocidade_mm_s = escalarU16(msg.velocidade, 1000.0f);
-      d.tensao_cv = escalarU16(msg.tensao_bateria, 100.0f);
+      d.velocidade_mm_s = (uint16_t)escalarDecimal(msg.velocidade, 3, UINT16_MAX);
+      d.tensao_cv = (uint16_t)escalarDecimal(msg.tensao_bateria, 2, UINT16_MAX);
       d.valor_flood = msg.valor_flood;
       d.estado = estado;
       return true;
     }
     case EVT_INICIO:
     case EVT_BATERIA_CRITICA:
-      item.dados.tensao.tensao_cv = escalarU16(msg.tensao_bateria, 100.0f);
+      item.dados.tensao.tensao_cv = (uint16_t)escalarDecimal(msg.tensao_bateria, 2, UINT16_MAX);
       return true;
     case EVT_RECONEXAO:
       item.dados.reconexao.offline_ms = msg.offline_ms;
       item.dados.reconexao.pendentes = msg.pendentes;
       return true;
     case EVT_FIM:
-      item.dados.fim.tempo_conc_cs = escalarU32(msg.tempo_conc_s, 100.0f);
-      item.dados.fim.consumo_dma = escalarU16(msg.consumo_medio_ma, 10.0f);
+      item.dados.fim.tempo_conc_cs = escalarDecimal(msg.tempo_conc_s, 2, UINT32_MAX);
+      item.dados.fim.consumo_dma = (uint16_t)escalarDecimal(msg.consumo_medio_ma, 1, UINT16_MAX);
       item.dados.fim.resultado = (uint8_t)msg.resultado;
       item.dados.fim.motivo = (uint8_t)msg.motivo;
       return true;
@@ -141,7 +146,8 @@ void BufferTelemetria::limpar() {
 }
 
 uint32_t BufferTelemetria::decorridoMs(uint32_t agora_ms, uint32_t desde_ms) const {
-  return (agora_ms >= desde_ms) ? (agora_ms - desde_ms) : 0;
+  // Subtração modular: funciona também quando millis() volta a zero.
+  return agora_ms - desde_ms;
 }
 
 void BufferTelemetria::avancarCabeca() {

@@ -740,8 +740,50 @@ void test_overflow_preserva_eventos_e_recusa_buffer_so_de_eventos() {
   TEST_ASSERT_EQUAL_UINT8(EVT_RECONEXAO, msg.tipo);
 }
 
+void test_buffer_arredondamento_identico_ao_serializador() {
+  const float tensoes[] = {7.125f, 7.135f, 7.145f, 8.005f};
+  for (float tensao : tensoes) conferirIdaEVolta(criarEventoInicio(1, 0, 0, tensao));
+  conferirIdaEVolta(criarTelemetria(1, 1, 200, 0, 0, 'N', 0, 0.0625f, 7.125f, 0, "parado"));
+  conferirIdaEVolta(criarEventoFimConcluida(1, 2, 1000, 1.125f, 412.25f));
+  // Leituras com mais casas que a resolução do protocolo.
+  for (int i = 0; i <= 9000; i++)
+    conferirIdaEVolta(criarEventoInicio(1, 0, 0, (float)i / 1000.0f));
+}
+
+void test_buffer_timeout_e_reconexao_com_rollover() {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.registrarEnvio(1, 0, UINT32_MAX - 999);
+  MensagemTelemetria msg;
+  bool reenvio;
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(999, msg, reenvio));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(1000, msg, reenvio));
+  TEST_ASSERT_TRUE(reenvio);
+  buf.registrarQuedaConexao(UINT32_MAX - 499);
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(500, 2000, 1, 1, msg));
+  TEST_ASSERT_EQUAL_UINT32(1000, msg.offline_ms);
+
+  buf.limpar();
+  buf.enfileirar(criarEventoInicio(1, 0, 0, 8));
+  buf.registrarEnvio(1, 0, UINT32_MAX - 4999);
+  buf.registrarEnvio(1, 0, UINT32_MAX - 2999);
+  buf.registrarEnvio(1, 0, UINT32_MAX - 999);
+  buf.registrarQuedaConexao(UINT32_MAX - 499);
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(500, 2000, 1, 1, msg));
+  TEST_ASSERT_TRUE(buf.obterProximoEnvio(500, msg, reenvio));
+  buf.registrarEnvio(1, 1, 500);
+  buf.confirmarAck(1, 1);
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(1999, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(1, buf.pendentes());
+  TEST_ASSERT_FALSE(buf.obterProximoEnvio(2000, msg, reenvio));
+  TEST_ASSERT_EQUAL_UINT32(1, buf.totalDescartesTentativas());
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_buffer_arredondamento_identico_ao_serializador);
+  RUN_TEST(test_buffer_timeout_e_reconexao_com_rollover);
   RUN_TEST(test_offline_preserva_mensagens_com_loop_ativo);
   RUN_TEST(test_retomada_ordena_enviados_e_novos);
   RUN_TEST(test_offline_pausa_timeout_da_ultima_tentativa);
