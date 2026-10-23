@@ -1269,7 +1269,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
   })
 
   test('carrega a Consulta Geral dos Resultados (GET /labirintos e GET /corridas), exibe cards de resumo, tentativas por labirinto, tabela completa e rodapé com limite da API (RF09-S, RF10-S, CT-S09, CT-S12)', async () => {
-    const fetchMock = vi.fn((url: string) => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
           ok: true,
@@ -1354,7 +1354,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
 
   test('filtra corridas por labirinto via MazeHistory, concatena query params no CSV e exibe "Labirinto sem registros" APENAS quando há filtroLabirintoId selecionado (RF08-S, CT-S10 e CT-S11)', async () => {
     let retornarVazioGeral = false
-    const fetchMock = vi.fn((url: string) => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
           ok: true,
@@ -1445,7 +1445,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
 
   test('abre Detalhes da Corrida via GET /corridas/{id}, renderiza o <MazeMap /> e cancela requisição anterior com AbortController (RF07-S, CT-S07, Ponto 7)', async () => {
     let resolverCorrida28: ((val: unknown) => void) | null = null
-    const fetchMock = vi.fn((url: string) => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
           ok: true,
@@ -1483,7 +1483,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     // Clica rapidamente em "Ver detalhes" da corrida #28 e logo em seguida da corrida #27
     fireEvent.click(screen.getByTestId('botao-detalhes-corrida-28'))
     const chamada28 = fetchMock.mock.calls.find((c) => c[0] === 'http://localhost:8000/corridas/28')
-    const signal28 = (chamada28?.[1] as RequestInit | undefined)?.signal
+    const signal28 = chamada28?.[1]?.signal
     expect(signal28).toBeTruthy()
     expect(signal28?.aborted).toBe(false)
 
@@ -1530,7 +1530,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
 
   test('trata erro de rede na consulta de histórico e permite tentar novamente', async () => {
     let falhar = true
-    const fetchMock = vi.fn((url: string) => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(labirintosMock) })
       }
@@ -1557,7 +1557,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
   })
 
   test('integra a aba Logs e Eventos com GET /logs, query params no CSV, rodapé de limite e painel Detalhes do evento (3.8.7, RF20-S, CT-S03 e CT-S14)', async () => {
-    const fetchMock = vi.fn((url: string) => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
       if (url.includes('/logs?tipo=erro')) {
         return Promise.resolve({
           ok: true,
