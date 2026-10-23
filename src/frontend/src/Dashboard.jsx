@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import MazeMap from './components/MazeMap.jsx'
+import MazeHistory from './components/MazeHistory.jsx'
 import ConnectionAlert from './components/ConnectionAlert.jsx'
 
 const LIMIAR_BATERIA_CRITICA_V = 7.0
@@ -369,16 +370,35 @@ function extrairDataIso(isoString) {
 }
 
 /**
- * Determina o rótulo do modo da corrida a partir dos campos retornados pelo backend.
+ * Determina o rótulo do modo da corrida exclusivamente a partir do campo modo retornado.
  */
 function resolverModoCorrida(corrida) {
-  if (corrida?.modo) {
-    return corrida.modo
+  const modo = corrida?.modo
+  if (!modo) {
+    return 'Não informado'
   }
-  if (corrida?.status === 'em_andamento') {
-    return 'Em execução'
+  const chave = String(modo).toLowerCase()
+  if (chave === 'exploracao' || chave === 'explorando') {
+    return 'Exploração'
   }
-  return (corrida?.num_tentativa || 1) > 1 ? 'Rápido' : 'Exploração'
+  if (chave === 'otimizado') {
+    return 'Otimizado'
+  }
+  return String(modo)
+}
+
+/**
+ * Determina o status de um registro de log sem rotular todo erro como Descartado.
+ */
+function resolverStatusLog(log) {
+  if (log?.status) {
+    return String(log.status)
+  }
+  const msg = String(log?.mensagem || '')
+  if (/descartad|checksum|formato invalido|json invalido|fora do intervalo|versao nao suportada/i.test(msg)) {
+    return 'Descartado'
+  }
+  return 'Registrado'
 }
 
 /**
@@ -842,23 +862,54 @@ export default function Dashboard({
     }
   }, [abaAtiva, baseUrlLimpa, filtroLabirintoId, filtroStatus, filtroTentativa, filtroData, contadorRecargaHistorico])
 
+  const abortDetalheRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (abortDetalheRef.current) {
+        abortDetalheRef.current.abort()
+      }
+    }
+  }, [])
+
   async function abrirDetalhesCorrida(corridaResumo) {
     if (!corridaResumo?.id || typeof fetch !== 'function') {
       return
     }
+    if (abortDetalheRef.current) {
+      abortDetalheRef.current.abort()
+    }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+    abortDetalheRef.current = controller
+
     setCarregandoDetalhe(true)
     setErroDetalhe(null)
     try {
-      const resposta = await fetch(`${baseUrlLimpa}/corridas/${corridaResumo.id}`)
+      const opcoesFetch = controller ? { signal: controller.signal } : undefined
+      const resposta = await fetch(
+        `${baseUrlLimpa}/corridas/${corridaResumo.id}`,
+        opcoesFetch,
+      )
+      if (controller?.signal.aborted) {
+        return
+      }
       if (!resposta || !resposta.ok) {
         throw new Error(`Não foi possível carregar os detalhes da corrida #${corridaResumo.id}`)
       }
       const dados = await resposta.json()
+      if (controller?.signal.aborted || abortDetalheRef.current !== controller) {
+        return
+      }
       setCorridaDetalhe(dados)
     } catch (erro) {
+      if (erro?.name === 'AbortError' || controller?.signal.aborted) {
+        return
+      }
       setErroDetalhe(erro?.message || 'Erro ao carregar detalhes da corrida')
     } finally {
-      setCarregandoDetalhe(false)
+      if (!controller || abortDetalheRef.current === controller) {
+        setCarregandoDetalhe(false)
+      }
     }
   }
 
@@ -983,39 +1034,10 @@ export default function Dashboard({
   // Cálculos derivados para a aba Histórico (3.8.5 / 3.8.2)
   const labirintosDisponiveis =
     labirintosHistorico.length > 0 ? labirintosHistorico : LABIRINTOS_PADRAO_HISTORICO
-  const labirintoSelecionadoObj =
-    labirintosDisponiveis.find((lab) => String(lab.id) === String(filtroLabirintoId)) || null
-  const rotuloLabirintoSelecionado = labirintoSelecionadoObj
-    ? `${labirintoSelecionadoObj.largura_celula} × ${labirintoSelecionadoObj.altura_celula}`
-    : ''
 
-  const corridasFiltradas = corridasHistorico.filter((corrida) => {
-    if (filtroLabirintoId) {
-      const correspondeId =
-        corrida.id_labirinto !== undefined && String(corrida.id_labirinto) === String(filtroLabirintoId)
-      const correspondeDimensao =
-        labirintoSelecionadoObj &&
-        corrida.largura_celula === labirintoSelecionadoObj.largura_celula &&
-        corrida.altura_celula === labirintoSelecionadoObj.altura_celula
-      if (!correspondeId && !correspondeDimensao) {
-        return false
-      }
-    }
-    if (filtroStatus && corrida.status !== filtroStatus) {
-      return false
-    }
-    if (filtroTentativa && String(corrida.num_tentativa) !== String(filtroTentativa)) {
-      return false
-    }
-    if (filtroData && extrairDataIso(corrida.iniciado_em) !== filtroData) {
-      return false
-    }
-    return true
-  })
-
-  const totalCorridasEncontradas = corridasFiltradas.length
-  const totalCorridasConcluidas = corridasFiltradas.filter((c) => c.status === 'concluida').length
-  const totalCorridasAbandonadas = corridasFiltradas.filter((c) => c.status === 'abandonada').length
+  const totalCorridasEncontradas = corridasHistorico.length
+  const totalCorridasConcluidas = corridasHistorico.filter((c) => c.status === 'concluida').length
+  const totalCorridasAbandonadas = corridasHistorico.filter((c) => c.status === 'abandonada').length
   const dadosMapaDetalhe = reconstruirDadosMapaCorrida(corridaDetalhe)
   const qtdCelulasDetalhe = Object.keys(dadosMapaDetalhe.celulas).length
   const leiturasDetalhe = Array.isArray(corridaDetalhe?.leituras) ? corridaDetalhe.leituras : []
@@ -1033,12 +1055,26 @@ export default function Dashboard({
       ? NOMES_ORIENTACAO[dadosMapaDetalhe.roboPos.orientacao].nome
       : '--'
 
+  const paramsCorridasCsv = new URLSearchParams()
+  if (corridaDetalhe?.id) {
+    paramsCorridasCsv.set('id_corrida', String(corridaDetalhe.id))
+  } else {
+    if (filtroLabirintoId) {
+      paramsCorridasCsv.set('id_labirinto', String(filtroLabirintoId))
+    }
+    if (filtroStatus) {
+      paramsCorridasCsv.set('status', filtroStatus)
+    }
+    if (filtroTentativa) {
+      paramsCorridasCsv.set('num_tentativa', String(filtroTentativa))
+    }
+    if (filtroData) {
+      paramsCorridasCsv.set('data', filtroData)
+    }
+  }
+  const queryCorridasCsv = paramsCorridasCsv.toString()
   const urlExportarCorridasCsv = `${baseUrlLimpa}/exportacao/corridas.csv${
-    corridaDetalhe?.id
-      ? `?id_corrida=${encodeURIComponent(corridaDetalhe.id)}`
-      : filtroLabirintoId
-        ? `?id_labirinto=${encodeURIComponent(filtroLabirintoId)}`
-        : ''
+    queryCorridasCsv ? `?${queryCorridasCsv}` : ''
   }`
 
   // Cálculos derivados para a aba Logs (3.8.7)
@@ -1066,7 +1102,26 @@ export default function Dashboard({
 
   const totalLogsAvisos = logsFiltrados.filter((l) => l.tipo === 'aviso').length
   const totalLogsErros = logsFiltrados.filter((l) => l.tipo === 'erro').length
-  const urlExportarLogsCsv = `${baseUrlLimpa}/exportacao/logs.csv`
+  const paramsLogsCsv = new URLSearchParams()
+  if (filtroLabirintoId) {
+    paramsLogsCsv.set('id_labirinto', String(filtroLabirintoId))
+  }
+  if (filtroTipoLog) {
+    paramsLogsCsv.set('tipo', filtroTipoLog)
+  }
+  if (filtroOrigemLog) {
+    paramsLogsCsv.set('origem', filtroOrigemLog)
+  }
+  if (filtroDataLog) {
+    paramsLogsCsv.set('data', filtroDataLog)
+  }
+  if (filtroBuscaLog.trim()) {
+    paramsLogsCsv.set('busca', filtroBuscaLog.trim())
+  }
+  const queryLogsCsv = paramsLogsCsv.toString()
+  const urlExportarLogsCsv = `${baseUrlLimpa}/exportacao/logs.csv${
+    queryLogsCsv ? `?${queryLogsCsv}` : ''
+  }`
 
   return (
     <div className="painel-layout">
@@ -2242,33 +2297,28 @@ export default function Dashboard({
                     </div>
                   )}
 
-                  {carregandoHistorico || carregandoDetalhe ? (
+                  {carregandoDetalhe && (
+                    <div className="estado-carregando-consulta" data-testid="carregando-detalhe-corrida">
+                      Carregando detalhes da corrida...
+                    </div>
+                  )}
+
+                  {carregandoHistorico ? (
                     <div className="estado-carregando-consulta" data-testid="carregando-historico">
                       Carregando dados do histórico...
                     </div>
-                  ) : corridasFiltradas.length === 0 ? (
-                    filtroLabirintoId ? (
-                      <div className="estado-vazio-historico" data-testid="estado-labirinto-sem-registros">
-                        <span className="icone-secao-grande" aria-hidden="true">
-                          ⊞
-                        </span>
-                        <strong className="titulo-vazio-historico">Labirinto sem registros</strong>
-                        <p className="texto-secundario">
-                          Nenhuma corrida registrada para este labirinto
-                          {rotuloLabirintoSelecionado ? ` (${rotuloLabirintoSelecionado})` : ''}.
-                        </p>
-                      </div>
-                    ) : (
+                  ) : corridasHistorico.length === 0 ? (
+                    !filtroLabirintoId ? (
                       <div className="estado-vazio-historico" data-testid="estado-historico-vazio">
                         <span className="icone-secao-grande" aria-hidden="true">
                           ◷
                         </span>
-                        <strong className="titulo-vazio-historico">Labirinto sem registros</strong>
+                        <strong className="titulo-vazio-historico">Nenhuma corrida encontrada</strong>
                         <p className="texto-secundario">
                           Nenhuma corrida registrada para os filtros selecionados.
                         </p>
                       </div>
-                    )
+                    ) : null
                   ) : (
                     <>
                       <div className="tabela-historico-container">
@@ -2287,7 +2337,7 @@ export default function Dashboard({
                             </tr>
                           </thead>
                           <tbody>
-                            {corridasFiltradas.map((corrida) => {
+                            {corridasHistorico.map((corrida) => {
                               const tempoSegundos = corrida.tempo_conc_s ?? corrida.duracao_s
                               const dimensaoTexto = `${corrida.largura_celula} × ${corrida.altura_celula}`
                               const modoCorrida = resolverModoCorrida(corrida)
@@ -2358,15 +2408,28 @@ export default function Dashboard({
                         </table>
                       </div>
 
-                      <div className="rodape-tabela-historico">
+                      <div className="rodape-tabela-historico" data-testid="rodape-tabela-historico">
                         <span className="texto-secundario">
-                          Exibindo {corridasFiltradas.length} de {corridasHistorico.length} registros
+                          Exibindo os últimos {corridasHistorico.length} registros (limite de 100 por consulta)
                         </span>
-                        <span className="texto-secundario">Dados sincronizados em tempo real</span>
+                        <span className="texto-secundario">Consulta sob demanda ao banco de dados</span>
                       </div>
                     </>
                   )}
                 </section>
+
+                {/* Integração do componente MazeHistory (José Eduardo - 3.8.5 / RF08-S) */}
+                <div className="card-painel" data-testid="secao-maze-history">
+                  <MazeHistory
+                    labirintos={labirintosDisponiveis}
+                    corridas={corridasHistorico}
+                    labirintoSelecionado={filtroLabirintoId || null}
+                    onSelectLabirinto={(id) =>
+                      setFiltroLabirintoId(id !== null && id !== undefined ? String(id) : '')
+                    }
+                    loading={carregandoHistorico}
+                  />
+                </div>
               </>
             )}
           </div>
@@ -2645,6 +2708,15 @@ export default function Dashboard({
                     </table>
                   </div>
                 )}
+
+                {!carregandoLogs && logsFiltrados.length > 0 && (
+                  <div className="rodape-tabela-historico" data-testid="rodape-tabela-logs">
+                    <span className="texto-secundario">
+                      Exibindo os últimos {logsFiltrados.length} registros (limite de 100 por consulta)
+                    </span>
+                    <span className="texto-secundario">Consulta sob demanda ao banco de dados</span>
+                  </div>
+                )}
               </section>
 
               {logSelecionado && (
@@ -2711,8 +2783,15 @@ export default function Dashboard({
                     </div>
                     <div className="linha-indicador">
                       <span>Status</span>
-                      <strong className={logSelecionado.tipo === 'erro' ? 'texto-vermelho' : 'texto-verde'}>
-                        {logSelecionado.tipo === 'erro' ? 'Descartado' : 'Registrado'}
+                      <strong
+                        data-testid="detalhe-evento-status"
+                        className={
+                          resolverStatusLog(logSelecionado) === 'Descartado'
+                            ? 'texto-vermelho'
+                            : 'texto-verde'
+                        }
+                      >
+                        {resolverStatusLog(logSelecionado)}
                       </strong>
                     </div>
                   </div>

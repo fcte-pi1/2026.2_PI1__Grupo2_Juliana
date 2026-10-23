@@ -1142,6 +1142,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       altura_celula: 4,
       num_tentativa: 1,
       num_corrida_robo: 28,
+      modo: 'exploracao',
       status: 'concluida',
       iniciado_em: '2026-09-25T16:42:00-03:00',
       tempo_conc_s: 91.0,
@@ -1174,6 +1175,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       altura_celula: 4,
       num_tentativa: 1,
       num_corrida_robo: 26,
+      modo: 'otimizado',
       status: 'abandonada',
       iniciado_em: '2026-09-24T14:00:00-03:00',
       tempo_conc_s: null,
@@ -1222,6 +1224,14 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
 
   const logsMock = [
     {
+      id: 104,
+      id_corrida: 28,
+      tipo: 'erro',
+      origem: 'firmware',
+      mensagem: 'Falha de leitura no sensor frontal',
+      ocorrido_em: '2026-09-26T19:42:37-03:00',
+    },
+    {
       id: 103,
       id_corrida: 28,
       tipo: 'erro',
@@ -1258,7 +1268,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     vi.unstubAllGlobals()
   })
 
-  test('carrega a Consulta Geral dos Resultados (GET /labirintos e GET /corridas), exibe cards de resumo, tentativas por labirinto e tabela completa (RF09-S, RF10-S, CT-S09, CT-S12)', async () => {
+  test('carrega a Consulta Geral dos Resultados (GET /labirintos e GET /corridas), exibe cards de resumo, tentativas por labirinto, tabela completa e rodapé com limite da API (RF09-S, RF10-S, CT-S09, CT-S12)', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
@@ -1294,6 +1304,10 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(urlsChamadas).toContain('http://localhost:8000/labirintos')
     expect(urlsChamadas).toContain('http://localhost:8000/corridas')
 
+    // Verifica integração do componente <MazeHistory />
+    expect(screen.getByTestId('secao-maze-history')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Histórico por labirinto' })).toBeTruthy()
+
     // Verifica cards de resumo e contagem de tentativas por labirinto (CT-S09)
     expect(screen.getByTestId('valor-total-corridas-historico').textContent).toBe('3')
     expect(screen.getByTestId('valor-corridas-concluidas').textContent).toBe('2')
@@ -1315,20 +1329,31 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(linha28.textContent).toContain('412,5 mA')
     expect(linha28.textContent).toContain('Concluído')
 
+    // Corrida 27 não informa modo -> exibe "Não informado" (sem inventar "Rápido" a partir de num_tentativa)
     const linha27 = screen.getByTestId('linha-corrida-27')
     expect(linha27.textContent).toContain('4 × 4')
     expect(linha27.textContent).toContain('Tentativa 2')
-    expect(linha27.textContent).toContain('Rápido')
+    expect(linha27.textContent).toContain('Não informado')
+    expect(linha27.textContent).not.toContain('Rápido')
     expect(linha27.textContent).toContain('00:38 (38,40 s)')
     expect(linha27.textContent).toContain('0,44 m/s')
     expect(linha27.textContent).toContain('Concluído')
 
     const linha26 = screen.getByTestId('linha-corrida-26')
+    expect(linha26.textContent).toContain('Otimizado')
     expect(linha26.textContent).toContain('00:15 (15,20 s)')
     expect(linha26.textContent).toContain('Não concluído')
+
+    // Verifica rodapé com o limite de 100 registros e texto atualizado (Pontos 4 e 6)
+    const rodapeHistorico = screen.getByTestId('rodape-tabela-historico')
+    expect(rodapeHistorico.textContent).toContain(
+      'Exibindo os últimos 3 registros (limite de 100 por consulta)',
+    )
+    expect(rodapeHistorico.textContent).toContain('Consulta sob demanda ao banco de dados')
   })
 
-  test('filtra corridas por labirinto enviando query param id_labirinto e exibe "Labirinto sem registros" quando vazio (RF08-S, CT-S10 e CT-S11)', async () => {
+  test('filtra corridas por labirinto via MazeHistory, concatena query params no CSV e exibe "Labirinto sem registros" APENAS quando há filtroLabirintoId selecionado (RF08-S, CT-S10 e CT-S11)', async () => {
+    let retornarVazioGeral = false
     const fetchMock = vi.fn((url: string) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
@@ -1354,7 +1379,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(corridasMock),
+        json: () => Promise.resolve(retornarVazioGeral ? [] : corridasMock),
       })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -1366,7 +1391,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       expect(screen.getByTestId('tabela-execucoes-registradas')).toBeTruthy()
     })
 
-    // Passo 1 (CT-S10): Filtra pelo labirinto 4 × 4 (id=1)
+    // Passo 1 (CT-S10): Filtra pelo labirinto 4 × 4 (id=1) e status "concluida"
     const selectLabirinto = screen.getByTestId('filtro-labirinto')
     fireEvent.change(selectLabirinto, { target: { value: '1' } })
 
@@ -1382,11 +1407,21 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(screen.getByTestId('linha-corrida-26')).toBeTruthy()
     expect(screen.queryByTestId('linha-corrida-28')).toBeNull()
 
+    // Verifica que o <MazeHistory /> renderizou a tabela de tentativas do labirinto filtrado
+    expect(screen.getByRole('table', { name: 'Tentativas de 4x4' })).toBeTruthy()
+
+    // Verifica que o link de CSV concatena os filtros ativos (Ponto 5)
+    fireEvent.change(screen.getByTestId('filtro-resultado'), { target: { value: 'concluida' } })
+    expect(screen.getByTestId('botao-exportar-csv').getAttribute('href')).toBe(
+      'http://localhost:8000/exportacao/corridas.csv?id_labirinto=1&status=concluida',
+    )
+    fireEvent.change(screen.getByTestId('filtro-resultado'), { target: { value: '' } })
+
     // Passo 2 (CT-S11): Filtra pelo labirinto 12 × 4 (id=3), que não possui corridas registradas
     fireEvent.change(selectLabirinto, { target: { value: '3' } })
 
     await waitFor(() => {
-      expect(screen.getByTestId('estado-labirinto-sem-registros')).toBeTruthy()
+      expect(screen.getByText('Labirinto sem registros')).toBeTruthy()
     })
     expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/corridas?id_labirinto=3')).toBe(
       true,
@@ -1394,29 +1429,33 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
       '0 corridas encontradas',
     )
-    expect(screen.getByTestId('estado-labirinto-sem-registros').textContent).toContain(
-      'Labirinto sem registros',
-    )
-    expect(screen.getByTestId('estado-labirinto-sem-registros').textContent).toContain(
-      'Nenhuma corrida registrada para este labirinto (12 × 4)',
-    )
+    expect(screen.getByText('Nenhuma corrida registrada para este labirinto')).toBeTruthy()
 
-    // Limpa os filtros e volta a mostrar as 3 corridas gerais
+    // Passo 3: Sem filtroLabirintoId selecionado e lista vazia, NÃO deve exibir "Labirinto sem registros"
+    retornarVazioGeral = true
     fireEvent.click(screen.getByTestId('botao-limpar-filtros-historico'))
     await waitFor(() => {
-      expect(screen.getByTestId('contador-corridas-encontradas').textContent).toContain(
-        '3 corridas encontradas',
-      )
+      expect(screen.getByTestId('estado-historico-vazio')).toBeTruthy()
     })
+    expect(screen.getByTestId('estado-historico-vazio').textContent).toContain(
+      'Nenhuma corrida encontrada',
+    )
+    expect(screen.queryByText('Labirinto sem registros')).toBeNull()
   })
 
-  test('abre Detalhes da Corrida via GET /corridas/{id} e renderiza o <MazeMap /> com o trajeto reconstruído (RF07-S, CT-S07)', async () => {
+  test('abre Detalhes da Corrida via GET /corridas/{id}, renderiza o <MazeMap /> e cancela requisição anterior com AbortController (RF07-S, CT-S07, Ponto 7)', async () => {
+    let resolverCorrida28: ((val: unknown) => void) | null = null
     const fetchMock = vi.fn((url: string) => {
       if (url.endsWith('/labirintos')) {
         return Promise.resolve({
           ok: true,
           status: 200,
           json: () => Promise.resolve(labirintosMock),
+        })
+      }
+      if (url.endsWith('/corridas/28')) {
+        return new Promise((resolve) => {
+          resolverCorrida28 = resolve
         })
       }
       if (url.endsWith('/corridas/27')) {
@@ -1441,12 +1480,31 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       expect(screen.getByTestId('botao-detalhes-corrida-27')).toBeTruthy()
     })
 
-    // Clica em "Ver detalhes" na corrida #27 (4x4)
+    // Clica rapidamente em "Ver detalhes" da corrida #28 e logo em seguida da corrida #27
+    fireEvent.click(screen.getByTestId('botao-detalhes-corrida-28'))
+    const chamada28 = fetchMock.mock.calls.find((c) => c[0] === 'http://localhost:8000/corridas/28')
+    const signal28 = (chamada28?.[1] as RequestInit | undefined)?.signal
+    expect(signal28).toBeTruthy()
+    expect(signal28?.aborted).toBe(false)
+
     fireEvent.click(screen.getByTestId('botao-detalhes-corrida-27'))
+    // Verifica que o AbortController abortou a requisição anterior (#28)
+    expect(signal28?.aborted).toBe(true)
 
     await waitFor(() => {
       expect(screen.getByTestId('tela-detalhes-corrida')).toBeTruthy()
     })
+
+    // Mesmo se a promessa antiga (#28) resolver depois, os detalhes exibidos continuam sendo da #27
+    if (resolverCorrida28) {
+      await act(async () => {
+        resolverCorrida28!({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...corridasMock[0], leituras: [] }),
+        })
+      })
+    }
 
     expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/corridas/27')).toBe(true)
     expect(screen.getByTestId('detalhe-id-corrida').textContent).toBe('#027')
@@ -1498,7 +1556,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     })
   })
 
-  test('integra a aba Logs e Eventos com GET /logs, filtros de tipo/origem/busca e painel Detalhes do evento (3.8.7, RF20-S, CT-S03 e CT-S14)', async () => {
+  test('integra a aba Logs e Eventos com GET /logs, query params no CSV, rodapé de limite e painel Detalhes do evento (3.8.7, RF20-S, CT-S03 e CT-S14)', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/logs?tipo=erro')) {
         return Promise.resolve({
@@ -1525,27 +1583,37 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
       expect(screen.getByTestId('tabela-registro-eventos')).toBeTruthy()
     })
 
-    expect(screen.getByTestId('valor-logs-total').textContent).toBe('3')
+    expect(screen.getByTestId('valor-logs-total').textContent).toBe('4')
     expect(screen.getByTestId('valor-logs-avisos').textContent).toBe('1')
-    expect(screen.getByTestId('valor-logs-erros').textContent).toBe('1')
+    expect(screen.getByTestId('valor-logs-erros').textContent).toBe('2')
+    expect(screen.getByTestId('rodape-tabela-logs').textContent).toContain(
+      'Exibindo os últimos 4 registros (limite de 100 por consulta)',
+    )
 
     // Filtra por Tipo de evento = "Erro" (CT-S03)
     fireEvent.change(screen.getByTestId('filtro-tipo-log'), { target: { value: 'erro' } })
 
     await waitFor(() => {
       expect(screen.getByTestId('contador-logs-encontrados').textContent).toContain(
-        '1 eventos encontrados',
+        '2 eventos encontrados',
       )
     })
     expect(fetchMock.mock.calls.some((c) => c[0] === 'http://localhost:8000/logs?tipo=erro')).toBe(
       true,
     )
+    expect(screen.getByTestId('botao-exportar-logs-csv').getAttribute('href')).toBe(
+      'http://localhost:8000/exportacao/logs.csv?tipo=erro',
+    )
 
-    // Clica no evento de descarte para abrir o painel "Detalhes do evento" e confere o campo "Motivo"
+    // Erro que NÃO é descarte de pacote (id=104) deve exibir Status = "Registrado" (e não "Descartado")
+    fireEvent.click(screen.getByTestId('botao-detalhe-log-104'))
+    expect(screen.getByTestId('detalhe-evento-status').textContent).toBe('Registrado')
+
+    // Evento de pacote descartado (id=103) deve exibir Status = "Descartado" e o campo "Motivo"
     fireEvent.click(screen.getByTestId('botao-detalhe-log-103'))
     const painelDetalhes = screen.getByTestId('painel-detalhes-evento')
     expect(painelDetalhes).toBeTruthy()
-    expect(painelDetalhes.textContent).toContain('Descartado')
+    expect(screen.getByTestId('detalhe-evento-status').textContent).toBe('Descartado')
     expect(screen.getByTestId('detalhe-evento-motivo').textContent).toContain(
       'checksum invalido (recebido 0000, calculado 2917)',
     )
@@ -1554,7 +1622,7 @@ describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 
     fireEvent.click(screen.getByTestId('botao-limpar-filtros-logs'))
     await waitFor(() => {
       expect(screen.getByTestId('contador-logs-encontrados').textContent).toContain(
-        '3 eventos encontrados',
+        '4 eventos encontrados',
       )
     })
   })
