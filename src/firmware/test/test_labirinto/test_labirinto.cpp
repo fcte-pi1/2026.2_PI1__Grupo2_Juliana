@@ -29,11 +29,11 @@ void test_oposta()
 
 void test_deslocamento()
 {
-    TEST_ASSERT_EQUAL(1, dx(LESTE));
-    TEST_ASSERT_EQUAL(-1, dx(OESTE));
-    TEST_ASSERT_EQUAL(1, dy(NORTE));
-    TEST_ASSERT_EQUAL(-1, dy(SUL));
-    TEST_ASSERT_EQUAL(0, dx(NORTE));
+    TEST_ASSERT_EQUAL(1, deslocamentoX(LESTE));
+    TEST_ASSERT_EQUAL(-1, deslocamentoX(OESTE));
+    TEST_ASSERT_EQUAL(1, deslocamentoY(NORTE));
+    TEST_ASSERT_EQUAL(-1, deslocamentoY(SUL));
+    TEST_ASSERT_EQUAL(0, deslocamentoX(NORTE));
 }
 
 void test_letra_do_contrato()
@@ -143,6 +143,7 @@ void test_coordenada_fora_do_labirinto_e_ignorada()
     lab.iniciar(4, 4);
     lab.marcarParede(9, 9, NORTE);
     TEST_ASSERT_TRUE(lab.temParede(9, 9, NORTE));
+    TEST_ASSERT_TRUE(lab.conhecida(9, 9, NORTE));
     TEST_ASSERT_EQUAL_UINT8(0, lab.paredesDe(9, 9));
 }
 
@@ -332,6 +333,50 @@ void test_iniciar_volta_o_objetivo_para_o_canto_oposto()
     TEST_ASSERT_TRUE(lab.ehObjetivo(7, 3));
 }
 
+void test_borda_a_direita_larga_virado_para_o_leste()
+{
+    Labirinto lab;
+    TEST_ASSERT_TRUE(lab.iniciar(4, 4, LESTE));
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacao());
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacaoInicial());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.x());
+    TEST_ASSERT_EQUAL_UINT8(0, lab.y());
+    TEST_ASSERT_TRUE(lab.temParede(0, 0, OESTE));                    // atrás
+    TEST_ASSERT_TRUE(lab.temParede(0, 0, girarDireita(LESTE)));      // à direita
+    TEST_ASSERT_TRUE(lab.ehObjetivo(3, 3));
+}
+
+void test_recusa_orientacao_inicial_sem_borda_atras()
+{
+    Labirinto lab;
+    lab.iniciar(8, 4);
+    TEST_ASSERT_FALSE(lab.iniciar(4, 4, SUL));
+    TEST_ASSERT_FALSE(lab.iniciar(4, 4, OESTE));
+    TEST_ASSERT_EQUAL_UINT8(8, lab.largura());
+}
+
+void test_iniciar_na_largada_converte_o_que_a_equipe_informa()
+{
+    Labirinto lab;
+    TEST_ASSERT_TRUE(lab.iniciarNaLargada(BORDA_ESQUERDA, 4, 8)); // 4 à frente, 8 à direita
+    TEST_ASSERT_EQUAL_UINT8(8, lab.largura());
+    TEST_ASSERT_EQUAL_UINT8(4, lab.altura());
+    TEST_ASSERT_EQUAL(NORTE, lab.orientacao());
+
+    TEST_ASSERT_TRUE(lab.iniciarNaLargada(BORDA_DIREITA, 8, 4)); // 8 à frente, 4 à esquerda
+    TEST_ASSERT_EQUAL_UINT8(8, lab.largura());
+    TEST_ASSERT_EQUAL_UINT8(4, lab.altura());
+    TEST_ASSERT_EQUAL(LESTE, lab.orientacao());
+
+    TEST_ASSERT_TRUE(lab.iniciarNaLargada(BORDA_DIREITA, 4, 12));
+    TEST_ASSERT_EQUAL_UINT8(4, lab.largura());
+    TEST_ASSERT_EQUAL_UINT8(12, lab.altura());
+    TEST_ASSERT_TRUE(lab.ehObjetivo(3, 11));
+
+    TEST_ASSERT_FALSE(lab.iniciarNaLargada(BORDA_DIREITA, 8, 8));
+    TEST_ASSERT_FALSE(lab.iniciarNaLargada((LadoBorda)7, 4, 4)); // lado inválido
+}
+
 void test_tamanho_fixo_do_labirinto()
 {
     TEST_ASSERT_TRUE(sizeof(Labirinto) <= 1024);
@@ -369,6 +414,9 @@ int main()
     RUN_TEST(test_definir_objetivo_troca_a_celula);
     RUN_TEST(test_objetivo_fora_do_labirinto_e_recusado);
     RUN_TEST(test_iniciar_volta_o_objetivo_para_o_canto_oposto);
+    RUN_TEST(test_borda_a_direita_larga_virado_para_o_leste);
+    RUN_TEST(test_recusa_orientacao_inicial_sem_borda_atras);
+    RUN_TEST(test_iniciar_na_largada_converte_o_que_a_equipe_informa);
     RUN_TEST(test_tamanho_fixo_do_labirinto);
 
     return UNITY_END();
