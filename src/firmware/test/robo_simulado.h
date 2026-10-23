@@ -9,13 +9,13 @@
 // Robô de teste: conhece o labirinto de verdade (gabarito), mas só enxerga o
 // que os 3 sensores veriam — frente, esquerda e direita da célula onde está —
 // e vai anotando no próprio mapa. Conta passos e giros de 90°.
-// Larga em (0,0) virado para o Norte.
+// Larga em (0,0) com a orientação inicial do gabarito (ver labirinto.h).
 class RoboSimulado
 {
 public:
     explicit RoboSimulado(const Labirinto &gabarito) : gabarito_(gabarito)
     {
-        mapa_.iniciar(gabarito.largura(), gabarito.altura());
+        mapa_.iniciar(gabarito.largura(), gabarito.altura(), gabarito.orientacaoInicial());
         for (uint8_t x = 0; x < gabarito.largura(); x++)
             for (uint8_t y = 0; y < gabarito.altura(); y++)
                 if (gabarito.ehObjetivo(x, y))

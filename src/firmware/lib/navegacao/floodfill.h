@@ -28,13 +28,14 @@ public:
     // Direção do vizinho com menor distância, a partir da pose do robô.
     // Empate: reto, direita, esquerda e trás (menos giros). Num beco, só
     // trás é passável e a resposta é o giro de 180° (RF23). Na largada, se a
-    // frente estiver fechada, a saída do beco é a direita (ver labirinto.h).
+    // frente estiver fechada, a saída do beco é o lado oposto à borda (ver
+    // labirinto.h).
     // false se a célula atual não tem caminho até o objetivo.
     bool proximaDirecao(const Labirinto &lab, Direcao &saida) const;
 
     // Recalcula em modo RAPIDO e grava em saida as direções da largada (0,0)
-    // até o objetivo (RF12). Devolve o número de passos, ou 0 se não houver
-    // rota ou se ela não couber em max.
+    // até o objetivo (RF12), partindo da orientação inicial. Devolve o número
+    // de passos, ou 0 se não houver rota ou se ela não couber em max.
     uint8_t rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t max);
 
     // Se a rota rápida já é a menor possível, mesmo sem conhecer o labirinto
@@ -54,8 +55,9 @@ private:
 };
 
 // Lê um labirinto desenhado em ASCII e grava em gabarito, com todos os
-// lados conhecidos. 
-bool carregar(const char *ascii, Labirinto &gabarito);
+// lados conhecidos. O objetivo fica em (largura-1, altura-1).
+// orientacaoInicial é para onde o robô aponta na largada (ver labirinto.h).
+bool carregar(const char *ascii, Labirinto &gabarito, Direcao orientacaoInicial = NORTE);
 
 // Desenha o mapa no mesmo formato de carregar(), com a distância do Flood Fill
 // dentro de cada célula (evidência do CT-SE11).

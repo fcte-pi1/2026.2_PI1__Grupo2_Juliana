@@ -74,10 +74,11 @@ uint8_t FloodFill::rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t 
     if (passos == INFINITO || passos > max)
         return 0;
 
-    // Pela convenção do labirinto.h, o robô larga virado para o Norte.
+    // Pela convenção do labirinto.h, a largada é (0,0) e a frente depende do
+    // lado da borda.
     uint8_t x = 0;
     uint8_t y = 0;
-    Direcao frente = NORTE;
+    Direcao frente = lab.orientacaoInicial();
     for (uint8_t i = 0; i < passos; i++)
     {
         Direcao d;
@@ -138,7 +139,7 @@ static uint16_t tamanhoUtil(const char *linha, uint16_t tamanho)
     return tamanho;
 }
 
-bool carregar(const char *ascii, Labirinto &gabarito)
+bool carregar(const char *ascii, Labirinto &gabarito, Direcao orientacaoInicial)
 {
     const uint8_t MAX_LINHAS = 2 * MAX_ALT + 1;
     const char *linhas[MAX_LINHAS];
@@ -176,7 +177,7 @@ bool carregar(const char *ascii, Labirinto &gabarito)
             return false;
     uint8_t altura = (n - 1) / 2;
     uint16_t largura = (tamanhos[0] - 1) / 4;
-    if (largura > MAX_LARG || !gabarito.iniciar(largura, altura))
+    if (largura > MAX_LARG || !gabarito.iniciar(largura, altura, orientacaoInicial))
         return false;
 
     for (uint8_t linha = 0; linha < altura; linha++)
