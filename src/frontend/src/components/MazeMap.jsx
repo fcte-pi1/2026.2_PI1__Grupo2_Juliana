@@ -37,11 +37,6 @@ export default function MazeMap({
     Number.isInteger(x) && Number.isInteger(y)
     && x >= 0 && x < largura && y >= 0 && y < altura
   )
-  const ehSaidaValida = (x, y) => (
-    Number.isInteger(x) && Number.isInteger(y)
-    && x >= -1 && x <= largura && y >= -1 && y <= altura
-    && ((x === -1 || x === largura) !== (y === -1 || y === altura))
-  )
   const mapa = new Map()
   const entradas = Array.isArray(celulas)
     ? celulas.map((celula) => [null, celula])
@@ -60,23 +55,15 @@ export default function MazeMap({
 
   const roboX = roboPos?.pos_x
   const roboY = roboPos?.pos_y
-  let ultimaCelula = ultimaCelulaProp && pontoSaidaProp ? ultimaCelulaProp : null
-  let pontoSaida = ultimaCelulaProp && pontoSaidaProp ? pontoSaidaProp : null
-
-  // Props fornecidas pelo Dashboard são a fonte da verdade, inclusive quando nulas.
-  if (ultimaCelulaProp === undefined && pontoSaidaProp === undefined) {
-    const ultimoPonto = trajeto[trajeto.length - 1]
-    const penultimoPonto = trajeto[trajeto.length - 2]
-    if (ehSaidaValida(ultimoPonto?.pos_x, ultimoPonto?.pos_y)
-      && dentroDoMapa(penultimoPonto?.pos_x, penultimoPonto?.pos_y)) {
-      pontoSaida = ultimoPonto
-      ultimaCelula = penultimoPonto
-    } else if (ehSaidaValida(roboX, roboY)
-      && dentroDoMapa(ultimoPonto?.pos_x, ultimoPonto?.pos_y)) {
-      pontoSaida = roboPos
-      ultimaCelula = ultimoPonto
-    }
-  }
+  const celulaObjetivo = { pos_x: largura - 1, pos_y: altura - 1 }
+  const ultimaValida = dentroDoMapa(ultimaCelulaProp?.pos_x, ultimaCelulaProp?.pos_y)
+  const saidaValida = dentroDoMapa(pontoSaidaProp?.pos_x, pontoSaidaProp?.pos_y)
+  const concluido = Boolean(
+    (ultimaValida && (saidaValida || pontoSaidaProp === undefined))
+    || (saidaValida && ultimaCelulaProp === undefined),
+  )
+  const ultimaCelula = concluido ? (ultimaValida ? ultimaCelulaProp : celulaObjetivo) : null
+  const pontoSaida = concluido ? (saidaValida ? pontoSaidaProp : celulaObjetivo) : null
 
   const posicaoValida = dentroDoMapa(roboX, roboY)
   const direcao = DIRECOES[roboPos?.orientacao]
@@ -168,7 +155,7 @@ export default function MazeMap({
           )}
 
           {linhas.flatMap((y, linha) => colunas.map((x) => (
-            <g key={`${x},${y}`} transform={`translate(${x * TAMANHO_CELULA} ${linha * TAMANHO_CELULA})`}>
+            <g key={`${x},${y}`} data-paredes-celula={`${x},${y}`} transform={`translate(${x * TAMANHO_CELULA} ${linha * TAMANHO_CELULA})`}>
               {PAREDES.filter(({ bit }) => ((mapa.get(`${x},${y}`) ?? 0) & bit) !== 0).map(({ bit, nome, ...pontos }) => (
                 <line key={bit} className="maze-map__wall" data-parede={nome} {...pontos} />
               ))}

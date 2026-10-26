@@ -117,7 +117,7 @@ describe('MazeMap', () => {
     expect(screen.getByText('Saída (última célula)')).toBeTruthy()
   })
 
-  test('destaca a penúltima coordenada como última célula interna quando o robô sai do labirinto', () => {
+  test('destaca o objetivo (3, 3) no labirinto fechado 4x4 ao receber as props de conclusão', () => {
     const { container, rerender } = render(
       <MazeMap
         largura={4}
@@ -125,9 +125,29 @@ describe('MazeMap', () => {
         trajeto={[
           { pos_x: 0, pos_y: 0 },
           { pos_x: 3, pos_y: 3 },
-          { pos_x: 4, pos_y: 3 },
         ]}
-        roboPos={{ pos_x: 4, pos_y: 3, orientacao: 'L' }}
+        roboPos={{ pos_x: 3, pos_y: 3, orientacao: 'L' }}
+      />,
+    )
+
+    // Sem props de conclusão, (3, 3) não deve receber marcação de saída apenas por estar no trajeto
+    expect(container.querySelector('.maze-map__exit')).toBeNull()
+    expect(container.querySelector('.maze-map__cell--exit')).toBeNull()
+    expect(container.querySelector('[data-celula="3,3"]').getAttribute('data-ultima-celula')).toBeNull()
+    expect(screen.queryByTestId('status-saida-mapa')).toBeNull()
+
+    // Ao receber as props de conclusão (ultimaCelula e pontoSaida em (3, 3)), destaca (3, 3)
+    rerender(
+      <MazeMap
+        largura={4}
+        altura={4}
+        trajeto={[
+          { pos_x: 0, pos_y: 0 },
+          { pos_x: 3, pos_y: 3 },
+        ]}
+        roboPos={{ pos_x: 3, pos_y: 3, orientacao: 'L' }}
+        ultimaCelula={{ pos_x: 3, pos_y: 3 }}
+        pontoSaida={{ pos_x: 3, pos_y: 3 }}
       />,
     )
 
@@ -135,71 +155,48 @@ describe('MazeMap', () => {
     expect(marcador).toBeTruthy()
     expect(marcador.classList.contains('maze-map__goal')).toBe(false)
     expect(container.querySelector('.maze-map__key--exit')).toBeTruthy()
-    expect(marcador.getAttribute('data-saida')).toBe('4,3')
+    expect(marcador.getAttribute('data-saida')).toBe('3,3')
     expect(marcador.getAttribute('x')).toBe(String(3 * 40 + 5))
     expect(marcador.getAttribute('y')).toBe('5')
     expect(container.querySelector('[data-celula="3,3"].maze-map__cell--exit')).toBeTruthy()
     expect(container.querySelector('[data-celula="3,3"]').getAttribute('data-ultima-celula')).toBe('true')
-    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (4, 3)')
+    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (3, 3)')
     expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Última célula (3, 3)')
+  })
 
-    // Também funciona quando a coordenada externa está apenas em roboPos e o último ponto do trajeto é interno
-    rerender(
+  test.each([
+    [4, 3, 3],
+    [8, 7, 3],
+    [12, 11, 3],
+  ])('destaca o canto oposto (%i×4 -> (%i, %i)) apenas quando as props de conclusão são válidas e respeita props nulas', (largura, objX, objY) => {
+    const objetivo = { pos_x: objX, pos_y: objY }
+    const { container, rerender } = render(
       <MazeMap
-        largura={4}
+        largura={largura}
         altura={4}
-        trajeto={[{ pos_x: 0, pos_y: 0 }, { pos_x: 0, pos_y: 1 }]}
-        roboPos={{ pos_x: -1, pos_y: 1, orientacao: 'O' }}
+        trajeto={[{ pos_x: 0, pos_y: 0 }, objetivo]}
+        ultimaCelula={objetivo}
+        pontoSaida={objetivo}
       />,
     )
-    expect(container.querySelector('[data-ultima-celula-marcador="0,1"]')).toBeTruthy()
-    expect(screen.getByTestId('status-saida-mapa').textContent).toContain('Saída em (-1, 1)')
-  })
 
-  test.each([
-    [0, 2, -1, 2],
-    [2, 0, 2, -1],
-    [2, 3, 2, 4],
-  ])('reconhece a saída de (%i, %i) para (%i, %i)', (x, y, saidaX, saidaY) => {
-    const ultimaCelula = { pos_x: x, pos_y: y }
-    const pontoSaida = { pos_x: saidaX, pos_y: saidaY }
-    const { container, rerender } = render(<MazeMap trajeto={[ultimaCelula, pontoSaida]} />)
-    expect(container.querySelector('.maze-map__exit').getAttribute('data-saida')).toBe(`${saidaX},${saidaY}`)
-    expect(container.querySelector('.maze-map__exit').getAttribute('data-ultima-celula-marcador')).toBe(`${x},${y}`)
+    const marcador = container.querySelector('.maze-map__exit')
+    expect(marcador).toBeTruthy()
+    expect(marcador.getAttribute('data-ultima-celula-marcador')).toBe(`${objX},${objY}`)
+    expect(marcador.getAttribute('data-saida')).toBe(`${objX},${objY}`)
+    expect(container.querySelector(`[data-celula="${objX},${objY}"].maze-map__cell--exit`)).toBeTruthy()
 
-    rerender(<MazeMap trajeto={[ultimaCelula]} roboPos={pontoSaida} />)
-    expect(container.querySelector('.maze-map__exit').getAttribute('data-saida')).toBe(`${saidaX},${saidaY}`)
-  })
-
-  test.each([
-    [50, 3], [4, 4], [-1, -1], [-1, 4], [4, -1], [2, -2],
-    [4, 1.5], ['4', 3], [NaN, 3], [Infinity, 3],
-  ])('não considera (%s, %s) uma saída válida', (pos_x, pos_y) => {
-    const interna = { pos_x: 3, pos_y: 3 }
-    const invalida = { pos_x, pos_y }
-    const { container, rerender } = render(<MazeMap trajeto={[interna, invalida]} />)
-    expect(container.querySelector('.maze-map__exit')).toBeNull()
-    expect(screen.queryByTestId('status-saida-mapa')).toBeNull()
-
-    rerender(<MazeMap trajeto={[interna]} roboPos={invalida} />)
+    rerender(
+      <MazeMap
+        largura={largura}
+        altura={4}
+        trajeto={[{ pos_x: 0, pos_y: 0 }, objetivo]}
+        ultimaCelula={null}
+        pontoSaida={null}
+      />,
+    )
     expect(container.querySelector('.maze-map__exit')).toBeNull()
     expect(container.querySelector('.maze-map__cell--exit')).toBeNull()
-    expect(screen.queryByTestId('status-saida-mapa')).toBeNull()
-  })
-
-  test('prioriza a saída calculada pelo Dashboard e respeita props nulas', () => {
-    const trajeto = [{ pos_x: 3, pos_y: 3 }, { pos_x: 4, pos_y: 3 }]
-    const { container, rerender } = render(<MazeMap
-      trajeto={trajeto}
-      ultimaCelula={{ pos_x: 0, pos_y: 1 }}
-      pontoSaida={{ pos_x: -1, pos_y: 1 }}
-    />)
-    const marcador = container.querySelector('.maze-map__exit')
-    expect(marcador.getAttribute('data-ultima-celula-marcador')).toBe('0,1')
-    expect(marcador.getAttribute('data-saida')).toBe('-1,1')
-
-    rerender(<MazeMap trajeto={trajeto} ultimaCelula={null} pontoSaida={null} />)
-    expect(container.querySelector('.maze-map__exit')).toBeNull()
     expect(screen.queryByTestId('status-saida-mapa')).toBeNull()
   })
 

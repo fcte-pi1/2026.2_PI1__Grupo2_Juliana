@@ -1,0 +1,114 @@
+-> {"v":1,"corrida":1,"t":"evt","tempo_ms":0,"evento":"inicio","tensao_bateria":8.4,"seq":0}|01C2
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":0,"pos_x":0,"pos_y":0,"orientacao":"N","paredes":14,"velocidade":0.171,"tensao_bateria":8.4,"valor_flood":10,"estado":"explorando","seq":1}|53A1
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":200,"pos_x":0,"pos_y":0,"orientacao":"N","paredes":14,"velocidade":0.184,"tensao_bateria":8.4,"valor_flood":10,"estado":"explorando","seq":2}|5365
+<- ack seq=0
+<- ack seq=1
+<- ack seq=2
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":400,"pos_x":0,"pos_y":0,"orientacao":"N","paredes":14,"velocidade":0.173,"tensao_bateria":8.38,"valor_flood":10,"estado":"explorando","seq":3}|9A03
+<- ack seq=3
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":600,"pos_x":0,"pos_y":0,"orientacao":"N","paredes":14,"velocidade":0.186,"tensao_bateria":8.38,"valor_flood":10,"estado":"explorando","seq":4}|7B8E
+<- ack seq=4
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":800,"pos_x":0,"pos_y":0,"orientacao":"N","paredes":14,"velocidade":0.195,"tensao_bateria":8.37,"valor_flood":10,"estado":"explorando","seq":5}|149B
+<- ack seq=5
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":1000,"pos_x":0,"pos_y":1,"orientacao":"N","paredes":10,"velocidade":0.199,"tensao_bateria":8.38,"valor_flood":9,"estado":"explorando","seq":6}|CDD5
+<- ack seq=6
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":1200,"pos_x":0,"pos_y":1,"orientacao":"N","paredes":10,"velocidade":0.181,"tensao_bateria":8.38,"valor_flood":9,"estado":"explorando","seq":7}|8EA0
+<- ack seq=7
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":1400,"pos_x":0,"pos_y":1,"orientacao":"N","paredes":10,"velocidade":0.198,"tensao_bateria":8.38,"valor_flood":9,"estado":"explorando","seq":8}|5136
+<- ack seq=8
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":1600,"pos_x":0,"pos_y":1,"orientacao":"N","paredes":10,"velocidade":0.174,"tensao_bateria":8.37,"valor_flood":9,"estado":"explorando","seq":9}|CE19
+<- ack seq=9
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":1800,"pos_x":0,"pos_y":1,"orientacao":"N","paredes":10,"velocidade":0.19,"tensao_bateria":8.37,"valor_flood":9,"estado":"explorando","seq":10}|F1C2
+<- ack seq=10
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":2000,"pos_x":0,"pos_y":2,"orientacao":"L","paredes":9,"velocidade":0.197,"tensao_bateria":8.37,"valor_flood":8,"estado":"explorando","seq":11}|E320
+<- ack seq=11
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":2200,"pos_x":0,"pos_y":2,"orientacao":"L","paredes":9,"velocidade":0.197,"tensao_bateria":8.35,"valor_flood":8,"estado":"explorando","seq":12}|B9BF
+<- ack seq=12
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":2400,"pos_x":0,"pos_y":2,"orientacao":"L","paredes":9,"velocidade":0.164,"tensao_bateria":8.36,"valor_flood":8,"estado":"explorando","seq":13}|93BA
+<- ack seq=13
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":2600,"pos_x":0,"pos_y":2,"orientacao":"L","paredes":9,"velocidade":0.189,"tensao_bateria":8.35,"valor_flood":8,"estado":"explorando","seq":14}|FA08
+<- ack seq=14
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":2800,"pos_x":0,"pos_y":2,"orientacao":"L","paredes":9,"velocidade":0.19,"tensao_bateria":8.34,"valor_flood":8,"estado":"explorando","seq":15}|3C02
+<- ack seq=15
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":3000,"pos_x":1,"pos_y":2,"orientacao":"N","paredes":6,"velocidade":0.199,"tensao_bateria":8.35,"valor_flood":7,"estado":"explorando","seq":16}|209B
+<- ack seq=16
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":3200,"pos_x":1,"pos_y":2,"orientacao":"N","paredes":6,"velocidade":0.199,"tensao_bateria":8.34,"valor_flood":7,"estado":"explorando","seq":17}|CBEB
+<- ack seq=17
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":3400,"pos_x":1,"pos_y":2,"orientacao":"N","paredes":6,"velocidade":0.196,"tensao_bateria":8.33,"valor_flood":7,"estado":"explorando","seq":18}|FF0C
+<- ack seq=18
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":3600,"pos_x":1,"pos_y":2,"orientacao":"N","paredes":6,"velocidade":0.171,"tensao_bateria":8.32,"valor_flood":7,"estado":"explorando","seq":19}|57A0
+<- ack seq=19
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":3800,"pos_x":1,"pos_y":2,"orientacao":"N","paredes":6,"velocidade":0.18,"tensao_bateria":8.33,"valor_flood":7,"estado":"explorando","seq":20}|0892
+<- ack seq=20
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":4000,"pos_x":1,"pos_y":3,"orientacao":"L","paredes":1,"velocidade":0.176,"tensao_bateria":8.33,"valor_flood":6,"estado":"explorando","seq":21}|0D8B
+<- ack seq=21
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":4200,"pos_x":1,"pos_y":3,"orientacao":"L","paredes":1,"velocidade":0.179,"tensao_bateria":8.32,"valor_flood":6,"estado":"explorando","seq":22}|0970
+<- ack seq=22
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":4400,"pos_x":1,"pos_y":3,"orientacao":"L","paredes":1,"velocidade":0.176,"tensao_bateria":8.32,"valor_flood":6,"estado":"explorando","seq":23}|1CC7
+<- ack seq=23
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":4600,"pos_x":1,"pos_y":3,"orientacao":"L","paredes":1,"velocidade":0.175,"tensao_bateria":8.31,"valor_flood":6,"estado":"explorando","seq":24}|BF8F
+<- ack seq=24
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":4800,"pos_x":1,"pos_y":3,"orientacao":"L","paredes":1,"velocidade":0.191,"tensao_bateria":8.31,"valor_flood":6,"estado":"explorando","seq":25}|6CCF
+<- ack seq=25
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":5000,"pos_x":2,"pos_y":3,"orientacao":"S","paredes":3,"velocidade":0.163,"tensao_bateria":8.3,"valor_flood":5,"estado":"explorando","seq":26}|3CB2
+<- ack seq=26
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":5200,"pos_x":2,"pos_y":3,"orientacao":"S","paredes":3,"velocidade":0.164,"tensao_bateria":8.3,"valor_flood":5,"estado":"explorando","seq":27}|DAF5
+<- ack seq=27
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":5400,"pos_x":2,"pos_y":3,"orientacao":"S","paredes":3,"velocidade":0.194,"tensao_bateria":8.29,"valor_flood":5,"estado":"explorando","seq":28}|AC6A
+<- ack seq=28
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":5600,"pos_x":2,"pos_y":3,"orientacao":"S","paredes":3,"velocidade":0.189,"tensao_bateria":8.29,"valor_flood":5,"estado":"explorando","seq":29}|5152
+<- ack seq=29
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":5800,"pos_x":2,"pos_y":3,"orientacao":"S","paredes":3,"velocidade":0.172,"tensao_bateria":8.28,"valor_flood":5,"estado":"explorando","seq":30}|2A86
+<- ack seq=30
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":6000,"pos_x":2,"pos_y":2,"orientacao":"S","paredes":10,"velocidade":0.185,"tensao_bateria":8.29,"valor_flood":4,"estado":"explorando","seq":31}|D696
+<- ack seq=31
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":6200,"pos_x":2,"pos_y":2,"orientacao":"S","paredes":10,"velocidade":0.186,"tensao_bateria":8.28,"valor_flood":4,"estado":"explorando","seq":32}|AFD5
+<- ack seq=32
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":6400,"pos_x":2,"pos_y":2,"orientacao":"S","paredes":10,"velocidade":0.169,"tensao_bateria":8.27,"valor_flood":4,"estado":"explorando","seq":33}|4CF3
+<- ack seq=33
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":6600,"pos_x":2,"pos_y":2,"orientacao":"S","paredes":10,"velocidade":0.168,"tensao_bateria":8.26,"valor_flood":4,"estado":"explorando","seq":34}|F931
+<- ack seq=34
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":6800,"pos_x":2,"pos_y":2,"orientacao":"S","paredes":10,"velocidade":0.182,"tensao_bateria":8.27,"valor_flood":4,"estado":"explorando","seq":35}|F21D
+<- ack seq=35
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":7000,"pos_x":2,"pos_y":1,"orientacao":"L","paredes":12,"velocidade":0.174,"tensao_bateria":8.26,"valor_flood":3,"estado":"explorando","seq":36}|16A6
+<- ack seq=36
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":7200,"pos_x":2,"pos_y":1,"orientacao":"L","paredes":12,"velocidade":0.174,"tensao_bateria":8.26,"valor_flood":3,"estado":"explorando","seq":37}|3C94
+<- ack seq=37
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":7400,"pos_x":2,"pos_y":1,"orientacao":"L","paredes":12,"velocidade":0.186,"tensao_bateria":8.26,"valor_flood":3,"estado":"explorando","seq":38}|EE4B
+<- ack seq=38
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":7600,"pos_x":2,"pos_y":1,"orientacao":"L","paredes":12,"velocidade":0.189,"tensao_bateria":8.25,"valor_flood":3,"estado":"explorando","seq":39}|9A1D
+<- ack seq=39
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":7800,"pos_x":2,"pos_y":1,"orientacao":"L","paredes":12,"velocidade":0.194,"tensao_bateria":8.24,"valor_flood":3,"estado":"explorando","seq":40}|FC54
+<- ack seq=40
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":8000,"pos_x":3,"pos_y":1,"orientacao":"N","paredes":2,"velocidade":0.198,"tensao_bateria":8.25,"valor_flood":2,"estado":"explorando","seq":41}|46F8
+<- ack seq=41
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":8200,"pos_x":3,"pos_y":1,"orientacao":"N","paredes":2,"velocidade":0.165,"tensao_bateria":8.24,"valor_flood":2,"estado":"explorando","seq":42}|ABE7
+<- ack seq=42
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":8400,"pos_x":3,"pos_y":1,"orientacao":"N","paredes":2,"velocidade":0.168,"tensao_bateria":8.24,"valor_flood":2,"estado":"explorando","seq":43}|BE15
+<- ack seq=43
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":8600,"pos_x":3,"pos_y":1,"orientacao":"N","paredes":2,"velocidade":0.179,"tensao_bateria":8.24,"valor_flood":2,"estado":"explorando","seq":44}|E815
+<- ack seq=44
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":8800,"pos_x":3,"pos_y":1,"orientacao":"N","paredes":2,"velocidade":0.182,"tensao_bateria":8.22,"valor_flood":2,"estado":"explorando","seq":45}|2F07
+<- ack seq=45
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":9000,"pos_x":3,"pos_y":2,"orientacao":"N","paredes":10,"velocidade":0.177,"tensao_bateria":8.23,"valor_flood":1,"estado":"explorando","seq":46}|68B1
+<- ack seq=46
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":9200,"pos_x":3,"pos_y":2,"orientacao":"N","paredes":10,"velocidade":0.177,"tensao_bateria":8.22,"valor_flood":1,"estado":"explorando","seq":47}|FFE7
+<- ack seq=47
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":9400,"pos_x":3,"pos_y":2,"orientacao":"N","paredes":10,"velocidade":0.182,"tensao_bateria":8.2,"valor_flood":1,"estado":"explorando","seq":48}|4018
+<- ack seq=48
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":9600,"pos_x":3,"pos_y":2,"orientacao":"N","paredes":10,"velocidade":0.173,"tensao_bateria":8.21,"valor_flood":1,"estado":"explorando","seq":49}|39E9
+<- ack seq=49
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":9800,"pos_x":3,"pos_y":2,"orientacao":"N","paredes":10,"velocidade":0.192,"tensao_bateria":8.21,"valor_flood":1,"estado":"explorando","seq":50}|B85B
+<- ack seq=50
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":10000,"pos_x":3,"pos_y":3,"orientacao":"N","paredes":11,"velocidade":0.182,"tensao_bateria":8.2,"valor_flood":0,"estado":"explorando","seq":51}|4C4E
+<- ack seq=51
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":10200,"pos_x":3,"pos_y":3,"orientacao":"N","paredes":11,"velocidade":0.164,"tensao_bateria":8.19,"valor_flood":0,"estado":"explorando","seq":52}|9B11
+<- ack seq=52
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":10400,"pos_x":3,"pos_y":3,"orientacao":"N","paredes":11,"velocidade":0.194,"tensao_bateria":8.19,"valor_flood":0,"estado":"explorando","seq":53}|6A84
+<- ack seq=53
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":10600,"pos_x":3,"pos_y":3,"orientacao":"N","paredes":11,"velocidade":0.161,"tensao_bateria":8.2,"valor_flood":0,"estado":"explorando","seq":54}|83E5
+<- ack seq=54
+-> {"v":1,"corrida":1,"t":"tel","tempo_ms":10800,"pos_x":3,"pos_y":3,"orientacao":"N","paredes":11,"velocidade":0.0,"tensao_bateria":8.19,"valor_flood":0,"estado":"parado","seq":55}|0A41
+-> {"v":1,"corrida":1,"t":"evt","tempo_ms":10800,"evento":"fim","resultado":"concluida","tempo_conc_s":10.8,"consumo_medio_ma":384.2,"seq":56}|B29B
+<- ack seq=55
+<- ack seq=56
