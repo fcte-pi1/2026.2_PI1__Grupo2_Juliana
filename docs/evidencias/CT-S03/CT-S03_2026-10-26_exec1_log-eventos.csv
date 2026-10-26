@@ -1,0 +1,5 @@
+tipo;origem;mensagem;ocorrido_em
+erro;backend;checksum invalido (recebido 6633, calculado D1B4);2026-10-26T03:47:15.966Z
+erro;backend;campo ausente: paredes;2026-10-26T03:47:15.975Z
+erro;backend;fora do intervalo: paredes=16;2026-10-26T03:47:15.983Z
+erro;backend;fora do intervalo: pos_x=99;2026-10-26T03:47:15.992Z

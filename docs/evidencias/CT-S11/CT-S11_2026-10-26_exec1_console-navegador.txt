@@ -1,0 +1,4 @@
+[debug] [vite] connecting...
+[debug] [vite] connected.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] WebSocket connection to 'ws://127.0.0.1:18000/ws/painel' failed: WebSocket is closed before the connection is established.
