@@ -104,52 +104,36 @@ function ehCelulaInterna(ponto, dimensoes) {
 }
 
 /**
- * Regra única de saída: exatamente 1 passo fora da matriz e em apenas um eixo
- * (pos_x inteiro entre -1 e largura, pos_y inteiro entre -1 e altura, sem diagonal e sem valores distantes).
- */
-function ehSaidaValida(ponto, dimensoes) {
-  if (!dimensoes || !ponto || !Number.isInteger(ponto.pos_x) || !Number.isInteger(ponto.pos_y)) {
-    return false
-  }
-  const { pos_x: x, pos_y: y } = ponto
-  const { largura, altura } = dimensoes
-  if (x < -1 || x > largura || y < -1 || y > altura) {
-    return false
-  }
-  const foraX = x === -1 || x === largura
-  const foraY = y === -1 || y === altura
-  return foraX !== foraY
-}
-
-/**
  * Valida se a coordenada (pos_x, pos_y) de um pacote tel é permitida pelas dimensões atuais do labirinto.
+ * Contrato v1.3 (Labirinto Fechado): aceita estritamente 0 <= pos_x < largura e 0 <= pos_y < altura.
  */
 function ehPosicaoPermitida(ponto, dimensoes) {
-  if (!Number.isInteger(ponto.pos_x) || !Number.isInteger(ponto.pos_y)) {
+  if (!ponto || !Number.isInteger(ponto.pos_x) || !Number.isInteger(ponto.pos_y)) {
     return false
   }
-  if (ponto.pos_x < -1 || ponto.pos_y < -1) {
-    return false
-  }
-  if (ponto.pos_x === -1 && ponto.pos_y === -1) {
+  if (ponto.pos_x < 0 || ponto.pos_y < 0) {
     return false
   }
   if (!dimensoes) {
     return true
   }
-  return ehCelulaInterna(ponto, dimensoes) || ehSaidaValida(ponto, dimensoes)
+  return ehCelulaInterna(ponto, dimensoes)
 }
 
 /**
- * Centraliza o cálculo da saída do labirinto e da última célula interna a partir do trajeto.
+ * Centraliza o cálculo da saída/objetivo do labirinto fechado (Contrato v1.3).
+ * Quando a corrida está concluída e há dimensões definidas, o objetivo alcançado
+ * é sempre o canto diagonal oposto à largada: (largura - 1, altura - 1).
  */
-function calcularSaidaLabirinto(trajeto, dimensoes) {
-  const ultimoPonto = trajeto[trajeto.length - 1]
-  const penultimoPonto = trajeto[trajeto.length - 2]
-  if (ehSaidaValida(ultimoPonto, dimensoes) && ehCelulaInterna(penultimoPonto, dimensoes)) {
+function calcularSaidaLabirinto(dimensoes, concluida = false) {
+  if (concluida && dimensoes) {
+    const objetivo = {
+      pos_x: dimensoes.largura - 1,
+      pos_y: dimensoes.altura - 1,
+    }
     return {
-      ultimaCelulaInterna: penultimoPonto,
-      pontoSaidaExterna: ultimoPonto,
+      ultimaCelulaInterna: objetivo,
+      pontoSaidaExterna: objetivo,
     }
   }
   return {
@@ -220,15 +204,15 @@ function interpretarFrameTelemetria(textoBruto, dimensoesAtuais = null) {
   }
 
   if (dados.v !== undefined && dados.v !== 1) {
-    return { valido: false, motivo: 'versao nao suportada' }
+    return { valido: false, jsonBemFormado: true, motivo: 'versao nao suportada' }
   }
 
   if (dados.t !== 'tel' && dados.t !== 'evt') {
-    return { valido: false, motivo: 'tipo de mensagem desconhecido' }
+    return { valido: false, jsonBemFormado: true, motivo: 'tipo de mensagem desconhecido' }
   }
 
   if (typeof dados.tempo_ms !== 'number' || dados.tempo_ms < 0) {
-    return { valido: false, motivo: 'campo invalido: tempo_ms' }
+    return { valido: false, jsonBemFormado: true, motivo: 'campo invalido: tempo_ms' }
   }
 
   const dimensoesEfetivas = resolverDimensoesLabirinto(dados, dimensoesAtuais)
@@ -237,24 +221,24 @@ function interpretarFrameTelemetria(textoBruto, dimensoesAtuais = null) {
     const camposNumericos = ['pos_x', 'pos_y', 'paredes', 'velocidade', 'tensao_bateria']
     for (const campo of camposNumericos) {
       if (typeof dados[campo] !== 'number' || Number.isNaN(dados[campo])) {
-        return { valido: false, motivo: `campo ausente ou invalido: ${campo}` }
+        return { valido: false, jsonBemFormado: true, motivo: `campo ausente ou invalido: ${campo}` }
       }
     }
     if (dados.paredes < 0 || dados.paredes > 15 || !Number.isInteger(dados.paredes)) {
-      return { valido: false, motivo: `fora do intervalo: paredes=${dados.paredes}` }
+      return { valido: false, jsonBemFormado: true, motivo: `fora do intervalo: paredes=${dados.paredes}` }
     }
     if (!ehPosicaoPermitida(dados, dimensoesEfetivas)) {
-      return { valido: false, motivo: 'fora do intervalo: coordenadas invalidas' }
+      return { valido: false, jsonBemFormado: true, motivo: 'fora do intervalo: coordenadas invalidas' }
     }
     if (!NOMES_ORIENTACAO[dados.orientacao]) {
-      return { valido: false, motivo: `orientacao invalida: ${dados.orientacao}` }
+      return { valido: false, jsonBemFormado: true, motivo: `orientacao invalida: ${dados.orientacao}` }
     }
     if (!TEXTOS_ESTADO_EXECUCAO[dados.estado]) {
-      return { valido: false, motivo: `estado invalido: ${dados.estado}` }
+      return { valido: false, jsonBemFormado: true, motivo: `estado invalido: ${dados.estado}` }
     }
   }
 
-  return { valido: true, dados, dimensoes: dimensoesEfetivas }
+  return { valido: true, jsonBemFormado: true, dados, dimensoes: dimensoesEfetivas }
 }
 
 /**
@@ -399,35 +383,36 @@ function reconstruirDadosMapaCorrida(detalhe) {
   const trajeto = []
 
   for (const leitura of leituras) {
-    if (!Number.isInteger(leitura?.pos_x) || !Number.isInteger(leitura?.pos_y)) {
+    if (!ehPosicaoPermitida(leitura, dimensoes)) {
       continue
     }
     const ultimoPonto = trajeto[trajeto.length - 1]
     if (!ultimoPonto || ultimoPonto.pos_x !== leitura.pos_x || ultimoPonto.pos_y !== leitura.pos_y) {
       trajeto.push({ pos_x: leitura.pos_x, pos_y: leitura.pos_y })
     }
-    const dentro = dimensoes ? ehCelulaInterna(leitura, dimensoes) : leitura.pos_x >= 0 && leitura.pos_y >= 0
-    if (dentro) {
-      celulas[`${leitura.pos_x},${leitura.pos_y}`] = {
-        pos_x: leitura.pos_x,
-        pos_y: leitura.pos_y,
-        paredes: leitura.paredes,
-        valor_flood: leitura.valor_flood ?? null,
-        orientacao: leitura.orientacao,
-        visitada: true,
-      }
+    celulas[`${leitura.pos_x},${leitura.pos_y}`] = {
+      pos_x: leitura.pos_x,
+      pos_y: leitura.pos_y,
+      paredes: leitura.paredes,
+      valor_flood: leitura.valor_flood ?? null,
+      orientacao: leitura.orientacao,
+      visitada: true,
     }
   }
 
   const ultimaLeitura = leituras[leituras.length - 1] || null
-  const roboPos = ultimaLeitura
-    ? {
-        pos_x: ultimaLeitura.pos_x,
-        pos_y: ultimaLeitura.pos_y,
-        orientacao: ultimaLeitura.orientacao || 'N',
-      }
-    : null
-  const { ultimaCelulaInterna, pontoSaidaExterna } = calcularSaidaLabirinto(trajeto, dimensoes)
+  const roboPos =
+    ultimaLeitura && ehPosicaoPermitida(ultimaLeitura, dimensoes)
+      ? {
+          pos_x: ultimaLeitura.pos_x,
+          pos_y: ultimaLeitura.pos_y,
+          orientacao: ultimaLeitura.orientacao || 'N',
+        }
+      : null
+  const { ultimaCelulaInterna, pontoSaidaExterna } = calcularSaidaLabirinto(
+    dimensoes,
+    detalhe.status === 'concluida',
+  )
 
   return {
     dimensoes,
@@ -573,22 +558,22 @@ export default function Dashboard({
     function processarMensagem(eventoWs) {
       const recebidoEm = Date.now()
       const resultado = interpretarFrameTelemetria(eventoWs.data, dimensoesLabirintoRef.current)
+
+      // Atualiza os marcadores de conexão (liveness) para qualquer pacote JSON bem formado,
+      // antes do descarte por coordenada inválida para o mapa (evita falso Offline após 3 s).
+      if (resultado.jsonBemFormado) {
+        ultimoPacoteRef.current = recebidoEm
+        roboOnlineRef.current = true
+        setUltimoPacoteEm(recebidoEm)
+        setSegundosDesdeUltimoPacote(0)
+        setRoboOnline(true)
+      }
+
       if (!resultado.valido) {
         return
       }
 
       const { dados, dimensoes: novasDimensoes } = resultado
-
-      // Atualiza marcadores de conexão antes do descarte de coordenada negativa sem dimensões (evita falso Offline)
-      ultimoPacoteRef.current = recebidoEm
-      roboOnlineRef.current = true
-      setUltimoPacoteEm(recebidoEm)
-      setSegundosDesdeUltimoPacote(0)
-      setRoboOnline(true)
-
-      if (dados.t === 'tel' && !novasDimensoes && (dados.pos_x < 0 || dados.pos_y < 0)) {
-        return
-      }
 
       if (typeof dados.corrida === 'number') {
         setCorridaAtual(dados.corrida)
@@ -637,38 +622,26 @@ export default function Dashboard({
           return [...trajetoAnterior, { pos_x: dados.pos_x, pos_y: dados.pos_y }]
         })
 
-        const dentroDaMatriz = novasDimensoes
-          ? ehCelulaInterna(dados, novasDimensoes)
-          : dados.pos_x >= 0 && dados.pos_y >= 0
+        const chaveCelula = `${dados.pos_x},${dados.pos_y}`
+        const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
+        const jaVista = celulasVistasRef.current.has(chaveCelula)
+        celulasVistasRef.current.add(chaveCelula)
 
-        if (dentroDaMatriz) {
-          const chaveCelula = `${dados.pos_x},${dados.pos_y}`
-          const codigo = formatarCodigoCelula(dados.pos_x, dados.pos_y)
-          const jaVista = celulasVistasRef.current.has(chaveCelula)
-          celulasVistasRef.current.add(chaveCelula)
-
-          if (!jaVista) {
-            registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
-          }
-
-          setMapaCelulas((mapaAnterior) => ({
-            ...mapaAnterior,
-            [chaveCelula]: {
-              pos_x: dados.pos_x,
-              pos_y: dados.pos_y,
-              paredes: dados.paredes,
-              valor_flood: dados.valor_flood ?? null,
-              orientacao: dados.orientacao,
-              visitada: true,
-            },
-          }))
-        } else {
-          registrarEvento(
-            `Saída do labirinto alcançada (${dados.pos_x}, ${dados.pos_y})`,
-            'sucesso',
-            recebidoEm,
-          )
+        if (!jaVista) {
+          registrarEvento(`Célula ${codigo} mapeada`, 'sucesso', recebidoEm)
         }
+
+        setMapaCelulas((mapaAnterior) => ({
+          ...mapaAnterior,
+          [chaveCelula]: {
+            pos_x: dados.pos_x,
+            pos_y: dados.pos_y,
+            paredes: dados.paredes,
+            valor_flood: dados.valor_flood ?? null,
+            orientacao: dados.orientacao,
+            visitada: true,
+          },
+        }))
       } else if (dados.t === 'evt') {
         if (dados.evento === 'inicio') {
           celulasVistasRef.current.clear()
@@ -984,7 +957,10 @@ export default function Dashboard({
       ? `${((qtdCelulasMapeadas / totalCelulasLabirinto) * 100).toFixed(1).replace('.', ',')}%`
       : '--'
 
-  const { ultimaCelulaInterna, pontoSaidaExterna } = calcularSaidaLabirinto(trajeto, dimensoesLabirinto)
+  const { ultimaCelulaInterna, pontoSaidaExterna } = calcularSaidaLabirinto(
+    dimensoesLabirinto,
+    statusCorrida === 'concluida',
+  )
   const roboSaiuDoLabirinto = Boolean(ultimaCelulaInterna && pontoSaidaExterna)
 
   const codigoCelulaAtual = roboSaiuDoLabirinto
