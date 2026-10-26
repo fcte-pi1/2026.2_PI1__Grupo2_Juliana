@@ -14,13 +14,14 @@ test('CT-S07 - corrida concluída é gravada e aparece completa no Histórico e 
   const robo = await RoboFalso.conectar()
   await robo.inicio()
   for (const leitura of TRAJETO_CURTO) await robo.tel(leitura)
-  const fim = await robo.fim('concluida')
-  robo.fechar()
 
-  // O que foi visto em tempo real, para comparar com o histórico
+  // O que foi visto em tempo real, para comparar com o histórico. Confere antes do fim:
+  // depois dele o painel troca a posição por "Saída (...)" e o texto deixa de ser estável
   const ultima = TRAJETO_CURTO.at(-1)!
   await expect(page.getByTestId('celula-atual-badge')).toContainText(`(${ultima.pos_x}, ${ultima.pos_y})`)
   const velocidadeAoVivo = await page.getByTestId('velocidade-media').textContent()
+  const fim = await robo.fim('concluida')
+  robo.fechar()
   await irPara(page, 'Dashboard')
   const ultimaExecucao = page.getByTestId('painel-ultima-execucao')
   await expect(page.getByTestId('resultado-ultima-execucao')).toContainText('Concluído')
