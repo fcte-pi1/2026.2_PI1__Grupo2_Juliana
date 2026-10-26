@@ -1,0 +1,7 @@
+id;status;num_tentativa;tempo_conc_s
+1;abandonada;1;
+
+tempo_ms;pos_x;pos_y
+200;0;0
+400;0;1
+600;1;1
