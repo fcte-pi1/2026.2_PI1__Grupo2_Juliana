@@ -155,7 +155,7 @@ export default function MazeMap({
           )}
 
           {linhas.flatMap((y, linha) => colunas.map((x) => (
-            <g key={`${x},${y}`} transform={`translate(${x * TAMANHO_CELULA} ${linha * TAMANHO_CELULA})`}>
+            <g key={`${x},${y}`} data-paredes-celula={`${x},${y}`} transform={`translate(${x * TAMANHO_CELULA} ${linha * TAMANHO_CELULA})`}>
               {PAREDES.filter(({ bit }) => ((mapa.get(`${x},${y}`) ?? 0) & bit) !== 0).map(({ bit, nome, ...pontos }) => (
                 <line key={bit} className="maze-map__wall" data-parede={nome} {...pontos} />
               ))}

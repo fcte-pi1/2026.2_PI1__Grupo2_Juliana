@@ -354,7 +354,8 @@ function resolverStatusLog(log) {
     return String(log.status)
   }
   const msg = String(log?.mensagem || '')
-  if (/descartad|checksum|formato invalido|json invalido|fora do intervalo|versao nao suportada/i.test(msg)) {
+  // Mesmos motivos que o backend grava ao descartar um quadro (protocol.py e telemetry_service.py)
+  if (/descartad|checksum|formato invalido|json invalido|quadro invalido|campo ausente|tipo invalido|fora do intervalo|versao nao suportada|corrida desconhecida/i.test(msg)) {
     return 'Descartado'
   }
   return 'Registrado'
@@ -1085,7 +1086,10 @@ export default function Dashboard({
 
   return (
     <div className="painel-layout">
-      {ultimoPacoteEm !== null && !roboOnline && <ConnectionAlert timeoutMs={TIMEOUT_OFFLINE_MS} />}
+      {/* Depois do fim o robô para de transmitir de propósito: não é perda de conexão */}
+      {ultimoPacoteEm !== null && !roboOnline && statusCorrida !== 'concluida' && statusCorrida !== 'abandonada' && (
+        <ConnectionAlert timeoutMs={TIMEOUT_OFFLINE_MS} />
+      )}
       {/* Menu Lateral Esquerdo (Sidebar fiel ao Figma) */}
       <aside className="menu-lateral" aria-label="Menu principal">
         <div className="marca-topo">

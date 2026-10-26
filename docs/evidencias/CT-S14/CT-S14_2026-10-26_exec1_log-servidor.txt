@@ -1,0 +1,6 @@
+id,id_corrida,tipo,origem,mensagem,ocorrido_em
+2,1,info,backend,evento inicio: tensao=8.4V,2026-10-26T03:48:13.876046+00:00
+3,1,erro,backend,"checksum invalido (recebido 0000, calculado 4DBB)",2026-10-26T03:48:13.914891+00:00
+4,1,aviso,backend,desconexao: conexao WebSocket do robo encerrada,2026-10-26T03:48:13.940853+00:00
+5,1,aviso,backend,"evento reconexao: offline_ms=1500, pendentes=0",2026-10-26T03:48:14.054092+00:00
+6,1,info,backend,"evento fim: resultado=concluida, tempo=0.8s",2026-10-26T03:48:14.095439+00:00

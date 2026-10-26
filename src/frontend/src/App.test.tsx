@@ -760,6 +760,12 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('desafio-cumprido').textContent).toBe('Sim')
     expect(screen.queryByRole('alert')).toBeNull()
 
+    // Corrida concluída: o robô para de transmitir e isso não abre o alerta de conexão perdida
+    act(() => {
+      vi.advanceTimersByTime(3200)
+    })
+    expect(screen.queryByTestId('connection-alert')).toBeNull()
+
     // Alterna para a aba Dashboard (Visão Geral) e verifica Resultado Concluído com ponto verde
     fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
     expect(screen.getByRole('heading', { name: 'Visão Geral' })).toBeTruthy()

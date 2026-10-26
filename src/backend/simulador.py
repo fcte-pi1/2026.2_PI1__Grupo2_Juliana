@@ -170,6 +170,10 @@ async def transmitir(url, ticks, intervalo=PERIODO_MS / 1000, corromper_tipos=()
     queda = range(len(ticks) // 2, len(ticks) // 2 + round(queda_s * 1000 / PERIODO_MS)) if queda_s else range(0)
     ws, conectando, leitor, ja_conectou, offline_desde, seq, n_tel, tick = None, None, None, False, 0, 0, 0, 0
     acks = 0
+    # Ticks presos ao relógio, como o timer do robô: dormir `intervalo` depois de cada tick somaria o
+    # tempo de envio (e a granularidade de ~15 ms do timer no Windows) e a taxa ficaria abaixo de 5 Hz.
+    relogio = asyncio.get_running_loop()
+    partida = relogio.time()
 
     async def ler_acks(conexao):
         nonlocal acks
@@ -255,7 +259,7 @@ async def transmitir(url, ticks, intervalo=PERIODO_MS / 1000, corromper_tipos=()
                     await enviar(s, texto)
 
         tick += 1
-        await asyncio.sleep(intervalo)
+        await asyncio.sleep(max(0.0, partida + tick * intervalo - relogio.time()))
 
     if conectando:
         conectando.cancel()

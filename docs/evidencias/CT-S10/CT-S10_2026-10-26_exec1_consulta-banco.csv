@@ -1,0 +1,5 @@
+id;labirinto;num_tentativa;status;tempo_conc_s;consumo_medio_ma
+1;4x4;1;concluida;0.800;400.00
+2;4x4;2;concluida;0.800;400.00
+3;8x4;1;concluida;0.800;400.00
+4;4x4;3;concluida;0.800;400.00
