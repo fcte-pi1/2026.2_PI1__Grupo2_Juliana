@@ -951,6 +951,90 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('D4 · Norte')
     expect(screen.queryByTestId('indicador-saida-painel')).toBeNull()
   })
+
+  test('pacotes tel com coordenadas fora do labirinto (pos_x: -1 e pos_x: 4 num mapa 4x4) mantêm a liveness por 5 s sem disparar ConnectionAlert e sem alterar mapaCelulas', () => {
+    render(<Dashboard />)
+    const ws = MockWebSocket.instancias[0]
+
+    // Inicia labirinto 4x4 e envia primeira leitura válida em (0, 0)
+    act(() => {
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'evt',
+          corrida: 1,
+          seq: 0,
+          tempo_ms: 0,
+          evento: 'inicio',
+          largura_celula: 4,
+          altura_celula: 4,
+          tensao_bateria: 8.4,
+        }),
+      )
+      ws.emitirMensagem(
+        JSON.stringify({
+          v: 1,
+          t: 'tel',
+          corrida: 1,
+          seq: 1,
+          tempo_ms: 200,
+          pos_x: 0,
+          pos_y: 0,
+          orientacao: 'N',
+          paredes: 14,
+          velocidade: 0.2,
+          tensao_bateria: 8.3,
+          estado: 'explorando',
+        }),
+      )
+    })
+
+    const containerMapa = screen.getByTestId('espaco-mapa-labirinto')
+    expect(containerMapa.getAttribute('data-celulas-count')).toBe('1')
+    expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / 16')
+
+    // Durante 5 segundos, envia pacotes tel a cada 1 s com pos_x: -1 e pos_x: 4 (fora da matriz 4x4)
+    for (let passo = 1; passo <= 5; passo += 1) {
+      const posXFora = passo % 2 === 1 ? -1 : 4
+      act(() => {
+        vi.advanceTimersByTime(1000)
+        ws.emitirMensagem(
+          JSON.stringify({
+            v: 1,
+            t: 'tel',
+            corrida: 1,
+            seq: passo + 1,
+            tempo_ms: 200 + passo * 1000,
+            pos_x: posXFora,
+            pos_y: 0,
+            orientacao: 'O',
+            paredes: 15,
+            velocidade: 0.2,
+            tensao_bateria: 8.25,
+            estado: 'explorando',
+          }),
+        )
+      })
+      // 1. O alerta de conexão (ConnectionAlert) NÃO aparece
+      expect(screen.queryByTestId('connection-alert')).toBeNull()
+      expect(screen.queryByRole('alert')).toBeNull()
+      // 2. O card de conexão continua exibindo 'Conectado'
+      expect(screen.getByTestId('card-conexao').textContent).toContain('Conectado')
+      // 3. Nada entra ou altera o estado do mapaCelulas
+      expect(containerMapa.getAttribute('data-celulas-count')).toBe('1')
+      expect(screen.getByTestId('celulas-mapeadas-total').textContent).toBe('1 / 16')
+    }
+
+    expect(containerMapa.querySelectorAll('.maze-map__cell--observed').length).toBe(1)
+    expect(containerMapa.querySelector('[data-celula="0,0"].maze-map__cell--observed')).toBeTruthy()
+    expect(screen.getByTestId('posicao-atual-destaque').textContent).toBe('A1 · Norte')
+
+    // Ao parar de enviar pacotes por > 3 s, o alerta de perda de conexão dispara normalmente
+    act(() => {
+      vi.advanceTimersByTime(3200)
+    })
+    expect(screen.getByTestId('connection-alert')).toBeTruthy()
+  })
 })
 
 describe('Telas de Consulta e Histórico de Corridas (Issue #220 - 3.8.5, 3.8.2 e 3.8.7)', () => {

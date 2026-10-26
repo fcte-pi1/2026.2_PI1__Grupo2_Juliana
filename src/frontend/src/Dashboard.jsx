@@ -204,15 +204,15 @@ function interpretarFrameTelemetria(textoBruto, dimensoesAtuais = null) {
   }
 
   if (dados.v !== undefined && dados.v !== 1) {
-    return { valido: false, motivo: 'versao nao suportada' }
+    return { valido: false, jsonBemFormado: true, motivo: 'versao nao suportada' }
   }
 
   if (dados.t !== 'tel' && dados.t !== 'evt') {
-    return { valido: false, motivo: 'tipo de mensagem desconhecido' }
+    return { valido: false, jsonBemFormado: true, motivo: 'tipo de mensagem desconhecido' }
   }
 
   if (typeof dados.tempo_ms !== 'number' || dados.tempo_ms < 0) {
-    return { valido: false, motivo: 'campo invalido: tempo_ms' }
+    return { valido: false, jsonBemFormado: true, motivo: 'campo invalido: tempo_ms' }
   }
 
   const dimensoesEfetivas = resolverDimensoesLabirinto(dados, dimensoesAtuais)
@@ -221,24 +221,24 @@ function interpretarFrameTelemetria(textoBruto, dimensoesAtuais = null) {
     const camposNumericos = ['pos_x', 'pos_y', 'paredes', 'velocidade', 'tensao_bateria']
     for (const campo of camposNumericos) {
       if (typeof dados[campo] !== 'number' || Number.isNaN(dados[campo])) {
-        return { valido: false, motivo: `campo ausente ou invalido: ${campo}` }
+        return { valido: false, jsonBemFormado: true, motivo: `campo ausente ou invalido: ${campo}` }
       }
     }
     if (dados.paredes < 0 || dados.paredes > 15 || !Number.isInteger(dados.paredes)) {
-      return { valido: false, motivo: `fora do intervalo: paredes=${dados.paredes}` }
+      return { valido: false, jsonBemFormado: true, motivo: `fora do intervalo: paredes=${dados.paredes}` }
     }
     if (!ehPosicaoPermitida(dados, dimensoesEfetivas)) {
-      return { valido: false, motivo: 'fora do intervalo: coordenadas invalidas' }
+      return { valido: false, jsonBemFormado: true, motivo: 'fora do intervalo: coordenadas invalidas' }
     }
     if (!NOMES_ORIENTACAO[dados.orientacao]) {
-      return { valido: false, motivo: `orientacao invalida: ${dados.orientacao}` }
+      return { valido: false, jsonBemFormado: true, motivo: `orientacao invalida: ${dados.orientacao}` }
     }
     if (!TEXTOS_ESTADO_EXECUCAO[dados.estado]) {
-      return { valido: false, motivo: `estado invalido: ${dados.estado}` }
+      return { valido: false, jsonBemFormado: true, motivo: `estado invalido: ${dados.estado}` }
     }
   }
 
-  return { valido: true, dados, dimensoes: dimensoesEfetivas }
+  return { valido: true, jsonBemFormado: true, dados, dimensoes: dimensoesEfetivas }
 }
 
 /**
@@ -557,17 +557,22 @@ export default function Dashboard({
     function processarMensagem(eventoWs) {
       const recebidoEm = Date.now()
       const resultado = interpretarFrameTelemetria(eventoWs.data, dimensoesLabirintoRef.current)
+
+      // Atualiza os marcadores de conexão (liveness) para qualquer pacote JSON bem formado,
+      // antes do descarte por coordenada inválida para o mapa (evita falso Offline após 3 s).
+      if (resultado.jsonBemFormado) {
+        ultimoPacoteRef.current = recebidoEm
+        roboOnlineRef.current = true
+        setUltimoPacoteEm(recebidoEm)
+        setSegundosDesdeUltimoPacote(0)
+        setRoboOnline(true)
+      }
+
       if (!resultado.valido) {
         return
       }
 
       const { dados, dimensoes: novasDimensoes } = resultado
-
-      ultimoPacoteRef.current = recebidoEm
-      roboOnlineRef.current = true
-      setUltimoPacoteEm(recebidoEm)
-      setSegundosDesdeUltimoPacote(0)
-      setRoboOnline(true)
 
       if (typeof dados.corrida === 'number') {
         setCorridaAtual(dados.corrida)
