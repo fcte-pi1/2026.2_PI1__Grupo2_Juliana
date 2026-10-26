@@ -164,7 +164,7 @@ Para guiar o cronograma de execução, cada item foi priorizado utilizando a met
 
 | ID | Nome do Requisito | Descrição | Prioridade | Responsáveis | Link Github Projects |
 | :---: | :--- | :--- | :---: | :--- | :--- |
-| RNF-L01 | Material das paredes | Deve ser feito de material rígido (MDF, PVC ou acrílico) que não deforme com o manuseio repetido. | Must have | Ana Beatriz | [RNF-L01](https://github.com/fcte-pi1/2026.2_PI1__Grupo2_Juliana/issues/74) |
+| RNF-L01 | Material das paredes | Deve ser feito de material firme (EVA de 15 mm, MDF, PVC ou acrílico) que não deforme com o manuseio repetido. | Must have | Ana Beatriz | [RNF-L01](https://github.com/fcte-pi1/2026.2_PI1__Grupo2_Juliana/issues/74) |
 | RNF-L02 | Peso máximo por peça | Cada célula/parede deve ter peso que permita montagem manual sem esforço excessivo. | Should have | Ana | [RNF-L02](https://github.com/fcte-pi1/2026.2_PI1__Grupo2_Juliana/issues/76) |
 | RNF-L03 | Acabamento das superfícies | As paredes devem ter acabamento fosco/não reflexivo, para não interferir em sensores infravermelhos ou ópticos do robô. | Must have | Daniel | [RNF-L03](https://github.com/fcte-pi1/2026.2_PI1__Grupo2_Juliana/issues/77) |
 | RNF-L04 | Resistência a colisões | O labirinto deve suportar múltiplas colisões do robô sem quebrar ou se deslocar permanentemente. | Must have | Ana | [RNF-L04](https://github.com/fcte-pi1/2026.2_PI1__Grupo2_Juliana/issues/79) |
