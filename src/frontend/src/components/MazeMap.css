@@ -1,0 +1,170 @@
+.maze-map {
+  --maze-unobserved: #e9eff2;
+  --maze-observed: #edf7f9;
+  --maze-grid: #b8c8d0;
+  --maze-wall: #354f5c;
+  --maze-robot: #117e8c;
+  --maze-text: #526977;
+  --maze-trail: #2563eb;
+  --maze-goal: #fef3c7;
+  --maze-goal-border: #b45309;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  color: var(--maze-text);
+  font-family: inherit;
+}
+
+.maze-map .maze-map__canvas {
+  display: block;
+  width: 100%;
+  max-width: 48rem;
+  height: auto;
+  margin-inline: auto;
+}
+
+.maze-map .maze-map__axis {
+  fill: var(--maze-text);
+  font: 8px ui-monospace, monospace;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.maze-map .maze-map__cell {
+  fill: var(--maze-unobserved);
+  stroke: var(--maze-grid);
+  stroke-width: 0.6;
+}
+
+.maze-map .maze-map__cell--observed {
+  fill: var(--maze-observed);
+}
+
+.maze-map .maze-map__wall {
+  stroke: var(--maze-wall);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.maze-map .maze-map__exit {
+  fill: var(--maze-goal);
+  stroke: var(--maze-goal-border);
+  stroke-width: 2;
+}
+
+.maze-map .maze-map__cell--exit {
+  fill: var(--maze-goal);
+}
+
+.maze-map .maze-map__exit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: fit-content;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--maze-goal-border);
+  border-radius: 999px;
+  background-color: var(--maze-goal);
+  color: #92400e;
+  font-weight: 700;
+}
+
+.maze-map .maze-map__trail {
+  fill: none;
+  stroke: var(--maze-trail);
+  stroke-width: 3;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.maze-map .maze-map__robot circle {
+  fill: var(--maze-robot);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.maze-map .maze-map__robot path {
+  fill: #fff;
+}
+
+.maze-map .maze-map__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.maze-map .maze-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.maze-map .maze-map__legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.maze-map .maze-map__key {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1px solid var(--maze-grid);
+  border-radius: 2px;
+  background: var(--maze-unobserved);
+}
+
+.maze-map .maze-map__key--observed {
+  background: var(--maze-observed);
+}
+
+.maze-map .maze-map__key--wall {
+  height: 0;
+  border: 0;
+  border-top: 3px solid var(--maze-wall);
+}
+
+.maze-map .maze-map__key--trail {
+  height: 0;
+  border: 0;
+  border-top: 3px dashed var(--maze-trail);
+}
+
+.maze-map .maze-map__key--exit {
+  background: var(--maze-goal);
+  border-color: var(--maze-goal-border);
+}
+
+/* Mantém o mapa dentro do card mesmo com as 12 colunas do TAP. */
+.painel-layout:has(.maze-map) > .conteudo-principal {
+  min-width: 0;
+}
+
+.card-mapa-labirinto {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.card-mapa-labirinto .container-maze-map {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .painel-layout:has(.maze-map) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 620px) {
+  .card-mapa-labirinto .card-mapa-corpo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
