@@ -1,14 +1,27 @@
-# _Firmware_
-Esta pasta deverá armazenar arquivos referentes a:
+# Firmware
 
-- Código-fonte para microcontroladores e SOCs: [Arduino](https://www.arduino.cc/), [ESP32](https://www.espressif.com/), [Raspberry Pi](https://www.raspberrypi.com/), dentre outros.
-- Projetos de organização destes códigos, caso utilize IDEs: [Arduino IDE](https://www.arduino.cc/en/software/), [Visual Studio](https://visualstudio.microsoft.com/pt-br/downloads/) etc.
-- Arquivos de configuração: ```CMakeLists.txt``` se for usar [CMake](https://cmake.org/download/), ```Makefile``` se for usar [make](https://www.cs.colby.edu/maxwell/courses/tutorials/maketutor/) etc.
+Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, usando o [PlatformIO](https://platformio.org/).
 
-Evite incluir:
-- Artefatos de compilação: os arquivos de saída compilados (binários, arquivos objeto, .hex, .elf) devem ser gerados pelo processo de compilação e não incluídos no repositório.
-- Arquivos temporários/específicos do sistema operacional: Arquivos como .DS_Store (macOS) ou arquivos de configuração do editor (a menos que esteja usando uma configuração compartilhada como .editorconfig).
-- Configurações pessoais: Arquivos de configuração locais específicos da máquina do desenvolvedor.
+## Requisitos
+- PlatformIO: extensão do VS Code ou `pip install platformio`
+- Para rodar os testes no computador: compilador `gcc`/`g++` instalado (no Windows, MinGW)
 
-> [!WARNING]
-> **Não acrescente arquivos referentes a _hardware_ nesta pasta.** Eles deverão ser armazenados na pasta [hw](https://github.com/fcte-pi1/template/tree/main/hw) deste repositório.
+## Estrutura
+- `src/`: código que só roda no robô (`setup`, `loop`, drivers).
+- `lib/`: lógica independente do hardware (mapa, Flood Fill, filtro, telemetria). É o código testado no computador.
+- `test/`: testes com [Unity](https://github.com/ThrowTheSwitch/Unity), um diretório `test_<nome>/` por módulo.
+
+## Compilar e gravar no robô
+```bash
+cd src/firmware
+pio run -e esp32dev                    # compila
+pio run -e esp32dev -t upload          # grava pela USB
+pio device monitor                     # abre o monitor serial (115200)
+```
+
+## Testar no computador
+```bash
+pio test -e native
+gcovr -r . --filter lib/ .pio/build/native   # cobertura (pip install gcovr)
+```
+O GitHub Actions roda os testes, a cobertura e a compilação para o ESP32 em todo Pull Request.
