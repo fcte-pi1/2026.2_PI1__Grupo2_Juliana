@@ -23,7 +23,7 @@ Dessa forma, o cálculo final do custo de mão de obra para os 17 membros da equ
 | Microcontrolador ESP32 DevKit (30 pinos) | 1 | 42,84 | — |
 | Módulo Sensor Laser ToF VL53L0X | 3 | 99,48 | — |
 | Módulo Sensor INA226 | 1 | 37,00 | — |
-| Módulo Sensor MPU-6050 | 1 | 39,89 | — |
+| Módulo Sensor IMU BNO085 | 1 | 39,89 | — |
 | Micromotores N20 com encoders | 2 | 85,30 | — |
 | Rodas 34 mm p/ motor N20 | 2 | 24,65 | — |
 | Esfera deslizante (ball caster) | 2 | 11,98 | — |
