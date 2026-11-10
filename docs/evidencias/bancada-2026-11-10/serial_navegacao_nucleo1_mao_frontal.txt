@@ -1,0 +1,64 @@
+Navegacao no nucleo 1 reagindo ao sensor frontal (10/11/2026)
+Mao na frente do VL53L0X frontal (GPIO16) de 449 s a 454 s; depois fora.
+Cada linha de status e seguida da linha da tarefa de navegacao no nucleo 1.
+
+[   449s] E=  73 F=  72 D=  72 mm paredes=11 yaw=   0.0 N | 5.65V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22218 tempo=45/354 us corridas simuladas ok=449 erradas=0
+[   450s] E=  72 F= 109 D=  73 mm paredes=11 yaw=   0.0 N | 5.60V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22268 tempo=45/354 us corridas simuladas ok=450 erradas=0
+[   451s] E=  70 F=  39 D=  71 mm paredes=11 yaw=   0.0 N | 5.59V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22318 tempo=45/354 us corridas simuladas ok=451 erradas=0
+[   452s] E=  72 F=  38 D=  72 mm paredes=11 yaw=   0.0 N | 5.66V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22368 tempo=45/354 us corridas simuladas ok=452 erradas=0
+[   453s] E=  72 F=  30 D=  72 mm paredes=11 yaw=   0.0 N | 5.64V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22417 tempo=45/354 us corridas simuladas ok=453 erradas=0
+[   454s] E=  72 F=  31 D=  73 mm paredes=11 yaw=   0.0 N | 5.62V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=-1 ciclos=22466 tempo=45/354 us corridas simuladas ok=454 erradas=0
+[   455s] E=  72 F= 546 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22516 tempo=45/354 us corridas simuladas ok=455 erradas=0
+[   456s] E=  72 F= 547 D=  72 mm paredes=10 yaw=   0.0 N | 5.64V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22565 tempo=45/354 us corridas simuladas ok=456 erradas=0
+[   457s] E=  72 F= 547 D=  71 mm paredes=10 yaw=   0.0 N | 5.66V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22614 tempo=45/354 us corridas simuladas ok=457 erradas=0
+[   458s] E=  72 F= 555 D=  73 mm paredes=10 yaw=   0.0 N | 5.66V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22663 tempo=45/354 us corridas simuladas ok=458 erradas=0
+[   459s] E=  73 F= 541 D=  72 mm paredes=10 yaw=   0.0 N | 5.66V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22713 tempo=45/354 us corridas simuladas ok=459 erradas=0
+[   460s] E=  72 F= 548 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22763 tempo=45/354 us corridas simuladas ok=460 erradas=0
+[   461s] E=  73 F= 550 D=  71 mm paredes=10 yaw=   0.0 N | 5.63V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22813 tempo=45/354 us corridas simuladas ok=461 erradas=0
+[   462s] E=  73 F= 542 D=  73 mm paredes=10 yaw=   0.0 N | 5.67V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22862 tempo=45/354 us corridas simuladas ok=462 erradas=0
+[   463s] E=  71 F= 548 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22911 tempo=45/354 us corridas simuladas ok=463 erradas=0
+[   464s] E=  72 F= 539 D=  72 mm paredes=10 yaw=   0.0 N | 5.66V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=22961 tempo=45/354 us corridas simuladas ok=464 erradas=0
+[   465s] E=  73 F= 550 D=  73 mm paredes=10 yaw=   0.0 N | 5.67V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23010 tempo=45/354 us corridas simuladas ok=465 erradas=0
+[   466s] E=  72 F= 540 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23059 tempo=45/354 us corridas simuladas ok=466 erradas=0
+[   467s] E=  72 F= 536 D=  71 mm paredes=10 yaw=   0.0 N | 5.62V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23109 tempo=45/354 us corridas simuladas ok=467 erradas=0
+[   468s] E=  72 F= 530 D=  72 mm paredes=10 yaw=   0.0 N | 5.66V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23159 tempo=45/354 us corridas simuladas ok=468 erradas=0
+[   469s] E=  71 F= 541 D=  72 mm paredes=10 yaw=   0.0 N | 5.69V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23209 tempo=45/354 us corridas simuladas ok=469 erradas=0
+[   470s] E=  72 F= 550 D=  73 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23258 tempo=45/354 us corridas simuladas ok=470 erradas=0
+[   471s] E=  72 F= 536 D=  72 mm paredes=10 yaw=   0.0 N | 5.47V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23308 tempo=45/354 us corridas simuladas ok=471 erradas=0
+[   472s] E=  73 F= 540 D=  72 mm paredes=10 yaw=   0.0 N | 5.62V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23357 tempo=45/354 us corridas simuladas ok=472 erradas=0
+[   473s] E=  72 F= 558 D=  72 mm paredes=10 yaw=   0.0 N | 5.61V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23407 tempo=45/354 us corridas simuladas ok=473 erradas=0
+[   474s] E=  72 F= 547 D=  73 mm paredes=10 yaw=   0.0 N | 5.64V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23458 tempo=45/354 us corridas simuladas ok=474 erradas=0
+[   475s] E=  71 F= 534 D=  72 mm paredes=10 yaw=   0.0 N | 5.64V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23507 tempo=45/354 us corridas simuladas ok=475 erradas=0
+[   476s] E=  73 F= 539 D=  72 mm paredes=10 yaw=   0.0 N | 5.63V 0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23557 tempo=45/354 us corridas simuladas ok=476 erradas=0
+[   477s] E=  72 F= 554 D=  72 mm paredes=10 yaw=   0.0 N | 5.69V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23608 tempo=45/354 us corridas simuladas ok=477 erradas=0
+[   478s] E=  72 F= 544 D=  73 mm paredes=10 yaw=   0.0 N | 5.60V -0.0mA | heap=112136
+         navegacao: nucleo=1 flood=6 ciclos=23658 tempo=45/354 us corridas simuladas ok=478 erradas=0
