@@ -1,0 +1,41 @@
+### enviado 'r' em 16:45:34
+>>> RTT zerado
+[    86s] wifi=1 srv=1 corrida=0 env=0 reenv=0 ack=0 pend=0 queda=0 rtt=0/0/0>500:0 | E=  21 F= 387 D=  74 mm paredes=10 yaw=   0.0 N | 5.68V -0.0mA | heap=122988
+### enviado 'i' em 16:45:35
+>>> corrida 5 iniciada
+[    87s] wifi=1 srv=1 corrida=5 env=2 reenv=0 ack=1 pend=1 queda=0 rtt=41/41/41>500:0 | E=  20 F= 386 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=122692
+[    88s] wifi=1 srv=1 corrida=5 env=7 reenv=0 ack=7 pend=0 queda=0 rtt=33/58/197>500:0 | E=  20 F= 386 D=  71 mm paredes=10 yaw=   0.0 N | 5.59V 0.0mA | heap=122692
+[    89s] wifi=1 srv=1 corrida=5 env=12 reenv=0 ack=12 pend=0 queda=0 rtt=47/49/197>500:0 | E=  19 F= 383 D=  72 mm paredes=10 yaw=   0.0 N | 5.70V -0.0mA | heap=122692
+[    90s] wifi=1 srv=1 corrida=5 env=17 reenv=0 ack=16 pend=1 queda=0 rtt=33/48/197>500:0 | E=  19 F= 387 D=  72 mm paredes=10 yaw=   0.0 N | 5.56V -0.0mA | heap=121108
+[    91s] wifi=1 srv=1 corrida=5 env=22 reenv=0 ack=22 pend=0 queda=0 rtt=32/45/197>500:0 | E=  22 F= 390 D=  71 mm paredes=10 yaw=   0.0 N | 5.69V -0.0mA | heap=122692
+[    92s] wifi=1 srv=1 corrida=5 env=27 reenv=0 ack=27 pend=0 queda=0 rtt=31/43/197>500:0 | E=  21 F= 380 D=  71 mm paredes=10 yaw=   0.0 N | 5.59V -0.0mA | heap=122692
+[    93s] wifi=1 srv=1 corrida=5 env=32 reenv=0 ack=32 pend=0 queda=0 rtt=31/41/197>500:0 | E=  21 F= 391 D=  71 mm paredes=10 yaw=   0.0 N | 5.55V -0.0mA | heap=122692
+[    94s] wifi=1 srv=1 corrida=5 env=37 reenv=0 ack=36 pend=1 queda=0 rtt=30/42/197>500:0 | E=  20 F= 387 D=  72 mm paredes=10 yaw=   0.0 N | 5.62V 0.0mA | heap=121108
+[    95s] wifi=1 srv=1 corrida=5 env=42 reenv=0 ack=42 pend=0 queda=0 rtt=36/41/197>500:0 | E=  20 F= 386 D=  73 mm paredes=10 yaw=   0.0 N | 5.67V -0.0mA | heap=122692
+[    96s] wifi=1 srv=1 corrida=5 env=47 reenv=0 ack=47 pend=0 queda=0 rtt=39/41/197>500:0 | E=  21 F= 384 D=  70 mm paredes=10 yaw=   0.0 N | 5.60V -0.0mA | heap=122724
+[    97s] wifi=1 srv=1 corrida=5 env=52 reenv=0 ack=52 pend=0 queda=0 rtt=34/40/197>500:0 | E=  22 F= 386 D=  73 mm paredes=10 yaw=   0.0 N | 5.66V 0.0mA | heap=122724
+[    98s] wifi=1 srv=1 corrida=5 env=57 reenv=0 ack=57 pend=0 queda=0 rtt=46/40/197>500:0 | E=  23 F= 385 D=  73 mm paredes=10 yaw=   0.0 N | 5.69V -0.0mA | heap=122724
+[    99s] wifi=1 srv=1 corrida=5 env=62 reenv=0 ack=62 pend=0 queda=0 rtt=36/39/197>500:0 | E=  22 F= 383 D=  73 mm paredes=10 yaw=   0.0 N | 5.63V -0.0mA | heap=122724
+[   100s] wifi=1 srv=1 corrida=5 env=67 reenv=0 ack=67 pend=0 queda=0 rtt=36/39/197>500:0 | E=  21 F= 385 D=  72 mm paredes=10 yaw=   0.0 N | 5.66V -0.0mA | heap=122724
+[   101s] wifi=1 srv=1 corrida=5 env=72 reenv=0 ack=72 pend=0 queda=0 rtt=41/41/197>500:0 | E=  20 F= 386 D=  70 mm paredes=10 yaw=   0.0 N | 5.60V -0.0mA | heap=122724
+[   102s] wifi=1 srv=1 corrida=5 env=77 reenv=0 ack=77 pend=0 queda=0 rtt=44/42/197>500:0 | E=  20 F= 389 D=  71 mm paredes=10 yaw=   0.0 N | 5.70V 0.0mA | heap=122724
+[   103s] wifi=1 srv=1 corrida=5 env=82 reenv=0 ack=82 pend=0 queda=0 rtt=32/42/197>500:0 | E=  21 F= 385 D=  73 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=122724
+[   104s] wifi=1 srv=1 corrida=5 env=87 reenv=0 ack=86 pend=1 queda=0 rtt=32/42/197>500:0 | E=  20 F= 386 D=  71 mm paredes=10 yaw=   0.0 N | 5.65V -0.0mA | heap=122724
+[   105s] wifi=1 srv=1 corrida=5 env=92 reenv=0 ack=92 pend=0 queda=0 rtt=28/48/421>500:0 | E=  20 F= 382 D=  72 mm paredes=10 yaw=   0.0 N | 5.65V 0.0mA | heap=122724
+[   106s] wifi=1 srv=1 corrida=5 env=97 reenv=0 ack=97 pend=0 queda=0 rtt=49/48/421>500:0 | E=  19 F= 383 D=  72 mm paredes=10 yaw=   0.0 N | 5.68V 0.0mA | heap=122724
+[   107s] wifi=1 srv=1 corrida=5 env=102 reenv=0 ack=102 pend=0 queda=0 rtt=37/47/421>500:0 | E=  19 F= 386 D=  71 mm paredes=10 yaw=   0.0 N | 5.60V -0.0mA | heap=122724
+[   108s] wifi=1 srv=1 corrida=5 env=107 reenv=0 ack=107 pend=0 queda=0 rtt=38/46/421>500:0 | E=  21 F= 382 D=  72 mm paredes=10 yaw=   0.0 N | 5.63V -0.0mA | heap=121140
+[   109s] wifi=1 srv=1 corrida=5 env=112 reenv=0 ack=112 pend=0 queda=0 rtt=49/46/421>500:0 | E=  20 F= 385 D=  71 mm paredes=10 yaw=   0.0 N | 5.61V -0.0mA | heap=121140
+[   110s] wifi=1 srv=1 corrida=5 env=117 reenv=0 ack=117 pend=0 queda=0 rtt=37/46/421>500:0 | E=  18 F= 384 D=  72 mm paredes=10 yaw=   0.0 N | 5.64V 0.0mA | heap=122444
+[   111s] wifi=1 srv=1 corrida=5 env=122 reenv=0 ack=122 pend=0 queda=0 rtt=31/45/421>500:0 | E=  21 F= 389 D=  70 mm paredes=10 yaw=   0.0 N | 5.47V -0.0mA | heap=121140
+[   112s] wifi=1 srv=1 corrida=5 env=127 reenv=0 ack=127 pend=0 queda=0 rtt=32/45/421>500:0 | E=  19 F= 381 D=  73 mm paredes=10 yaw=   0.0 N | 5.63V -0.0mA | heap=122724
+[   113s] wifi=1 srv=1 corrida=5 env=132 reenv=0 ack=132 pend=0 queda=0 rtt=32/44/421>500:0 | E=  20 F= 385 D=  71 mm paredes=10 yaw=   0.0 N | 5.52V -0.0mA | heap=122724
+[   114s] wifi=1 srv=1 corrida=5 env=137 reenv=0 ack=137 pend=0 queda=0 rtt=35/44/421>500:0 | E=  18 F= 378 D=  71 mm paredes=10 yaw=   0.0 N | 5.59V 0.0mA | heap=122724
+[   115s] wifi=1 srv=1 corrida=5 env=142 reenv=0 ack=142 pend=0 queda=0 rtt=34/44/421>500:0 | E=  18 F= 382 D=  71 mm paredes=10 yaw=   0.0 N | 5.63V -0.0mA | heap=122724
+[   116s] wifi=1 srv=1 corrida=5 env=147 reenv=0 ack=147 pend=0 queda=0 rtt=31/43/421>500:0 | E=  18 F= 386 D=  71 mm paredes=10 yaw=   0.0 N | 5.61V 0.0mA | heap=122724
+### enviado 'f' em 16:46:05
+>>> corrida 5 encerrada (concluida)
+[   117s] wifi=1 srv=1 corrida=0 env=153 reenv=0 ack=152 pend=1 queda=0 rtt=35/43/421>500:0 | E=  19 F= 385 D=  72 mm paredes=10 yaw=   0.0 N | 5.55V -0.0mA | heap=121140
+[   118s] wifi=1 srv=1 corrida=0 env=153 reenv=0 ack=153 pend=0 queda=0 rtt=108/44/421>500:0 | E=  20 F= 382 D=  71 mm paredes=10 yaw=   0.0 N | 5.61V -0.0mA | heap=122724
+[   119s] wifi=1 srv=1 corrida=0 env=153 reenv=0 ack=153 pend=0 queda=0 rtt=108/44/421>500:0 | E=  20 F= 389 D=  72 mm paredes=10 yaw=   0.0 N | 5.70V 0.0mA | heap=122724
+[   120s] wifi=1 srv=1 corrida=0 env=153 reenv=0 ack=153 pend=0 queda=0 rtt=108/44/421>500:0 | E=  19 F= 389 D=  70 mm paredes=10 yaw=   0.0 N | 5.68V 0.0mA | heap=122724

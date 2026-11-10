@@ -1,0 +1,30 @@
+Diagnostico do travamento da ESP32 (10/11/2026)
+
+Sintoma: Guru Meditation Error: Core 1 panic'ed (IllegalInstruction), sempre logo
+no comeco do programa do VL53L0X, e em seguida reinicio.
+
+Backtrace decodificado (xtensa-esp32-elf-addr2line):
+  0x400ea18f: _svfprintf_r  (newlib vfprintf.c:1688)
+  0x400ee29e: _vsnprintf_r
+  0x400d32a2: Print::printf
+  0x400d1646: varrer(char const*)  teste_vl53.cpp:26
+  0x400d170a: setup()              teste_vl53.cpp:53
+
+Memoria lida pela ESP32 no endereco do erro x bytes gravados no firmware.elf:
+  ESP leu:  0x400ea18c: 42 d9 02 72 | 04 52 14 77 | 04 92 21 a0
+  gravado:  0x400ea18c: 42 d9 02 72 | 04 52 16 77 | 04 92 21 a0
+                                           ^^ um bit trocado (0x16 -> 0x14)
+
+Testes para achar a causa:
+  - Leitura da flash 3x com esptool read_flash: 0 diferencas -> flash integra.
+  - Flash em modo DOUT: continua travando.
+  - CPU a 80 MHz: continua travando.
+  - Porta USB traseira do PC: continua travando.
+  - XSHUT sempre em nivel alto: continua travando.
+  - teste_i2c e teste_encoder (codigo em outros enderecos): nao travam.
+  - Mesmo programa com o Arduino no nucleo 0 (-DARDUINO_RUNNING_CORE=0): nao trava;
+    30 s e 83 leituras dos 3 sensores sem nenhum reinicio.
+
+Conclusao: defeito na cache de instrucoes do nucleo 1 (APP CPU) desta ESP32
+(ESP32-D0WD-V3 rev3). Contorno no platformio.ini: -DARDUINO_RUNNING_CORE=0, e a
+tarefa de telemetria tambem fixa no nucleo 0. Trocar a placa resolve de vez.
