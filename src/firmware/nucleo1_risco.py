@@ -36,7 +36,8 @@ def ferramenta(nome):
     nucleo = os.environ.get("PLATFORMIO_CORE_DIR", os.path.expanduser("~/.platformio"))
     pastas += glob.glob(os.path.join(nucleo, "packages", "toolchain-xtensa*", "bin"))
     for pasta in pastas:
-        achados = glob.glob(os.path.join(pasta, f"xtensa-esp32-elf-{nome}*"))
+        achados = glob.glob(os.path.join(pasta, f"xtensa-esp32-elf-{nome}*")) or glob.glob(
+            os.path.join(pasta, f"xtensa-esp-elf-{nome}*"))
         if achados:
             return achados[0]
     raise FileNotFoundError(f"não achei o xtensa-esp32-elf-{nome} (procurei em {pastas})")

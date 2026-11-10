@@ -10,10 +10,10 @@
 // nada.
 #if defined(ESP_PLATFORM) || defined(ESP32)
 #include <esp_attr.h>
-// Nome de seção fixo (o IRAM_ATTR usa um nome por uso, o que quebra os
-// construtores e destrutores, gerados em duas cópias com apelido).
-// O linker do ESP32 manda .iram1.* para a IRAM.
-#define NUCLEO1 __attribute__((section(".iram1.nucleo1")))
+// IRAM_ATTR dá uma seção por função. Não use em construtor ou destrutor
+// inline de header: o compilador gera duas cópias com apelido e recusa
+// seções diferentes ("section of alias must match").
+#define NUCLEO1 IRAM_ATTR
 #define NUCLEO1_DADOS DRAM_ATTR
 #else
 #define NUCLEO1
