@@ -10,7 +10,8 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
 - `src/`: código que só roda no robô.
   - `main.cpp`: lê os sensores e envia a telemetria pelo Wi-Fi; comandos pelo monitor serial ou pelo botão BOOT.
   - `sensores.cpp`: 3 VL53L0X (endereços trocados pelo XSHUT), BNO085 e INA226.
-  - `telemetria_wifi.cpp`: envio por WebSocket numa tarefa própria, com o buffer para quedas de conexão.
+  - `telemetria_wifi.cpp`: envio por WebSocket numa tarefa própria (núcleo 0), com o buffer para quedas de conexão.
+  - `navegacao_nucleo1.cpp`: tarefa no núcleo 1 que atualiza o mapa com as paredes vistas e recalcula o Flood Fill (vai na telemetria como `valor_flood`).
   - `pinos.h`: pinagem da placa.
   - `bancada/`: testes de bancada de cada sensor, um programa por arquivo (ver abaixo).
 - `lib/`: lógica independente do hardware, testada no computador.
@@ -23,6 +24,8 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
 > **Atenção:** a ESP32 da placa atual tem defeito na cache do núcleo 1 e trava com `IllegalInstruction`. Por isso o `platformio.ini` roda o Arduino no núcleo 0 (`-DARDUINO_RUNNING_CORE=0`) e a tarefa de telemetria também fica no núcleo 0. Detalhes nos testes 3.11 e 3.18 do [7.3 - Testes de hardware](../../docs/7.3%20-%20Testes%20de%20hardware.md).
 >
 > O defeito é um único bit: o núcleo 1 roda normalmente funções `IRAM_ATTR` e qualquer código que não caia nos bytes defeituosos. Para saber o que não pode ir para o núcleo 1, compile e rode `python nucleo1_risco.py` (lista as funções afetadas naquela compilação).
+>
+> A navegação (`navegacao_nucleo1.cpp`: Flood Fill e modo automático) roda no núcleo 1. As funções dela ficam em `custom_nucleo1` no `platformio.ini`, e a compilação falha se alguma delas, ou algo que elas chamam, cair num byte defeituoso. Se isso acontecer, mude qualquer coisa no código (as funções mudam de endereço) e compile de novo.
 
 ## Compilar e gravar no robô
 ```bash

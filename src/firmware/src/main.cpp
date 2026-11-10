@@ -18,6 +18,7 @@
 #include <esp_heap_caps.h>
 #include <esp_heap_caps.h>
 
+#include "navegacao_nucleo1.h"
 #include "pacote.h"
 #include "pinos.h"
 #include "sensores.h"
@@ -97,10 +98,10 @@ void enviarTelemetria()
     const LeituraSensores &l = sensores.leitura();
     somaCorrente += l.corrente_ma;
     amostrasCorrente++;
-    // Parado na bancada: posição (0,0), velocidade 0 e sem Flood Fill (null).
+    // Parado na bancada: posição (0,0) e velocidade 0. O Flood Fill vem do núcleo 1.
     MensagemTelemetria tel = criarTelemetria(0, 0, millis() - inicioCorrida, 0, 0,
                                              letra(sensores.orientacao()), sensores.mascaraParedes(),
-                                             0.0f, tensaoContrato(), -1, "parado");
+                                             0.0f, tensaoContrato(), Navegacao::estado().valorFlood, "parado");
     TelemetriaWifi::publicar(tel);
 }
 
@@ -117,6 +118,9 @@ void mostrarStatus()
                   l.distancia_mm[LADO_FRONTAL], l.distancia_mm[LADO_DIREITO],
                   sensores.mascaraParedes(), l.yawGraus, letra(sensores.orientacao()), l.tensao_v,
                   l.corrente_ma, ESP.getFreeHeap());
+    Navegacao::Estado n = Navegacao::estado();
+    Serial.printf("         navegacao: nucleo=%u flood=%d ciclos=%u tempo=%u/%u us corridas simuladas ok=%u erradas=%u\n",
+                  n.nucleo, n.valorFlood, n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk, n.corridasErradas);
 }
 
 void tratarComando(char c)
@@ -189,6 +193,7 @@ void setup()
     const LeituraSensores &l = sensores.leitura();
     Serial.printf("Sensores: %u de 5 responderam (IMU=%d INA226=%d)\n", ok, l.imuOk, l.inaOk);
 
+    Navegacao::iniciar(4, 4); // tarefa no núcleo 1 (labirinto 4x4 da bancada)
     wifiAtivo = TelemetriaWifi::iniciar(WIFI_SSID, WIFI_SENHA, SERVIDOR_HOST, SERVIDOR_PORTA);
     if (wifiAtivo)
         Serial.printf("Wi-Fi: conectando em \"%s\", servidor ws://%s:%u/ws/telemetria\n", WIFI_SSID,
@@ -201,6 +206,9 @@ void setup()
 void loop()
 {
     sensores.atualizar();
+    const LeituraSensores &lido = sensores.leitura();
+    Navegacao::atualizarSensores(lido.parede[LADO_FRONTAL], lido.parede[LADO_ESQUERDO], lido.parede[LADO_DIREITO],
+                                 sensores.orientacao());
 
     uint32_t agora = millis();
     if (emCorrida && agora - ultimaTelemetria >= PERIODO_TELEMETRIA_MS)
