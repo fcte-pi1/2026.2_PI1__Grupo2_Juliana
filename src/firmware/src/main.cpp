@@ -229,4 +229,7 @@ void loop()
             iniciarOta();
         ArduinoOTA.handle();
     }
+    // O loop roda no núcleo 0 (defeito no núcleo 1), onde o watchdog vigia a
+    // tarefa ociosa: sem ceder a vez, um laço rápido derruba a ESP32.
+    vTaskDelay(1);
 }

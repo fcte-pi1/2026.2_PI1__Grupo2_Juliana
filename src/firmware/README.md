@@ -20,7 +20,9 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
 - `test/`: testes com [Unity](https://github.com/ThrowTheSwitch/Unity), um diretório `test_<nome>/` por módulo.
 - `include/credenciais.exemplo.h`: modelo do arquivo com o Wi-Fi e o servidor.
 
-> **Atenção:** a ESP32 da placa atual tem defeito na cache do núcleo 1 e trava com `IllegalInstruction`. Por isso o `platformio.ini` roda o Arduino no núcleo 0 (`-DARDUINO_RUNNING_CORE=0`) e a tarefa de telemetria também fica no núcleo 0. Detalhes no teste 3.11 do [7.3 - Testes de hardware](../../docs/7.3%20-%20Testes%20de%20hardware.md).
+> **Atenção:** a ESP32 da placa atual tem defeito na cache do núcleo 1 e trava com `IllegalInstruction`. Por isso o `platformio.ini` roda o Arduino no núcleo 0 (`-DARDUINO_RUNNING_CORE=0`) e a tarefa de telemetria também fica no núcleo 0. Detalhes nos testes 3.11 e 3.18 do [7.3 - Testes de hardware](../../docs/7.3%20-%20Testes%20de%20hardware.md).
+>
+> O defeito é um único bit: o núcleo 1 roda normalmente funções `IRAM_ATTR` e qualquer código que não caia nos bytes defeituosos. Para saber o que não pode ir para o núcleo 1, compile e rode `python nucleo1_risco.py` (lista as funções afetadas naquela compilação).
 
 ## Compilar e gravar no robô
 ```bash
@@ -65,6 +67,7 @@ Cada teste é um programa separado em `src/bancada/`, com seu ambiente no `platf
 | `teste_vl53` | os 3 VL53L0X: endereços pelo XSHUT e distâncias |
 | `teste_bno` | yaw, pitch e roll do BNO085 |
 | `teste_encoder` | contagem dos encoders girando a roda à mão (`z` zera) |
+| `teste_nucleo1` | o que o núcleo 1 consegue fazer: mapa do defeito da cache e execução de código (E1 a E4) |
 
 ```bash
 pio run -e teste_vl53 -t upload && pio device monitor
