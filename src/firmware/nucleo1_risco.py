@@ -26,11 +26,20 @@ BIT = 0x02
 SECOES = (".flash.text", ".flash.rodata")
 
 
+# Pasta do compilador. Dentro da compilação o nucleo1_verificar.py preenche com
+# a do PlatformIO; fora dela, procura nos pacotes instalados.
+PASTA_TOOLCHAIN = None
+
+
 def ferramenta(nome):
-    achados = glob.glob(os.path.expanduser(f"~/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-{nome}*"))
-    if not achados:
-        sys.exit(f"não achei o xtensa-esp32-elf-{nome} do PlatformIO")
-    return achados[0]
+    pastas = [PASTA_TOOLCHAIN] if PASTA_TOOLCHAIN else []
+    nucleo = os.environ.get("PLATFORMIO_CORE_DIR", os.path.expanduser("~/.platformio"))
+    pastas += glob.glob(os.path.join(nucleo, "packages", "toolchain-xtensa*", "bin"))
+    for pasta in pastas:
+        achados = glob.glob(os.path.join(pasta, f"xtensa-esp32-elf-{nome}*"))
+        if achados:
+            return achados[0]
+    raise FileNotFoundError(f"não achei o xtensa-esp32-elf-{nome} (procurei em {pastas})")
 
 
 def secoes(elf):

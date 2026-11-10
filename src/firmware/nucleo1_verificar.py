@@ -14,6 +14,10 @@ sys.path.insert(0, env.subst("$PROJECT_DIR"))  # noqa: F821
 import nucleo1_risco  # noqa: E402
 
 PADROES = env.GetProjectOption("custom_nucleo1", "").split()  # noqa: F821
+# Usa o mesmo compilador da compilação (a pasta muda entre Windows e o CI).
+_cc = env.WhereIs(env.subst("$CC"))  # noqa: F821
+if _cc:
+    nucleo1_risco.PASTA_TOOLCHAIN = os.path.dirname(_cc)
 
 
 def conferir(target, source, env):
