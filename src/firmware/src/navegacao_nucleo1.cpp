@@ -25,7 +25,7 @@ Navegacao::Estado saida = {-1, 0, 0, 0, 0, 0, 0};
 Labirinto mapa;
 FloodFill floodFill;
 
-void marcar(Direcao d, bool parede)
+NUCLEO1 void marcar(Direcao d, bool parede)
 {
     if (parede)
         mapa.marcarParede(mapa.x(), mapa.y(), d);
@@ -50,16 +50,17 @@ const uint8_t ROTA_CONFERIDA = 6;
 class RoboSimuladoNucleo1 : public InterfaceRobo
 {
 public:
-    explicit RoboSimuladoNucleo1(const Labirinto &g) : gabarito_(g) {}
-    bool calibrar() override { return true; }
-    void sentir(Labirinto &m) override
+    NUCLEO1 explicit RoboSimuladoNucleo1(const Labirinto &g) : gabarito_(g) {}
+    NUCLEO1 ~RoboSimuladoNucleo1() override {}
+    NUCLEO1 bool calibrar() override { return true; }
+    NUCLEO1 void sentir(Labirinto &m) override
     {
         Direcao f = m.orientacao();
         revelar(m, f);
         revelar(m, girarDireita(f));
         revelar(m, girarEsquerda(f));
     }
-    bool mover(Direcao d) override
+    NUCLEO1 bool mover(Direcao d) override
     {
         if (gabarito_.temParede(x_, y_, d))
             return false;
@@ -69,7 +70,7 @@ public:
     }
 
 private:
-    void revelar(Labirinto &m, Direcao d)
+    NUCLEO1 void revelar(Labirinto &m, Direcao d)
     {
         if (gabarito_.temParede(x_, y_, d))
             m.marcarParede(x_, y_, d);
@@ -84,7 +85,7 @@ Labirinto gabaritoSimulado;
 Labirinto mapaSimulado;
 uint8_t rotaEsperada = 0;
 
-uint8_t corridaSimulada()
+NUCLEO1 uint8_t corridaSimulada()
 {
     mapaSimulado.iniciar(4, 4, NORTE);
     RoboSimuladoNucleo1 robo(gabaritoSimulado);
@@ -95,7 +96,7 @@ uint8_t corridaSimulada()
     return modo.passosRapido();
 }
 
-void tarefaNavegacao(void *)
+NUCLEO1 void tarefaNavegacao(void *)
 {
     uint32_t versaoVista = UINT32_MAX;
     uint64_t somaUs = 0;

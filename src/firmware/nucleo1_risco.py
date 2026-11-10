@@ -144,8 +144,15 @@ def verificar(elf, padroes):
         pilha.extend(chamadas.get(f, ()))
     ordenados = sorted(inicios)
     problemas = []
+    tabela = simbolos(elf)
+    comecos = [t[0] for t in tabela]
     for secao, (_, perigosos) in bytes_perigosos(elf).items():
         for endereco in perigosos:
+            # Constantes com o nome das funções do núcleo 1 (ex.: a vtable do
+            # robô simulado, lida em toda chamada virtual).
+            objeto = dono(tabela, comecos, endereco)
+            if any(r.search(objeto) for r in regex):
+                problemas.append(f"0x{endereco:08x} ({secao}) na constante {objeto}")
             i = bisect.bisect_right(ordenados, endereco) - 1
             candidatos = []
             if i >= 0:
@@ -168,6 +175,12 @@ def main():
         padroes = args[1:]
         raizes, alcancadas, problemas = verificar(elf, padroes)
         print(f"{len(raizes)} funções do núcleo 1, {len(alcancadas)} alcançadas pelas chamadas")
+        inicios, _ = grafo(elf)
+        na_flash = sorted(nome for endereco, nome in inicios.items()
+                          if nome in alcancadas and 0x400D0000 <= endereco < 0x40400000)
+        print(f"{len(na_flash)} delas ainda na flash (passam pela cache do núcleo 1):")
+        for nome in na_flash:
+            print("   ", nome)
         for p in problemas:
             print("  PROBLEMA:", p)
         sys.exit(1 if problemas or not raizes else 0)

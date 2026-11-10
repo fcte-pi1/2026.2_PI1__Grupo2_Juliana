@@ -25,7 +25,7 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
 >
 > O defeito é um único bit: o núcleo 1 roda normalmente funções `IRAM_ATTR` e qualquer código que não caia nos bytes defeituosos. Para saber o que não pode ir para o núcleo 1, compile e rode `python nucleo1_risco.py` (lista as funções afetadas naquela compilação).
 >
-> A navegação (`navegacao_nucleo1.cpp`: Flood Fill e modo automático) roda no núcleo 1. As funções dela ficam em `custom_nucleo1` no `platformio.ini`, e a compilação falha se alguma delas, ou algo que elas chamam, cair num byte defeituoso. Se isso acontecer, mude qualquer coisa no código (as funções mudam de endereço) e compile de novo.
+> A navegação (`navegacao_nucleo1.cpp`: Flood Fill e modo automático) roda no núcleo 1, **na RAM interna**: as funções dela são marcadas com `NUCLEO1` (`lib/labirinto/nucleo1.h`), que no ESP32 as põe na IRAM e no computador não faz nada. Função nova chamada pelo núcleo 1 também precisa do `NUCLEO1`. As raízes ficam em `custom_nucleo1` no `platformio.ini`; depois de compilar, o `nucleo1_verificar.py` lista o que ainda ficou na flash e falha a compilação se algo cair num byte defeituoso.
 
 ## Compilar e gravar no robô
 ```bash

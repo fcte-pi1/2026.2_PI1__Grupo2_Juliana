@@ -7,7 +7,7 @@ const char *nomeEstado(EstadoRobo e)
     return e <= ESTADO_FALHA ? NOMES[e] : "falha";
 }
 
-void ModoAutomatico::iniciar()
+NUCLEO1 void ModoAutomatico::iniciar()
 {
     estado_ = ESTADO_CALIBRANDO;
     motivo_ = SEM_FALHA;
@@ -25,14 +25,14 @@ void ModoAutomatico::iniciar()
             }
 }
 
-EstadoRobo ModoAutomatico::executar()
+NUCLEO1 EstadoRobo ModoAutomatico::executar()
 {
     while (estado_ != ESTADO_PARADO && estado_ != ESTADO_FALHA)
         passo();
     return estado_;
 }
 
-EstadoRobo ModoAutomatico::passo()
+NUCLEO1 EstadoRobo ModoAutomatico::passo()
 {
     switch (estado_)
     {
@@ -81,7 +81,7 @@ EstadoRobo ModoAutomatico::passo()
     return estado_;
 }
 
-void ModoAutomatico::falhar(MotivoFalha m)
+NUCLEO1 void ModoAutomatico::falhar(MotivoFalha m)
 {
     motivo_ = m;
     estado_ = ESTADO_FALHA;
@@ -89,7 +89,7 @@ void ModoAutomatico::falhar(MotivoFalha m)
 
 // Uma célula em direção a (x, y), explorando: lado desconhecido conta como
 // aberto e o Flood Fill é recalculado a cada célula (RF11-S).
-void ModoAutomatico::navegarAte(uint8_t x, uint8_t y)
+NUCLEO1 void ModoAutomatico::navegarAte(uint8_t x, uint8_t y)
 {
     mapa_.definirObjetivo(x, y);
     floodFill_.recalcular(mapa_, EXPLORACAO);
@@ -106,7 +106,7 @@ void ModoAutomatico::navegarAte(uint8_t x, uint8_t y)
 
 // Segue o contrato do labirinto.h: consulta podeAvancar() antes do motor e
 // registra com avancar() depois que o robô andou de fato.
-bool ModoAutomatico::andar(Direcao d)
+NUCLEO1 bool ModoAutomatico::andar(Direcao d)
 {
     if (passos_ >= limitePassos_)
     {
@@ -133,7 +133,7 @@ bool ModoAutomatico::andar(Direcao d)
     return false;
 }
 
-void ModoAutomatico::chegouAoObjetivo()
+NUCLEO1 void ModoAutomatico::chegouAoObjetivo()
 {
     viagens_++;
     estado_ = ESTADO_RETORNANDO;
@@ -141,7 +141,7 @@ void ModoAutomatico::chegouAoObjetivo()
 
 // Na largada: se nenhum lado desconhecido puder encurtar a rota, corre pela
 // rota mais curta; senão faz mais uma ida e volta explorando (CT-SE14).
-void ModoAutomatico::chegouNaLargada()
+NUCLEO1 void ModoAutomatico::chegouNaLargada()
 {
     if (!floodFill_.rotaGarantida(mapa_))
     {
