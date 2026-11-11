@@ -42,17 +42,37 @@ O ESP32 e o computador precisam estar na mesma rede. O hotspot do celular não s
 
 O backend precisa aceitar conexões de fora: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
 
-### Comandos no monitor serial
+### Bateria e USB: nunca os dois juntos
+Com a bateria ligada, desligue o USB. Para ver e comandar o robô sem o cabo, use o **console pelo Wi-Fi** (porta 23), que mostra o mesmo que o monitor serial e aceita os mesmos comandos:
+```bash
+python console_wifi.py <IP do robô>      # o IP aparece no boot: "OTA e console pelo Wi-Fi prontos em ..."
+```
+Para gravar com a bateria ligada, use o OTA (abaixo).
+
+### Comandos (monitor serial ou console pelo Wi-Fi)
 | Tecla | Ação |
 | :--- | :--- |
-| `i` | inicia uma corrida (evento `inicio`); abra a corrida no sistema web antes |
+| `i` | calibra e inicia uma corrida (evento `inicio`); abra a corrida no sistema web antes |
 | `f` | encerra a corrida como concluída (evento `fim`) |
 | `a` | encerra a corrida como abandonada (manual) |
+| `c` | calibração: sensores, bateria, yaw e encoders zerados, e um toque em cada motor |
+| `l` | log de erros |
+| `m` | teste dos motores, **com as rodas no ar**: tabela de PWM × pulsos/s × corrente |
+| `e` | mostra e zera os encoders (para medir os pulsos por volta da roda) |
+| `p` | para os motores |
 | `z` | zera o yaw: a orientação atual vira o Norte |
 | `s` | mostra o estado agora |
 | `r` | zera as estatísticas de RTT |
 
-O botão BOOT inicia e encerra a corrida. A cada segundo o monitor mostra o Wi-Fi, a conexão com o servidor, as mensagens enviadas e confirmadas, o RTT (`rtt=último/médio/máximo`), as distâncias, as paredes, o yaw e a bateria.
+O botão BOOT inicia e encerra a corrida. A cada segundo o console mostra o Wi-Fi, a conexão com o servidor, as mensagens enviadas e confirmadas, o RTT (`rtt=último/médio/máximo`), as distâncias, as paredes, o yaw, a bateria (tensão, %, corrente, autonomia), os motores e os encoders.
+
+### Motores: limite de 5 V
+Pedido da Eletrônica: os motores N20 não podem passar de **5 V**. O driver (`motores.cpp`) limita o PWM a `5 V ÷ tensão da bateria` (59,5 % com a bateria cheia, 8,4 V), recalculado com a leitura do INA226, e sobe a potência em rampa (0 ao máximo em 0,5 s). Sem bateria (só USB) os motores não ligam: os 5 V do USB voltam pelo MP1584 até o DRV8833.
+
+Calibrar com o robô montado: `INVERTE_*` (motor ou encoder espelhado) e `PULSOS_POR_VOLTA` em `motores.h`.
+
+### Bateria
+Regras do Contrato de Telemetria (`lib/energia/monitor_bateria.*`): abaixo de 7,0 V por 1 s manda o evento `bateria_critica` (repete só depois de passar de 7,2 V); abaixo de 6,6 V por 1 s para os motores e encerra a corrida como abandonada; INA226 sem resposta faz o mesmo com `falha_sensor_bateria`. O percentual é linear de 6,4 a 8,4 V, como no painel.
 
 ### Gravar pelo Wi-Fi (OTA)
 ```bash
