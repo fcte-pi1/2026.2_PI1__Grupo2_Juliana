@@ -763,6 +763,89 @@ void tratarComando(char c)
         break;
     }
     case 'T': autoTeste(); break;
+    case 'W':
+    {
+        // SÓ NO USB: motores ligados por 90 s, alternando a cada 2 s, para
+        // escutar e procurar mau contato apertando de leve a placa. 'p' para.
+        if (bateria.presente() || sensores.leitura().tensao_v < 3.5f)
+        {
+            console.println(">>> teste 'W' e so no USB, sem bateria");
+            break;
+        }
+        console.println("\n>>> MOTORES NO USB POR 90 s, alternando a cada 2 s ('p' para)");
+        Motores::informarTensaoBateria(8.0f); // libera só neste teste
+        bool parar = false;
+        for (int i = 0; i < 45 && !parar; i++)
+        {
+            int m = i % 2;
+            int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+            float v0 = sensores.leitura().tensao_v, menor = v0;
+            Motores::pwmBruto(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+            for (uint32_t t0 = millis(); millis() - t0 < 2000;)
+            {
+                delay(30);
+                sensores.atualizar();
+                float v = sensores.leitura().tensao_v;
+                menor = v < menor ? v : menor;
+                if (console.ler() == 'p')
+                {
+                    parar = true;
+                    break;
+                }
+            }
+            int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+            console.printf("    %4.0fs %-8s %6ld pulsos (%4.0f RPM)  trilha caiu %3.0f mV%s\n", (i + 1) * 2.0f,
+                           m == 0 ? "esquerdo" : "direito", (long)pulsos,
+                           fabsf((float)pulsos) / Encoders::PULSOS_POR_VOLTA * 30, (v0 - menor) * 1000,
+                           labs(pulsos) > 100 ? "  <-- GIROU" : "");
+        }
+        Motores::parar();
+        Motores::informarTensaoBateria(0);
+        console.println(">>> fim do teste W");
+        break;
+    }
+    case 'y':
+    {
+        // SÓ NO USB: variações de modo e frequência do PWM a 100% (o motor
+        // recebe no máximo a tensão do driver, < 5 V), 3 s cada.
+        if (bateria.presente() || sensores.leitura().tensao_v < 3.5f)
+        {
+            console.println(">>> teste 'y' e so no USB, sem bateria");
+            break;
+        }
+        console.println("\n>>> VARIACOES NO USB (100% de PWM, 3 s cada)");
+        const uint32_t freqs[] = {20000, 1000, 200};
+        Motores::informarTensaoBateria(8.0f); // libera só neste teste
+        for (int m = 0; m < 2; m++)
+            for (int lento = 0; lento < 2; lento++)
+                for (uint32_t f : freqs)
+                {
+                    Motores::usarDecaimentoLento(lento);
+                    Motores::definirFrequencia(f);
+                    int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                    float v0 = sensores.leitura().tensao_v, menor = v0;
+                    Motores::pwmBruto(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+                    for (uint32_t t0 = millis(); millis() - t0 < 3000;)
+                    {
+                        delay(30);
+                        sensores.atualizar();
+                        float v = sensores.leitura().tensao_v;
+                        menor = v < menor ? v : menor;
+                    }
+                    Motores::parar();
+                    int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+                    console.printf("    %-8s %-6s %5u Hz: %6ld pulsos (%4.0f RPM), trilha caiu %3.0f mV\n",
+                                   m == 0 ? "esquerdo" : "direito", lento ? "lento" : "rapido", f, (long)pulsos,
+                                   fabsf((float)pulsos) / Encoders::PULSOS_POR_VOLTA * 20, (v0 - menor) * 1000);
+                    Motores::informarTensaoBateria(8.0f); // parar() não desliga a liberação
+                    delay(300);
+                }
+        Motores::usarDecaimentoLento(false);
+        Motores::definirFrequencia(20000);
+        Motores::informarTensaoBateria(0);
+        console.println(">>> variacoes concluidas");
+        break;
+    }
     case 'o':
     {
         // Sinais dos encoders: conta as mudanças de cada fio (A e B) por 8 s
