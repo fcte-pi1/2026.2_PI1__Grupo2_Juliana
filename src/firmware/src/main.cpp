@@ -763,6 +763,64 @@ void tratarComando(char c)
         break;
     }
     case 'T': autoTeste(); break;
+    case 'E':
+    {
+        // Liga/desliga só o pino SLEEP (EEP) do DRV8833, sem motor: mostra se
+        // o LED do módulo acompanha o SLEEP ou a alimentação.
+        static bool acordado = false;
+        Motores::parar(); // motores parados de qualquer jeito
+        acordado = !acordado;
+        digitalWrite(PINO_DRV_SLEEP, acordado ? HIGH : LOW);
+        console.printf(">>> DRV8833 %s (pino D32 = %d), motores parados\n",
+                       acordado ? "ACORDADO" : "dormindo", digitalRead(PINO_DRV_SLEEP));
+        break;
+    }
+    case 'I':
+    {
+        // Ligação ESP -> entradas do DRV8833. O DRV8833 puxa cada IN para 0 V
+        // (~100 kΩ). Com o pull-up interno da ESP (~45 kΩ), o pino lê 0 se o
+        // fio estiver ligado ao driver e 1 se estiver aberto (solda solta).
+        Motores::parar();
+        const int pinos[] = {PINO_MOTOR_E_IN1, PINO_MOTOR_E_IN2, PINO_MOTOR_D_IN1, PINO_MOTOR_D_IN2};
+        const char *nomes[] = {"D25 -> IN1 (esq. frente)", "D26 -> IN2 (esq. tras)", "D27 -> IN3 (dir. frente)",
+                               "D33 -> IN4 (dir. tras)"};
+        console.println("\n>>> LIGACAO DOS PINOS ATE O DRV8833 (pull-up da ESP x pull-down do driver)");
+        for (int p : pinos)
+            ledcDetachPin(p);
+        for (int i = 0; i < 4; i++)
+        {
+            pinMode(pinos[i], INPUT_PULLUP);
+            delay(5);
+            int leituras = 0;
+            for (int k = 0; k < 20; k++)
+                leituras += digitalRead(pinos[i]);
+            pinMode(pinos[i], INPUT_PULLDOWN);
+            console.printf("    %-26s le %s (%d/20 em 1)\n", nomes[i],
+                           leituras == 0 ? "0: ligado ao driver" : (leituras == 20 ? "1: ABERTO?" : "instavel: mau contato?"),
+                           leituras);
+        }
+        Motores::iniciar();
+        // No USB: motor esquerdo para trás (IN2) e para frente (IN1).
+        if (!bateria.presente() && sensores.leitura().tensao_v >= 3.5f)
+        {
+            Motores::informarTensaoBateria(8.0f); // libera só neste teste
+            const float sentidos[] = {-1, 1};
+            for (float s : sentidos)
+            {
+                int32_t p0 = Encoders::esquerdo();
+                Motores::pwmBruto(s, 0);
+                delay(1500);
+                Motores::parar();
+                Motores::informarTensaoBateria(8.0f);
+                console.printf("    motor esquerdo %-14s %6ld pulsos\n", s < 0 ? "tras (IN2):" : "frente (IN1):",
+                               (long)(Encoders::esquerdo() - p0));
+                delay(300);
+            }
+            Motores::informarTensaoBateria(0);
+        }
+        console.println(">>> fim");
+        break;
+    }
     case 'W':
     {
         // SÓ NO USB: motores ligados por 90 s, alternando a cada 2 s, para
