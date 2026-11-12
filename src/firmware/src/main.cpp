@@ -18,11 +18,14 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <Wire.h>
+#include <esp_system.h>
+#include <stdarg.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
 #include "console.h"
+#include "filtro_distancia.h"
 #include "log_erros.h"
 #include "monitor_bateria.h"
 #include "motores.h"
@@ -252,6 +255,179 @@ void testarMotores()
         }
     Motores::parar();
     console.println(">>> teste dos motores concluido");
+}
+
+// ---------- autoteste de todas as peças (comando T) ----------
+
+bool inaLer(uint8_t reg, int32_t &v)
+{
+    Wire.beginTransmission(0x40);
+    Wire.write(reg);
+    if (Wire.endTransmission(false) != 0 || Wire.requestFrom((uint8_t)0x40, (uint8_t)2) != 2)
+        return false;
+    v = (int16_t)((Wire.read() << 8) | Wire.read());
+    return true;
+}
+
+bool inaEscrever(uint8_t reg, uint16_t v)
+{
+    Wire.beginTransmission(0x40);
+    Wire.write(reg);
+    Wire.write(v >> 8);
+    Wire.write(v & 0xFF);
+    return Wire.endTransmission() == 0;
+}
+
+struct Resultado
+{
+    int ok = 0, falhas = 0;
+    void item(bool passou, const char *peca, const char *formato, ...)
+    {
+        char texto[120];
+        va_list args;
+        va_start(args, formato);
+        vsnprintf(texto, sizeof(texto), formato, args);
+        va_end(args);
+        console.printf("  [%s] %-22s %s\n", passou ? " OK  " : "FALHA", peca, texto);
+        passou ? ok++ : falhas++;
+    }
+};
+
+void autoTeste()
+{
+    Motores::parar();
+    Resultado r;
+    console.println("\n================ AUTOTESTE DA PLACA (rodas no ar!) ================");
+
+    // ESP32
+    const char *motivos[] = {"?", "ligou", "externo", "software", "PANICO", "watchdog int", "watchdog tarefa",
+                             "watchdog", "sono", "QUEDA DE ENERGIA", "SDIO"};
+    esp_reset_reason_t motivo = esp_reset_reason();
+    r.item(motivo != ESP_RST_BROWNOUT && motivo != ESP_RST_PANIC, "ESP32: ultimo reset", "%s",
+           motivo < 11 ? motivos[motivo] : "?");
+    r.item(ESP.getFreeHeap() > 30000, "ESP32: memoria", "%u B livres", ESP.getFreeHeap());
+    Navegacao::Estado n = Navegacao::estado();
+    r.item(n.nucleo == 1 && n.corridasErradas == 0, "ESP32: nucleo 1", "navegacao no nucleo %u, %u corridas ok",
+           n.nucleo, n.corridasOk);
+    r.item(WiFi.status() == WL_CONNECTED, "Wi-Fi", "sinal %d dBm", WiFi.RSSI());
+
+    // I2C
+    const uint8_t enderecos[] = {0x30, 0x31, 0x32, 0x4A, 0x40};
+    const char *nomesI2c[] = {"VL53L0X esq (0x30)", "VL53L0X front (0x31)", "VL53L0X dir (0x32)",
+                              "BNO085 (0x4A)", "INA226 (0x40)"};
+    for (int i = 0; i < 5; i++)
+    {
+        Wire.beginTransmission(enderecos[i]);
+        r.item(Wire.endTransmission() == 0, nomesI2c[i], "responde no I2C");
+    }
+
+    // VL53L0X: 2 s parado
+    uint16_t menor[3] = {65535, 65535, 65535}, maior[3] = {0, 0, 0};
+    float yaw0 = sensores.leitura().yawGraus, yawMax = 0;
+    for (uint32_t t0 = millis(); millis() - t0 < 2000;)
+    {
+        sensores.atualizar();
+        const LeituraSensores &l = sensores.leitura();
+        for (int i = 0; i < 3; i++)
+        {
+            menor[i] = l.distancia_mm[i] < menor[i] ? l.distancia_mm[i] : menor[i];
+            maior[i] = l.distancia_mm[i] > maior[i] ? l.distancia_mm[i] : maior[i];
+        }
+        float d = fabsf(l.yawGraus - yaw0);
+        yawMax = d > yawMax ? d : yawMax;
+        delay(20);
+    }
+    const char *lados[] = {"VL53L0X esquerdo", "VL53L0X frontal", "VL53L0X direito"};
+    for (int i = 0; i < 3; i++)
+    {
+        bool semAlvo = menor[i] >= DIST_SEM_ALVO;
+        r.item(!sensores.leitura().defeito[i] && (semAlvo || maior[i] - menor[i] < 30), lados[i],
+               semAlvo ? "sem alvo no alcance (ok)" : "%u a %u mm parado (ruido %u mm)", menor[i], maior[i],
+               maior[i] - menor[i]);
+    }
+
+    // BNO085
+    r.item(sensores.leitura().imuOk && yawMax < 2, "BNO085 (giroscopio)", "yaw variou %.2f graus em 2 s parado",
+           yawMax);
+
+    // INA226
+    int32_t fabricante = 0, chip = 0, barramento = 0, shunt = 0;
+    inaLer(0xFE, fabricante);
+    inaLer(0xFF, chip);
+    inaLer(0x02, barramento);
+    inaLer(0x01, shunt);
+    r.item((uint16_t)fabricante == 0x5449, "INA226: identificacao", "fabricante 0x%04X chip 0x%04X",
+           (uint16_t)fabricante, (uint16_t)chip);
+    r.item(bateria.presente(), "Bateria", "%.2f V (%u%%)", (uint16_t)barramento * 0.00125f, bateria.percentual());
+    r.item(abs((int)shunt) > 20, "INA226: corrente", "%.1f mA com a placa ligada (esperado ~100-200 mA)",
+           (int16_t)shunt * 0.0025f / 0.1f);
+
+    // Encoders parados
+    Encoders::zerar();
+    delay(1000);
+    r.item(Encoders::esquerdo() == 0 && Encoders::direito() == 0, "Encoders parados",
+           "E=%ld D=%ld pulsos em 1 s sem mexer", (long)Encoders::esquerdo(), (long)Encoders::direito());
+
+    // Pinos do DRV8833: curto entre entradas
+    const int pinos[] = {PINO_MOTOR_E_IN1, PINO_MOTOR_E_IN2, PINO_MOTOR_D_IN1, PINO_MOTOR_D_IN2};
+    int curtos = 0;
+    for (int p : pinos)
+        ledcDetachPin(p);
+    for (int i = 0; i < 4; i++)
+    {
+        for (int p : pinos)
+            pinMode(p, INPUT_PULLDOWN);
+        pinMode(pinos[i], OUTPUT);
+        digitalWrite(pinos[i], HIGH);
+        delay(5);
+        for (int j = 0; j < 4; j++)
+            if (j != i && digitalRead(pinos[j]) == HIGH)
+                curtos++;
+        digitalWrite(pinos[i], LOW);
+    }
+    Motores::iniciar();
+    r.item(curtos == 0, "DRV8833: pinos IN1-IN4", curtos ? "%d curtos entre entradas" : "sem curto", curtos);
+
+    // Motores a 5 V: rotação, corrente no INA226 e queda da bateria
+    if (bateria.presente())
+    {
+        inaEscrever(0x00, 0x4927); // média de 128, para ver microvolts
+        delay(300);
+        int32_t vRepouso = 0;
+        inaLer(0x02, vRepouso);
+        for (int m = 0; m < 2; m++)
+        {
+            int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+            int32_t shuntMax = 0, vMin = vRepouso, v = 0;
+            Motores::definir(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+            for (uint32_t t0 = millis(); millis() - t0 < 2000;)
+            {
+                Motores::atualizar(millis());
+                if (inaLer(0x01, v) && abs((int)v) > abs((int)shuntMax))
+                    shuntMax = v;
+                if (inaLer(0x02, v) && (uint16_t)v < (uint16_t)vMin)
+                    vMin = v;
+                delay(30);
+            }
+            Motores::parar();
+            int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+            float rpm = fabsf((float)pulsos) / Encoders::PULSOS_POR_VOLTA * 60 / 1.5f;
+            float queda = ((uint16_t)vRepouso - (uint16_t)vMin) * 1.25f;
+            r.item(rpm > 20, m == 0 ? "Motor esquerdo (5 V)" : "Motor direito (5 V)",
+                   "%.0f RPM, corrente %.0f mA, bateria caiu %.0f mV", rpm, (int16_t)shuntMax * 0.025f, queda);
+            delay(400);
+        }
+        inaEscrever(0x00, 0x4127);
+    }
+    else
+        r.item(false, "Motores", "sem bateria: nao testados");
+
+    // Servidor
+    EstatisticasTelemetria e = TelemetriaWifi::estatisticas();
+    r.item(e.servidor, "Servidor (telemetria)", e.servidor ? "conectado, RTT medio %u ms" : "desconectado (backend ligado?)",
+           e.rttMedio);
+
+    console.printf("================ %d OK, %d FALHA(S) ================\n", r.ok, r.falhas);
 }
 
 // ---------- console ----------
@@ -584,6 +760,81 @@ void tratarComando(char c)
         medir("motores parados de novo", 1500);
         escrever(0x00, 0x4127); // padrão
         console.println(">>> INA226 de volta ao padrao");
+        break;
+    }
+    case 'T': autoTeste(); break;
+    case 'o':
+    {
+        // Sinais dos encoders: conta as mudanças de cada fio (A e B) por 8 s
+        // enquanto alguém gira a roda. Fio que quase não muda = solto/defeito.
+        const int pinos[] = {PINO_ENC_E_A, PINO_ENC_E_B, PINO_ENC_D_A, PINO_ENC_D_B};
+        const char *nomes[] = {"esquerdo A (VP)", "esquerdo B (VN)", "direito A (D34)", "direito B (D35)"};
+        uint32_t mudancas[4] = {0, 0, 0, 0};
+        int anterior[4];
+        for (int i = 0; i < 4; i++)
+            anterior[i] = digitalRead(pinos[i]);
+        console.println("\n>>> SINAIS DOS ENCODERS: gire a roda nos proximos 8 s");
+        for (uint32_t t0 = millis(); millis() - t0 < 8000;)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                int v = digitalRead(pinos[i]);
+                if (v != anterior[i])
+                {
+                    mudancas[i]++;
+                    anterior[i] = v;
+                }
+            }
+            delayMicroseconds(50);
+            if ((millis() - t0) % 1000 == 0)
+                vTaskDelay(1); // deixa o watchdog em paz
+        }
+        for (int i = 0; i < 4; i++)
+            console.printf("    %-18s %6u mudancas (agora em %d)\n", nomes[i], mudancas[i], anterior[i]);
+        console.println(">>> fim");
+        break;
+    }
+    case 'u':
+    {
+        // Teste SÓ NO USB (sem bateria): os 5 V do USB voltam pelo MP1584 até a
+        // trilha de 7,4 V e chegam ao DRV8833 com ~4-5 V. Libera os motores só
+        // aqui, 1,5 s cada, com o PWM no máximo: o motor recebe no máximo a
+        // tensão do driver (< 5 V). Mostra se driver e motores funcionam por
+        // outro caminho de energia.
+        if (bateria.presente())
+        {
+            console.println(">>> teste 'u' e so no USB: desligue a bateria e ligue a ESP no USB/carregador");
+            break;
+        }
+        float vLinha = sensores.leitura().tensao_v;
+        console.printf("\n>>> TESTE NO USB: trilha da bateria em %.2f V (vinda do USB)\n", vLinha);
+        if (vLinha < 3.5f)
+        {
+            console.println(">>> trilha abaixo de 3,5 V: nao ha tensao para testar");
+            break;
+        }
+        Motores::informarTensaoBateria(8.0f); // libera só neste teste (bloqueio volta no próximo laço)
+        for (int m = 0; m < 2; m++)
+        {
+            int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+            float menor = vLinha;
+            Motores::pwmBruto(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+            for (uint32_t t0 = millis(); millis() - t0 < 1500;)
+            {
+                delay(30);
+                sensores.atualizar();
+                float v = sensores.leitura().tensao_v;
+                menor = v < menor ? v : menor;
+            }
+            Motores::parar();
+            int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+            console.printf("    motor %-8s %6ld pulsos (%.0f RPM)  trilha caiu de %.2f para %.2f V\n",
+                           m == 0 ? "esquerdo" : "direito", (long)pulsos,
+                           fabsf((float)pulsos) / Encoders::PULSOS_POR_VOLTA * 60 / 1.5f, vLinha, menor);
+            delay(500);
+        }
+        Motores::informarTensaoBateria(0);
+        console.println(">>> teste no USB concluido");
         break;
     }
     case 'x':
