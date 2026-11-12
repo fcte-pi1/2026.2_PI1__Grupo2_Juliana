@@ -13,7 +13,7 @@
 //  - INVERTE_*: um motor é montado espelhado; troque se a roda girar para trás
 //    com potência positiva, ou se o encoder contar negativo andando para frente.
 //  - PULSOS_POR_VOLTA: pulsos do encoder (duas bordas do canal A) em uma volta
-//    da RODA. Valor de partida para N20 de 7 PPR e redução 1:100; marque a
+//    da RODA. Medido em 11/11/2026 girando a roda 1 volta à mão (3305); marque a
 //    roda, gire uma volta à mão e confira com o comando 'e'.
 namespace Motores
 {
@@ -50,7 +50,7 @@ namespace Encoders
 {
 const bool INVERTE_ESQUERDO = true;
 const bool INVERTE_DIREITO = false;
-const float PULSOS_POR_VOLTA = 1400.0f; // calibrar (ver acima)
+const float PULSOS_POR_VOLTA = 3305.0f; // medido: 1 volta da roda à mão (11/11/2026)
 const float DIAMETRO_RODA_MM = 34.0f;   // roda N20 de 34 mm (docs/4.1)
 
 void iniciar();
