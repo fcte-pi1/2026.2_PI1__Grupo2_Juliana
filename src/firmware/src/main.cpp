@@ -418,6 +418,62 @@ void tratarComando(char c)
         console.println(">>> teste de frequencia concluido (de volta a 20 kHz)");
         break;
     }
+    case 'k':
+    {
+        // Os dois lados do driver juntos, nas 4 combinações de sentido, a 5 V.
+        // Um motor ligado entre saídas dos dois lados (OUT1-OUT3, por ex.) só
+        // gira quando os dois lados são acionados com polaridades diferentes.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        console.println("\n>>> DOIS LADOS JUNTOS a 5 V (rodas no ar!), 2 s cada");
+        console.println("lado E (D25/D26)  lado D (D27/D33)   pulsos E   pulsos D");
+        const int combos[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+        for (auto &c : combos)
+        {
+            int32_t e0 = Encoders::esquerdo(), d0 = Encoders::direito();
+            Motores::definir(c[0], c[1]);
+            esperarAtualizando(2000);
+            Motores::parar();
+            console.printf("    %-14s   %-14s   %8ld   %8ld\n", c[0] > 0 ? "+" : "-", c[1] > 0 ? "+" : "-",
+                           (long)(Encoders::esquerdo() - e0), (long)(Encoders::direito() - d0));
+            esperarAtualizando(400);
+        }
+        console.println(">>> teste concluido");
+        break;
+    }
+    case 'x':
+    {
+        // Curto entre os pinos do driver (ponte de solda), sem multímetro: com o
+        // DRV8833 dormindo, põe um pino em 1 e lê os outros (com pull-down).
+        Motores::parar();
+        const int pinos[] = {PINO_MOTOR_E_IN1, PINO_MOTOR_E_IN2, PINO_MOTOR_D_IN1, PINO_MOTOR_D_IN2};
+        const char *nomes[] = {"D25 (IN1)", "D26 (IN2)", "D27 (IN3)", "D33 (IN4)"};
+        console.println("\n>>> CURTO ENTRE PINOS DO DRIVER (motores desligados)");
+        int curtos = 0;
+        for (int p : pinos)
+            ledcDetachPin(p);
+        for (int i = 0; i < 4; i++)
+        {
+            for (int p : pinos)
+                pinMode(p, INPUT_PULLDOWN);
+            pinMode(pinos[i], OUTPUT);
+            digitalWrite(pinos[i], HIGH);
+            delay(5);
+            for (int j = 0; j < 4; j++)
+                if (j != i && digitalRead(pinos[j]) == HIGH)
+                {
+                    console.printf("    %s em 1 -> %s tambem em 1: CURTO\n", nomes[i], nomes[j]);
+                    curtos++;
+                }
+            digitalWrite(pinos[i], LOW);
+        }
+        Motores::iniciar(); // devolve os pinos ao PWM
+        console.printf(">>> %s\n", curtos ? "ha curto entre pinos do driver" : "nenhum curto entre os pinos do driver");
+        break;
+    }
     case 'p': Motores::parar(); console.println(">>> motores parados"); break;
     case 'z': sensores.zerarYaw(); console.println(">>> yaw zerado"); break;
     case 's': mostrarStatus(); break;
