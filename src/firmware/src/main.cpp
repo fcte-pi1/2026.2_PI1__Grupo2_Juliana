@@ -17,6 +17,7 @@
 //   r  zera as estatísticas de RTT
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <Wire.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
@@ -503,6 +504,86 @@ void tratarComando(char c)
             delay(400);
         }
         console.println(">>> teste concluido, de volta ao limite de 5 V");
+        break;
+    }
+    case 'w':
+    {
+        // Monitor ao vivo para ajustar o regulador: motor esquerdo no limite
+        // normal (5 V) por 90 s, rotação a cada 0,5 s. 'p' interrompe.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        console.println("\n>>> MONITOR AO VIVO: motor esquerdo no limite de 5 V por 90 s ('p' para)");
+        Motores::definir(1, 0);
+        for (int i = 0; i < 180; i++)
+        {
+            esperarAtualizando(500);
+            float rpm = fabsf(Encoders::pulsosPorSegundoEsquerda()) / Encoders::PULSOS_POR_VOLTA * 60;
+            console.printf("    %5.1fs  roda esquerda %5.1f RPM  bateria %.2f V\n", (i + 1) / 2.0f, rpm,
+                           sensores.leitura().tensao_v);
+            int c = console.ler();
+            if (c == 'p')
+                break;
+        }
+        Motores::parar();
+        console.println(">>> monitor encerrado, motor parado");
+        break;
+    }
+    case 'n':
+    {
+        // O INA226 mede IN+ - IN- (as pontas do shunt) em passos de 2,5 uV.
+        // Com os motores zumbindo: se o driver é alimentado depois do shunt e o
+        // shunt está ruim, a diferença dispara; se fica em zero, a corrente dos
+        // motores não passa pelo INA226.
+        auto escrever = [](uint8_t reg, uint16_t v) {
+            Wire.beginTransmission(0x40);
+            Wire.write(reg);
+            Wire.write(v >> 8);
+            Wire.write(v & 0xFF);
+            return Wire.endTransmission() == 0;
+        };
+        auto ler = [](uint8_t reg, int32_t &v) {
+            Wire.beginTransmission(0x40);
+            Wire.write(reg);
+            if (Wire.endTransmission(false) != 0 || Wire.requestFrom((uint8_t)0x40, (uint8_t)2) != 2)
+                return false;
+            v = (int16_t)((Wire.read() << 8) | Wire.read());
+            return true;
+        };
+        auto medir = [&](const char *rotulo, uint32_t ms) {
+            int32_t menor = 32767, maior = -32768, bus = 0, v = 0;
+            uint32_t t0 = millis();
+            while (millis() - t0 < ms)
+            {
+                Motores::atualizar(millis());
+                if (ler(0x01, v))
+                {
+                    menor = v < menor ? v : menor;
+                    maior = v > maior ? v : maior;
+                }
+                delay(30);
+            }
+            ler(0x02, bus);
+            console.printf("    %-28s shunt %+6ld a %+6ld (%+.3f a %+.3f mV)  barramento %.3f V\n", rotulo,
+                           (long)menor, (long)maior, menor * 0.0025f, maior * 0.0025f, (uint16_t)bus * 0.00125f);
+        };
+        int32_t config = 0;
+        ler(0x00, config);
+        console.printf("\n>>> INA226: config 0x%04X, media de 128 leituras\n", (uint16_t)config);
+        escrever(0x00, 0x4927); // AVG=128, conversão de 1,1 ms, contínuo
+        delay(300);
+        medir("motores parados", 1500);
+        if (bateria.presente())
+        {
+            Motores::definir(1, 1);
+            medir("dois motores zumbindo (5 V)", 5000);
+            Motores::parar();
+        }
+        medir("motores parados de novo", 1500);
+        escrever(0x00, 0x4127); // padrão
+        console.println(">>> INA226 de volta ao padrao");
         break;
     }
     case 'x':
