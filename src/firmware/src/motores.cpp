@@ -165,6 +165,21 @@ void definirTensaoMaxima(float volts)
     tetoMotor = volts > TENSAO_ABSOLUTA_MOTOR_V ? TENSAO_ABSOLUTA_MOTOR_V : volts;
 }
 float tensaoMaxima() { return tetoMotor; }
+void pwmBruto(float esquerdo, float direito)
+{
+    if (!bateriaPresente())
+        return;
+    if (!ligado)
+    {
+        digitalWrite(PINO_DRV_SLEEP, HIGH);
+        ligado = true;
+    }
+    alvoE = alvoD = atualE = atualD = 0; // a rampa não mexe enquanto isso
+    aplicadoE = limitar(esquerdo, 1) * (INVERTE_ESQUERDO ? -1 : 1);
+    aplicadoD = limitar(direito, 1) * (INVERTE_DIREITO ? -1 : 1);
+    aplicar(CANAL_E1, CANAL_E2, aplicadoE);
+    aplicar(CANAL_D1, CANAL_D2, aplicadoD);
+}
 void definirFrequencia(uint32_t hz)
 {
     for (uint8_t c : {CANAL_E1, CANAL_E2, CANAL_D1, CANAL_D2})

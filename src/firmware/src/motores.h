@@ -42,6 +42,9 @@ bool habilitado();
 void definirTensaoMaxima(float volts);
 float tensaoMaxima();
 void definirFrequencia(uint32_t hz); // PWM (padrão 20 kHz)
+// SÓ PARA O TESTE COM TRAVA POR VELOCIDADE: PWM direto (0 a 1), sem o limite
+// de 5 V e sem rampa. Quem chama precisa vigiar o encoder e parar.
+void pwmBruto(float esquerdo, float direito);
 float pwmEsquerdo();          // PWM aplicado agora, -1 a 1
 float pwmDireito();
 } // namespace Motores

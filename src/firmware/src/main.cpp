@@ -444,6 +444,67 @@ void tratarComando(char c)
         console.println(">>> teste concluido");
         break;
     }
+    case 'g':
+    {
+        // PWM subindo em degraus com TRAVA POR VELOCIDADE: a rotação da roda é
+        // proporcional à tensão no motor. Corta assim que passar de LIMITE_RPM
+        // (abaixo do que o motor faz a 5 V), então mesmo com o DRV8833 na
+        // bateria inteira o motor só passa de 5 V por uma fração de segundo.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        const float LIMITE_RPM = 40;
+        const float limitePps = LIMITE_RPM / 60.0f * Encoders::PULSOS_POR_VOLTA;
+        console.printf("\n>>> PWM EM DEGRAUS COM TRAVA (rodas no ar!) bateria %.2f V, corta acima de %.0f RPM\n",
+                       bateria.tensao(), LIMITE_RPM);
+        console.println("motor     PWM%   equivale a (se VCC = bateria)   RPM maximo no degrau");
+        for (int m = 0; m < 2; m++)
+        {
+            bool cortou = false;
+            for (int passo = 0; passo <= 8 && !cortou; passo++)
+            {
+                float pwm = 0.62f + passo * 0.05f;
+                if (pwm > 1)
+                    pwm = 1;
+                Motores::pwmBruto(m == 0 ? pwm : 0, m == 1 ? pwm : 0);
+                float maxRpm = 0;
+                int32_t anterior = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                uint32_t t0 = millis(), tJanela = t0;
+                while (millis() - t0 < 500)
+                {
+                    delay(20);
+                    sensores.atualizar();
+                    uint32_t agora = millis();
+                    if (agora - tJanela >= 60)
+                    {
+                        int32_t atual = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                        float pps = fabsf((float)(atual - anterior)) * 1000.0f / (agora - tJanela);
+                        float rpm = pps / Encoders::PULSOS_POR_VOLTA * 60;
+                        if (rpm > maxRpm)
+                            maxRpm = rpm;
+                        anterior = atual;
+                        tJanela = agora;
+                        if (pps > limitePps)
+                        {
+                            Motores::parar();
+                            cortou = true;
+                            break;
+                        }
+                    }
+                }
+                console.printf("%-8s %5.0f   %5.1f V                         %6.1f%s\n", m == 0 ? "esquerdo" : "direito",
+                               pwm * 100, pwm * bateria.tensao(), maxRpm, cortou ? "  <- CORTOU (trava)" : "");
+                if (pwm >= 1)
+                    break;
+            }
+            Motores::parar();
+            delay(400);
+        }
+        console.println(">>> teste concluido, de volta ao limite de 5 V");
+        break;
+    }
     case 'x':
     {
         // Curto entre os pinos do driver (ponte de solda), sem multímetro: com o
