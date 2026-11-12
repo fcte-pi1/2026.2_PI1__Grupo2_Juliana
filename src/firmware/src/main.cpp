@@ -294,6 +294,130 @@ void tratarComando(char c)
                        (long)Encoders::direito());
         Encoders::zerar();
         break;
+    case 'h':
+    case 'j':
+    {
+        // Segura um motor no máximo (5 V) por 10 s, para medir com o multímetro.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        bool esq = c == 'h';
+        console.printf(">>> motor %s no maximo por 10 s (PWM %.0f%% de %.2f V)\n", esq ? "ESQUERDO" : "DIREITO",
+                       Motores::pwmMaximo() * 100, bateria.tensao());
+        Motores::definir(esq ? 1 : 0, esq ? 0 : 1);
+        for (int s = 0; s < 10; s++)
+        {
+            esperarAtualizando(1000);
+            console.printf("    %2ds: pulsos/s E=%.0f D=%.0f corrente=%.0f mA\n", s + 1,
+                           Encoders::pulsosPorSegundoEsquerda(), Encoders::pulsosPorSegundoDireita(),
+                           sensores.leitura().corrente_ma);
+        }
+        Motores::parar();
+        console.println(">>> motor parado");
+        break;
+    }
+    case 'd':
+    {
+        // Diagnóstico sem multímetro: cada motor, sentido e modo de PWM a 5 V por
+        // 2 s. Pulsos = a roda girou; queda da bateria = o motor puxou corrente.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        console.println("\n>>> DIAGNOSTICO DOS MOTORES (rodas no ar!) a 5 V, 2 s cada");
+        console.println("motor     sentido  PWM     pulsos   queda bateria mV   corrente mA");
+        for (int lento = 0; lento < 2; lento++)
+            for (int m = 0; m < 2; m++)
+                for (int sentido = 1; sentido >= -1; sentido -= 2)
+                {
+                    Motores::usarDecaimentoLento(lento);
+                    esperarAtualizando(300);
+                    float antes = sensores.leitura().tensao_v;
+                    int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                    Motores::definir(m == 0 ? sentido : 0, m == 1 ? sentido : 0);
+                    float menor = antes, maiorCorrente = 0;
+                    uint32_t t0 = millis();
+                    while (millis() - t0 < 2000)
+                    {
+                        esperarAtualizando(20);
+                        const LeituraSensores &l = sensores.leitura();
+                        if (l.tensao_v < menor)
+                            menor = l.tensao_v;
+                        if (fabsf(l.corrente_ma) > maiorCorrente)
+                            maiorCorrente = fabsf(l.corrente_ma);
+                    }
+                    int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+                    Motores::parar();
+                    console.printf("%-8s  %-7s  %-6s %7ld   %16.0f   %11.0f\n", m == 0 ? "esquerdo" : "direito",
+                                   sentido > 0 ? "frente" : "tras", lento ? "lento" : "rapido", (long)pulsos,
+                                   (antes - menor) * 1000, maiorCorrente);
+                }
+        Motores::usarDecaimentoLento(false);
+        console.println(">>> diagnostico concluido");
+        break;
+    }
+    case 'v':
+    {
+        // Varredura de 5 a 6 V (máximo do N20), supondo o DRV8833 com a tensão
+        // da bateria: no pior caso o motor recebe 6 V. Para no primeiro degrau
+        // que girar e volta o teto para 5 V.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        console.printf("\n>>> VARREDURA 5 a 6 V (rodas no ar!) bateria %.2f V\n", bateria.tensao());
+        const float degraus[] = {5.0f, 5.3f, 5.6f, 6.0f};
+        for (int m = 0; m < 2; m++)
+        {
+            for (float v : degraus)
+            {
+                Motores::definirTensaoMaxima(v);
+                int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                Motores::definir(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+                esperarAtualizando(1500);
+                int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+                console.printf("%-8s %.1f V (PWM %.0f%%): %ld pulsos\n", m == 0 ? "esquerdo" : "direito", v,
+                               Motores::pwmMaximo() * 100, (long)pulsos);
+                if (labs(pulsos) > 20)
+                    break;
+            }
+            Motores::parar();
+            esperarAtualizando(300);
+        }
+        Motores::definirTensaoMaxima(Motores::TENSAO_MAX_MOTOR_V);
+        console.printf(">>> varredura concluida, teto de volta em %.1f V\n", Motores::tensaoMaxima());
+        break;
+    }
+    case 'q':
+    {
+        // Frequência do PWM a 5 V: mesma tensão média, rendimento diferente.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        console.printf("\n>>> FREQUENCIA DO PWM a 5 V (rodas no ar!) bateria %.2f V\n", bateria.tensao());
+        const uint32_t freqs[] = {20000, 5000, 1000, 200};
+        for (int m = 0; m < 2; m++)
+            for (uint32_t f : freqs)
+            {
+                Motores::definirFrequencia(f);
+                int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+                Motores::definir(m == 0 ? 1 : 0, m == 1 ? 1 : 0);
+                esperarAtualizando(1500);
+                int32_t pulsos = (m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0;
+                Motores::parar();
+                console.printf("%-8s %5u Hz: %ld pulsos\n", m == 0 ? "esquerdo" : "direito", f, (long)pulsos);
+                esperarAtualizando(300);
+            }
+        Motores::definirFrequencia(20000);
+        console.println(">>> teste de frequencia concluido (de volta a 20 kHz)");
+        break;
+    }
     case 'p': Motores::parar(); console.println(">>> motores parados"); break;
     case 'z': sensores.zerarYaw(); console.println(">>> yaw zerado"); break;
     case 's': mostrarStatus(); break;

@@ -18,6 +18,7 @@
 namespace Motores
 {
 const float TENSAO_MAX_MOTOR_V = 5.0f;  // teto no motor (Eletrônica)
+const float TENSAO_ABSOLUTA_MOTOR_V = 6.0f; // máximo do motor N20: nenhum teste passa disso
 const float TENSAO_PIOR_CASO_V = 8.4f;  // bateria cheia, se não houver leitura
 const float RAMPA_POR_SEGUNDO = 2.0f;   // fração da potência por segundo
 const bool INVERTE_ESQUERDO = false;
@@ -35,15 +36,20 @@ void definir(float esquerdo, float direito);
 void atualizar(uint32_t agora_ms);
 void frear();                 // as duas entradas em 1: freio ativo
 void parar();                 // freia e desliga o driver (SLEEP)
+void usarDecaimentoLento(bool lento); // modo do PWM no DRV8833 (padrão: rápido)
 bool habilitado();
+// Só para teste: muda o teto (limitado a TENSAO_ABSOLUTA_MOTOR_V). Volte para 5 V.
+void definirTensaoMaxima(float volts);
+float tensaoMaxima();
+void definirFrequencia(uint32_t hz); // PWM (padrão 20 kHz)
 float pwmEsquerdo();          // PWM aplicado agora, -1 a 1
 float pwmDireito();
 } // namespace Motores
 
 namespace Encoders
 {
-const bool INVERTE_ESQUERDO = false;
-const bool INVERTE_DIREITO = true;
+const bool INVERTE_ESQUERDO = true;
+const bool INVERTE_DIREITO = false;
 const float PULSOS_POR_VOLTA = 1400.0f; // calibrar (ver acima)
 const float DIAMETRO_RODA_MM = 34.0f;   // roda N20 de 34 mm (docs/4.1)
 

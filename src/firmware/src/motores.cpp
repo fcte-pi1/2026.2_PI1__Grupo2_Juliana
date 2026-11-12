@@ -29,12 +29,30 @@ float aproximar(float atual, float alvo, float passo)
     return atual - passo < alvo ? alvo : atual - passo;
 }
 
-// Decaimento rápido: PWM numa entrada e 0 na outra define o sentido.
+bool decaimentoLento = false;
+float tetoMotor = Motores::TENSAO_MAX_MOTOR_V;
+
+// Decaimento rápido: PWM numa entrada e 0 na outra (motor solto no intervalo).
+// Decaimento lento: 1 numa entrada e PWM invertido na outra (motor em curto no
+// intervalo): mais força em baixa rotação. A tensão média é a mesma nos dois.
 void aplicar(uint8_t canal1, uint8_t canal2, float pwm)
 {
     uint32_t duty = (uint32_t)(fabsf(pwm) * PWM_CHEIO + 0.5f);
-    ledcWrite(canal1, pwm > 0 ? duty : 0);
-    ledcWrite(canal2, pwm < 0 ? duty : 0);
+    if (pwm == 0)
+    {
+        ledcWrite(canal1, 0);
+        ledcWrite(canal2, 0);
+    }
+    else if (decaimentoLento)
+    {
+        ledcWrite(canal1, pwm > 0 ? PWM_CHEIO : PWM_CHEIO - duty);
+        ledcWrite(canal2, pwm < 0 ? PWM_CHEIO : PWM_CHEIO - duty);
+    }
+    else
+    {
+        ledcWrite(canal1, pwm > 0 ? duty : 0);
+        ledcWrite(canal2, pwm < 0 ? duty : 0);
+    }
 }
 
 void escrever()
@@ -90,7 +108,7 @@ float pwmMaximo()
     // Tensão fora da faixa de uma 2S (sem bateria, só USB, leitura ruim):
     // usa o pior caso para nunca passar de 5 V no motor.
     float v = bateriaPresente() ? tensaoBateria : TENSAO_PIOR_CASO_V;
-    float m = TENSAO_MAX_MOTOR_V / v;
+    float m = tetoMotor / v;
     return m > 1 ? 1 : m;
 }
 
@@ -141,6 +159,17 @@ void parar()
 }
 
 bool habilitado() { return ligado; }
+void usarDecaimentoLento(bool lento) { decaimentoLento = lento; }
+void definirTensaoMaxima(float volts)
+{
+    tetoMotor = volts > TENSAO_ABSOLUTA_MOTOR_V ? TENSAO_ABSOLUTA_MOTOR_V : volts;
+}
+float tensaoMaxima() { return tetoMotor; }
+void definirFrequencia(uint32_t hz)
+{
+    for (uint8_t c : {CANAL_E1, CANAL_E2, CANAL_D1, CANAL_D2})
+        ledcChangeFrequency(c, hz, BITS_PWM);
+}
 float pwmEsquerdo() { return aplicadoE; }
 float pwmDireito() { return aplicadoD; }
 } // namespace Motores
