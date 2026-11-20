@@ -16,7 +16,6 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
-#include <esp_heap_caps.h>
 
 #include "navegacao_nucleo1.h"
 #include "pacote.h"
