@@ -19,6 +19,8 @@ struct LeituraSensores
     bool inaOk;
     float tensao_v;            // ~0 V sem bateria (só USB)
     float corrente_ma;
+    uint32_t imuEventos;       // leituras do BNO085 recebidas desde o boot (~50/s)
+    uint16_t imuReinicios;     // resets do BNO085 por ficar mudo
 };
 
 class Sensores
@@ -38,9 +40,11 @@ public:
     uint8_t mascaraParedes() const;
 
 private:
+    uint8_t ligarDistancia(); // liga os 3 VL53L0X um por vez e troca o endereço
     void lerImu();
     void lerIna();
     LeituraSensores leitura_ = {};
     float yawBruto_ = 0;
     float yawZero_ = 0;
+    uint32_t ultimoEventoImu_ = 0;
 };
