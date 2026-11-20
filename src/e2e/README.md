@@ -69,6 +69,18 @@ Teste automatizado só ajuda se o grupo confiar nele. Um teste que às vezes fal
 
 Caso que ainda dependa de tela ou rota que não existe entra como `test.fixme`: aparece como *skipped* no relatório.
 
+## Com o robô real
+
+`robo-real/` tem casos em que a telemetria vem do ESP32 pelo Wi-Fi, e não do simulador. Eles usam outra configuração ([playwright.robo-real.config.ts](playwright.robo-real.config.ts)), que **não sobe servidores e não apaga o banco**: usam o backend (8000) e o frontend (5173) de desenvolvimento, que o robô alcança pela rede. Por isso ficam fora do `npx playwright test` normal e do CI.
+
+| Caso | Arquivo | O que mede |
+| :--- | :--- | :--- |
+| CT-S04 (robô real) | `robo-real/ct-s04-robo-real.spec.ts` | Atraso da chegada no navegador até a tela desenhada, pacote a pacote. Somado ao RTT do monitor serial do robô, dá o atraso total (RNF06-S) |
+
+1. Suba o backend com `--host 0.0.0.0` e o frontend (`npm run dev`), e ligue o robô no mesmo Wi-Fi (veja o [README do firmware](../firmware/README.md)).
+2. Rode `E2E_EVIDENCIAS=1 npx playwright test -c playwright.robo-real.config.ts`. O teste abre a corrida e avisa no terminal.
+3. Inicie a corrida no robô (tecla `i` no monitor serial ou botão BOOT). O teste termina depois de 50 pacotes (`E2E_MIN_PACOTES` muda o número).
+
 ## Evidências para o documento 7.4
 
 Cada caso anexa ao relatório do Playwright as evidências pedidas no roteiro (prints, CSV das consultas ao banco, log do simulador, latências). Para gravá-las também em `docs/evidencias/<caso>/`, no padrão `<caso>_<AAAA-MM-DD>_exec<n>_<nome>.<ext>`:
