@@ -12,10 +12,11 @@
 #define BNO_RST 18
 #define INA226_ADDR 0x40
 
-#define ENC_D_A 36
-#define ENC_D_B 39
-#define ENC_E_A 34
-#define ENC_E_B 35
+// Encoders como no pinos.h: na placa montada o esquerdo está em VP/VN (11/11/2026).
+#define ENC_E_A 36
+#define ENC_E_B 39
+#define ENC_D_A 34
+#define ENC_D_B 35
 #define MOT_SLEEP 32
 
 Adafruit_BNO08x bno08x(-1); // Controlaremos o RST manualmente no pino 18 para ser infalível
