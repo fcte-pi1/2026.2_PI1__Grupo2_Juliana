@@ -569,6 +569,72 @@ void tratarComando(char c)
         console.printf(">>> varredura concluida, teto de volta em %.1f V\n", Motores::tensaoMaxima());
         break;
     }
+    case 'b':
+    {
+        // Diagnóstico do BNO085 (16/11/2026): conta as quedas do INT (D19, vai a
+        // 0 com leitura pronta) e as leituras que chegam pelo I2C em 3 s.
+        // INT caindo sem leituras = I2C perde; INT parado = o sensor não mede.
+        static volatile uint32_t quedas = 0;
+        attachInterrupt(PINO_BNO_INT, [] { quedas++; }, FALLING);
+        quedas = 0;
+        LeituraSensores a = sensores.leitura();
+        for (uint32_t t0 = millis(); millis() - t0 < 3000;)
+        {
+            sensores.atualizar();
+            delay(2);
+        }
+        detachInterrupt(PINO_BNO_INT);
+        const LeituraSensores &l = sensores.leitura();
+        console.printf(">>> BNO085 em 3 s: INT caiu %lu vezes, %lu leituras I2C, %u resets, imuOk=%d, INT agora=%d\n",
+                       (unsigned long)quedas, (unsigned long)(l.imuEventos - a.imuEventos),
+                       l.imuReinicios - a.imuReinicios, l.imuOk, digitalRead(PINO_BNO_INT));
+        break;
+    }
+    case '6':
+        // Alterna o teto dos motores entre 5 V (padrão) e 6 V (máximo do N20),
+        // para rodar h, j, m... a 6 V. Volta para 5 V ao reiniciar.
+        Motores::definirTensaoMaxima(Motores::tensaoMaxima() < 5.5f ? Motores::TENSAO_ABSOLUTA_MOTOR_V
+                                                                    : Motores::TENSAO_MAX_MOTOR_V);
+        console.printf(">>> teto dos motores: %.1f V (PWM max %.0f%%)\n", Motores::tensaoMaxima(),
+                       Motores::pwmMaximo() * 100);
+        break;
+    case 'V':
+    {
+        // Cada motor direto a 6 V (máximo do N20), sem rampa, por 6 s. PWM bruto
+        // calculado pela bateria: no motor nunca passa de 6 V.
+        if (!bateria.presente())
+        {
+            console.println(">>> sem bateria, motores bloqueados");
+            break;
+        }
+        float pwm = Motores::TENSAO_ABSOLUTA_MOTOR_V / bateria.tensao();
+        pwm = pwm > 1 ? 1 : pwm;
+        console.printf("\n>>> 6 V DIRETO por 6 s cada (rodas no ar!) bateria %.2f V, PWM %.0f%%\n", bateria.tensao(),
+                       pwm * 100);
+        for (int m = 0; m < 2; m++)
+        {
+            int32_t p0 = m == 0 ? Encoders::esquerdo() : Encoders::direito();
+            Motores::pwmBruto(m == 0 ? pwm : 0, m == 1 ? pwm : 0);
+            for (int s = 0; s < 6; s++)
+            {
+                // Sem Motores::atualizar: a rampa zeraria o PWM bruto.
+                for (uint32_t t0 = millis(); millis() - t0 < 1000;)
+                {
+                    sensores.atualizar();
+                    Encoders::atualizar(millis());
+                    delay(5);
+                }
+                console.printf("    %-8s %ds: %5.0f pulsos/s\n", m == 0 ? "esquerdo" : "direito", s + 1,
+                               m == 0 ? Encoders::pulsosPorSegundoEsquerda() : Encoders::pulsosPorSegundoDireita());
+            }
+            Motores::parar();
+            console.printf("    %-8s total: %ld pulsos\n", m == 0 ? "esquerdo" : "direito",
+                           (long)((m == 0 ? Encoders::esquerdo() : Encoders::direito()) - p0));
+            esperarAtualizando(500);
+        }
+        console.println(">>> teste 6 V concluido");
+        break;
+    }
     case 'q':
     {
         // Frequência do PWM a 5 V: mesma tensão média, rendimento diferente.
@@ -1092,9 +1158,72 @@ void setup()
     console.println("Comandos: i f a c l s m e p z r (veja o topo do main.cpp)");
 }
 
+#ifdef TESTE_AO_LIGAR
+// Teste ao ligar (pedido de 16/11/2026): 10 s depois do boot, os dois motores
+// a 6 V por 15 s, com os VL53L0X e o BNO085 lidos ao mesmo tempo. Na bateria o
+// PWM é 6 V / tensão da bateria; no USB o driver só recebe ~4,8 V, então vai a
+// 100 % (fica abaixo de 6 V). RODAS NO AR. 'p' pelo console interrompe.
+const uint32_t TESTE_AO_LIGAR_ATRASO_MS = 10000;
+const uint32_t TESTE_AO_LIGAR_DURACAO_MS = 15000;
+
+void testeAoLigar()
+{
+    bool usb = !bateria.presente();
+    float vAlim = usb ? sensores.leitura().tensao_v : bateria.tensao();
+    float pwm = usb ? 1.0f : Motores::TENSAO_ABSOLUTA_MOTOR_V / vAlim;
+    pwm = pwm > 1 ? 1 : pwm;
+    console.printf("\n>>> TESTE AO LIGAR: motores a %.1f V por %lu s (%s %.2f V, PWM %.0f%%), RODAS NO AR\n",
+                   pwm * vAlim, TESTE_AO_LIGAR_DURACAO_MS / 1000, usb ? "USB" : "bateria", vAlim, pwm * 100);
+    if (usb)
+        Motores::informarTensaoBateria(8.0f); // libera os motores só neste teste
+    Motores::pwmBruto(pwm, pwm);
+    console.println("  tempo | dist E   F   D (mm) | yaw graus | pulsos/s E    D | BNO leituras/s resets");
+    uint32_t t0 = millis(), ultimo = 0, eventosAntes = sensores.leitura().imuEventos;
+    while (millis() - t0 < TESTE_AO_LIGAR_DURACAO_MS)
+    {
+        // Sem Motores::atualizar: a rampa zeraria o PWM bruto.
+        sensores.atualizar();
+        Encoders::atualizar(millis());
+        if (millis() - ultimo >= 500)
+        {
+            ultimo = millis();
+            const LeituraSensores &l = sensores.leitura();
+            console.printf("  %4.1fs | %5u %5u %5u   | %8.1f%s | %6.0f %6.0f | %6lu %5u\n", (ultimo - t0) / 1000.0f,
+                           l.distancia_mm[LADO_ESQUERDO], l.distancia_mm[LADO_FRONTAL], l.distancia_mm[LADO_DIREITO],
+                           l.yawGraus, l.imuOk ? "" : " (BNO sem resposta)", Encoders::pulsosPorSegundoEsquerda(),
+                           Encoders::pulsosPorSegundoDireita(), (unsigned long)(l.imuEventos - eventosAntes) * 2,
+                           l.imuReinicios);
+            eventosAntes = l.imuEventos;
+        }
+        if (wifiAtivo && WiFi.status() == WL_CONNECTED)
+            console.atender();
+        if (console.ler() == 'p')
+        {
+            console.println(">>> interrompido ('p')");
+            break;
+        }
+        delay(5);
+    }
+    Motores::parar();
+    if (usb)
+        Motores::informarTensaoBateria(0);
+    console.println(">>> teste ao ligar concluido, motores parados");
+}
+
+#endif
+
 void loop()
 {
     uint32_t agora = millis();
+#ifdef TESTE_AO_LIGAR
+    static bool testeFeito = false;
+    if (!testeFeito && agora >= TESTE_AO_LIGAR_ATRASO_MS)
+    {
+        testeFeito = true;
+        testeAoLigar();
+        agora = millis();
+    }
+#endif
     sensores.atualizar();
     Motores::atualizar(agora);
     Encoders::atualizar(agora);
