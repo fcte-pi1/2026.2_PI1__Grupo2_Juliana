@@ -162,7 +162,7 @@ bool reservarMemoria()
 
 bool iniciar(const char *ssid, const char *senha, const char *host, uint16_t porta)
 {
-    if (ssid == nullptr || ssid[0] == '\0')
+    if (pbuffer == nullptr || ssid == nullptr || ssid[0] == '\0')
         return false;
     trava = xSemaphoreCreateMutex();
     WiFi.mode(WIFI_STA);

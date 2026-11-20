@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 // Testes com o robô de verdade (ESP32 mandando telemetria pelo Wi-Fi).
 // Não sobe servidores nem apaga banco: usa o backend (8000) e o frontend (5173)
-// de desenvolvimento, que o ESP32 alcança pela rede. Veja robo-real/README.md.
+// de desenvolvimento, que o ESP32 alcança pela rede. Veja README.md ("Com o robô real").
 export default defineConfig({
   testDir: './robo-real',
   fullyParallel: false,
