@@ -38,6 +38,10 @@ public:
     Direcao orientacao() const;
     // Máscara de paredes do contrato (N=1, L=2, S=4, O=8) vista dos 3 sensores.
     uint8_t mascaraParedes() const;
+    // Limiares da detecção de parede de um lado, em mm (calibração, #279).
+    void configurarLimiares(LadoSensor lado, uint16_t liga, uint16_t desliga);
+    uint16_t limiarLiga(LadoSensor lado) const;
+    uint16_t limiarDesliga(LadoSensor lado) const;
 
 private:
     uint8_t ligarDistancia(); // liga os 3 VL53L0X um por vez e troca o endereço

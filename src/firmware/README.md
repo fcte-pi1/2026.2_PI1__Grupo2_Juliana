@@ -63,6 +63,8 @@ Para gravar com a bateria ligada, use o OTA (abaixo).
 | `z` | zera o yaw: a orientação atual vira o Norte |
 | `s` | mostra o estado agora |
 | `r` | zera as estatísticas de RTT |
+| `L` | calibra os limiares de parede (#279): robô parado no centro de uma célula, mede com paredes nos 3 lados e depois sem elas; os limiares ficam salvos na flash |
+| `Q` / `G` / `H` | derruba o Wi-Fi por 5 s / 60 s / 12 min, este último até encher o buffer (#282). Inicie a corrida com `i` antes; o console Wi-Fi cai junto, então acompanhe pela serial ou mande `l` depois |
 
 O botão BOOT inicia e encerra a corrida. A cada segundo o console mostra o Wi-Fi, a conexão com o servidor, as mensagens enviadas e confirmadas, o RTT (`rtt=último/médio/máximo`), as distâncias, as paredes, o yaw, a bateria (tensão, %, corrente, autonomia), os motores e os encoders.
 
