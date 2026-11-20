@@ -154,9 +154,55 @@ void test_filtro_mais_detector_em_serie_com_pico()
     }
 }
 
+// ---------- calibração dos limiares (#279) ----------
+
+void test_limiares_lado_tipico() {
+    // parede lateral a 60 mm; sem ela, a próxima a 240 mm
+    LimiaresParede l = calcularLimiares(60, 240);
+    TEST_ASSERT_TRUE(l.ok);
+    TEST_ASSERT_EQUAL_UINT16(139, l.liga);    // meio 150, histerese 22
+    TEST_ASSERT_EQUAL_UINT16(161, l.desliga);
+}
+
+void test_limiares_sem_alvo_usa_a_celula_seguinte() {
+    LimiaresParede a = calcularLimiares(60, DIST_SEM_ALVO);
+    LimiaresParede b = calcularLimiares(60, 60 + CELULA_MM);
+    TEST_ASSERT_TRUE(a.ok);
+    TEST_ASSERT_EQUAL_UINT16(b.liga, a.liga);
+    TEST_ASSERT_EQUAL_UINT16(b.desliga, a.desliga);
+}
+
+void test_limiares_separam_as_duas_medidas() {
+    // com o ruído medido na bancada (±5 mm) a parede liga e desliga certo
+    LimiaresParede l = calcularLimiares(100, 280);
+    DetectorParede d;
+    d.configurar(l.liga, l.desliga);
+    TEST_ASSERT_TRUE(d.atualizar(100 + 5));
+    TEST_ASSERT_TRUE(d.atualizar(100 - 5));
+    TEST_ASSERT_FALSE(d.atualizar(280 - 5));
+    TEST_ASSERT_FALSE(d.atualizar(DIST_SEM_ALVO));
+}
+
+void test_limiares_histerese_minima() {
+    LimiaresParede l = calcularLimiares(60, 110); // diferença 50: 1/8 daria 6
+    TEST_ASSERT_TRUE(l.ok);
+    TEST_ASSERT_EQUAL_UINT16(10, l.desliga - l.liga);
+}
+
+void test_limiares_recusa_medidas_ruins() {
+    TEST_ASSERT_FALSE(calcularLimiares(0, 240).ok);             // sensor sem leitura
+    TEST_ASSERT_FALSE(calcularLimiares(DIST_SEM_ALVO, 240).ok); // parede não estava lá
+    TEST_ASSERT_FALSE(calcularLimiares(60, 80).ok);             // parede não foi tirada
+}
+
 int main()
 {
     UNITY_BEGIN();
+    RUN_TEST(test_limiares_lado_tipico);
+    RUN_TEST(test_limiares_sem_alvo_usa_a_celula_seguinte);
+    RUN_TEST(test_limiares_separam_as_duas_medidas);
+    RUN_TEST(test_limiares_histerese_minima);
+    RUN_TEST(test_limiares_recusa_medidas_ruins);
     RUN_TEST(test_sem_leitura_nao_esta_pronto_e_vale_sem_alvo);
     RUN_TEST(test_mediana_de_serie_real_parada);
     RUN_TEST(test_mediana_com_menos_leituras_que_a_janela);
