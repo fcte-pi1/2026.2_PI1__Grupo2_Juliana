@@ -1,11 +1,5 @@
 # Modelos para impressão 3D
 
-Os arquivos de manufatura aditiva ainda não estavam versionados no repositório quando esta pasta foi organizada.
+[`referencias/`](./referencias/) contém dois arquivos STL extraídos da pasta de componentes comerciais do pacote `Estruturas_PI1_2026_2.zip`: um suporte de motor N20 e uma roda. São modelos de referência; **não está confirmado que correspondam às peças fabricadas ou à montagem final**.
 
-Devem ser adicionados aqui, quando disponibilizados pela equipe, os modelos (`.STL` ou `.3MF`) das peças impressas, como:
-
-- base e abraçadeira do suporte dos motores;
-- pilares e elementos de fixação do labirinto;
-- outros suportes estruturais efetivamente utilizados na montagem final.
-
-Antes da inclusão, deve-se conferir se o arquivo corresponde à versão realmente fabricada.
+Os arquivos de impressão das peças efetivamente utilizadas, incluindo os suportes dos motores e os elementos do labirinto, devem ser conferidos e acrescentados quando disponíveis. Antes de fabricar qualquer peça, conferir a geometria, as dimensões e a versão com a equipe.

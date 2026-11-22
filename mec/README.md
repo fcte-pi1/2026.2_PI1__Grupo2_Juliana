@@ -7,12 +7,12 @@ Esta pasta reúne os artefatos do projeto mecânico e estrutural do Micromouse, 
 | Diretório | Conteúdo |
 |---|---|
 | [`componentes/`](./componentes/) | Imagens de referência das rodas e das alternativas de apoio do chassi. |
-| [`desenhos-tecnicos/`](./desenhos-tecnicos/) | Desenhos dos três patamares do chassi, base e abraçadeira do suporte do motor, além da EBOM. |
+| [`desenhos-tecnicos/`](./desenhos-tecnicos/) | Desenhos em PNG e [PDF](./desenhos-tecnicos/pdf/), incluindo peças, montagem e EBOM. |
 | [`modelos-cad/`](./modelos-cad/) | Imagens renderizadas do modelo CAD, incluindo vistas completa, explodida, da base e da montagem atualizada. |
 | [`testes/`](./testes/) | Fotografias usadas como evidências dos testes estruturais de inventário, medição, montagem, encaixe de componentes, pesagem, sensores e cabeamento. |
 | [`documentos/`](./documentos/) | Índice dos documentos de projeto, testes estruturais e integração mantidos em `docs/`. |
-| [`arquivos-cad/`](./arquivos-cad/) | Controle dos arquivos CAD editáveis ainda pendentes de inclusão. |
-| [`impressao-3d/`](./impressao-3d/) | Controle dos modelos de impressão 3D ainda pendentes de inclusão. |
+| [`arquivos-cad/`](./arquivos-cad/) | Montagem e peças em SolidWorks, montagem STEP, desenhos editáveis e arquivos da base do labirinto. |
+| [`impressao-3d/`](./impressao-3d/) | Modelos STL de referência, cuja correspondência com as peças fabricadas deve ser verificada. |
 
 ## Inventário atual
 
@@ -22,18 +22,13 @@ Esta pasta reúne os artefatos do projeto mecânico e estrutural do Micromouse, 
 - 5 imagens do modelo CAD;
 - 30 fotografias de testes e da montagem física.
 
-Os arquivos desta pasta foram organizados a partir dos artefatos estruturais já existentes no repositório. As cópias originais foram mantidas em `docs/figs/estruturas/` para preservar os links utilizados na documentação atual.
+Os arquivos desta pasta foram organizados a partir dos artefatos estruturais do repositório e do pacote `Estruturas_PI1_2026_2.zip`. As imagens originais em `docs/figs/estruturas/` foram mantidas para preservar os links da documentação.
 
 ## Artefatos pendentes
 
-As imagens comprovam a existência dos modelos, mas os seguintes arquivos-fonte ainda não estavam versionados no repositório no momento desta organização:
+O pacote CAD disponibilizado é de setembro de 2026. Confirmar se a montagem corresponde à versão final e à atualização descrita no teste 1.5, e verificar as referências ao abrir os arquivos no SolidWorks. Os STLs incluídos são referências comerciais e ainda precisam ser comparados às peças fabricadas. Permanecem pendentes os modelos de impressão das peças finais e demais arquivos do labirinto que não estejam no pacote.
 
-- arquivos editáveis do SolidWorks (`.SLDPRT` e `.SLDASM`);
-- arquivos neutros para intercâmbio CAD (`.STEP` ou `.STP`);
-- arquivos de impressão 3D (`.STL` ou `.3MF`);
-- arquivos CAD e de impressão 3D referentes ao labirinto de testes.
-
-Quando forem obtidos, os modelos CAD deverão ser adicionados em `arquivos-cad/` e os modelos de manufatura aditiva em `impressao-3d/`.
+Também faltam os registros complementares de massa por componente, centro de gravidade e envelope final, a partir das medições e dados conferidos pela equipe.
 
 ## Documentação relacionada
 
