@@ -180,11 +180,10 @@ void encerrarCorrida(bool concluida, MotivoAbandono motivo = MOTIVO_MANUAL)
 
 void enviarTelemetria()
 {
-    // Pose, paredes da célula, Flood Fill e estado vêm da navegação (núcleo 1).
-    Navegacao::Estado n = Navegacao::estado();
+    // Posição (0,0) por enquanto: a pose vem da navegação quando o robô andar.
     MensagemTelemetria tel = criarTelemetria(
-        0, 0, millis() - inicioCorrida, (int8_t)n.x, (int8_t)n.y, letra(n.orientacao), n.paredes,
-        fabsf(Encoders::velocidadeMs()), tensaoContrato(), n.valorFlood, estadoContrato(n.estadoRobo));
+        0, 0, millis() - inicioCorrida, 0, 0, letra(sensores.orientacao()), sensores.mascaraParedes(),
+        fabsf(Encoders::velocidadeMs()), tensaoContrato(), Navegacao::estado().valorFlood, "parado");
     TelemetriaWifi::publicar(tel);
 }
 
@@ -454,10 +453,9 @@ void mostrarStatus()
                    Motores::pwmEsquerdo() * 100, Motores::pwmDireito() * 100, Motores::pwmMaximo() * 100,
                    (long)Encoders::esquerdo(), (long)Encoders::direito(), Encoders::velocidadeMs());
     Navegacao::Estado n = Navegacao::estado();
-    console.printf("         navegacao: (%u,%u) %c paredes=%2u %s nucleo=%u flood=%d ciclos=%u tempo=%u/%u us "
-                   "corridas simuladas ok=%u erradas=%u\n",
-                   n.x, n.y, letra(n.orientacao), n.paredes, estadoContrato(n.estadoRobo), n.nucleo, n.valorFlood,
-                   n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk, n.corridasErradas);
+    console.printf("         navegacao: nucleo=%u flood=%d ciclos=%u tempo=%u/%u us corridas simuladas ok=%u erradas=%u\n",
+                   n.nucleo, n.valorFlood, n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk,
+                   n.corridasErradas);
 }
 
 // ---------- limiares de parede (#279) ----------
