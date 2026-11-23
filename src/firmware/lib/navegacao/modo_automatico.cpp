@@ -7,6 +7,11 @@ const char *nomeEstado(EstadoRobo e)
     return e <= ESTADO_FALHA ? NOMES[e] : "falha";
 }
 
+const char *estadoContrato(EstadoRobo e)
+{
+    return e <= ESTADO_PARADO ? nomeEstado(e) : nomeEstado(ESTADO_PARADO);
+}
+
 NUCLEO1 void ModoAutomatico::iniciar()
 {
     estado_ = ESTADO_CALIBRANDO;

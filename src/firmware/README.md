@@ -8,7 +8,7 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
 
 ## Estrutura
 - `src/`: código que só roda no robô.
-  - `main.cpp`: lê os sensores e envia a telemetria pelo Wi-Fi; comandos pelo monitor serial ou pelo botão BOOT.
+  - `main.cpp`: lê os sensores, envia a telemetria pelo Wi-Fi e roda a corrida automática; comandos pelo monitor serial ou pelo botão BOOT.
   - `sensores.cpp`: 3 VL53L0X (endereços trocados pelo XSHUT), BNO085 e INA226.
   - `telemetria_wifi.cpp`: envio por WebSocket numa tarefa própria (núcleo 0), com o buffer para quedas de conexão.
   - `navegacao_nucleo1.cpp`: tarefa no núcleo 1 que atualiza o mapa com as paredes vistas e recalcula o Flood Fill (vai na telemetria como `valor_flood`).
@@ -16,9 +16,10 @@ Firmware do Micromouse para o ESP32-DEVKIT-V1 em C++ com o framework Arduino, us
   - `bancada/`: testes de bancada de cada sensor, um programa por arquivo (ver abaixo).
 - `lib/`: lógica independente do hardware, testada no computador.
   - `labirinto/`: mapa e pose do robô. `navegacao/`: Flood Fill e máquina de estados do modo automático.
+  - `movimento/`: controle de movimento célula a célula (andar, girar, centralizar nas paredes) e o `RoboFisico`, que liga o modo automático ao robô.
   - `sensores/`: filtro de ruído (mediana) e detecção de paredes dos VL53L0X.
   - `telemetria/`: pacotes do contrato, CRC16 e buffer de retransmissão.
-- `test/`: testes com [Unity](https://github.com/ThrowTheSwitch/Unity), um diretório `test_<nome>/` por módulo.
+- `test/`: testes com [Unity](https://github.com/ThrowTheSwitch/Unity), um diretório `test_<nome>/` por módulo. O `test_movimento` usa um robô simulado com física simples (`robo_fisico_simulado.h`: motores, encoders, giroscópio, os 3 sensores medindo as paredes e colisão) para rodar o controle e a corrida inteira sem o robô.
 - `include/credenciais.exemplo.h`: modelo do arquivo com o Wi-Fi e o servidor.
 
 > **Atenção:** a ESP32 da placa atual tem defeito na cache do núcleo 1 e trava com `IllegalInstruction`. Por isso o `platformio.ini` roda o Arduino no núcleo 0 (`-DARDUINO_RUNNING_CORE=0`) e a tarefa de telemetria também fica no núcleo 0. Detalhes nos testes 3.11 e 3.18 do [7.3 - Testes de hardware](../../docs/7.3%20-%20Testes%20de%20hardware.md).
@@ -65,13 +66,39 @@ Para gravar com a bateria ligada, use o OTA (abaixo).
 | `r` | zera as estatísticas de RTT |
 | `L` | calibra os limiares de parede (#279): robô parado no centro de uma célula, mede com paredes nos 3 lados e depois sem elas; os limiares ficam salvos na flash |
 | `Q` / `G` / `H` | derruba o Wi-Fi por 5 s / 60 s / 12 min, este último até encher o buffer (#282). Inicie a corrida com `i` antes; o console Wi-Fi cai junto, então acompanhe pela serial ou mande `l` depois |
+| `A` | **corrida automática** (robô no chão, bateria): explora até o objetivo, volta, repete se preciso e faz a corrida rápida; `p`, `a` ou BOOT param |
+| `M` / `B` | tamanho do labirinto (células à frente × ao lado na largada) / onde ficam as bordas do canto: atrás e à esquerda, atrás e à direita, à frente e à direita ou à frente e à esquerda (robô virado para a borda); ficam salvos na flash |
+| `F` / `3` | anda 1 / 3 células (CT-SE05) |
+| `<` / `>` / `U` | gira 90° à esquerda / à direita / meia-volta (CT-SE06) |
+| `O` | liga/desliga o log do controle: uma linha `mov,...` a cada 50 ms com erro lateral e sinal de controle (CT-SE07) |
+| `K` | parâmetros do controle, referências da calibração das paredes e labirinto configurado |
+| `Y` | calibra os encoders: com uma parede a 30-90 cm na frente, anda ~20 cm e compara os pulsos com a distância medida pelo sensor; mostra se algum encoder ou motor está invertido e salva os pulsos por mm na flash |
+| `+` / `-` | PWM máximo do movimento, de 0 a 255 em passos de 5 (padrão 20, salvo na flash): limita andar, girar e o reforço da roda parada |
 
-O botão BOOT inicia e encerra a corrida. A cada segundo o console mostra o Wi-Fi, a conexão com o servidor, as mensagens enviadas e confirmadas, o RTT (`rtt=último/médio/máximo`), as distâncias, as paredes, o yaw, a bateria (tensão, %, corrente, autonomia), os motores e os encoders.
+O botão BOOT, sem corrida: um toque inicia uma corrida com o robô parado (só telemetria, como o `i`); **segurado por 1 s**, a corrida automática (começa 1 s depois de soltar). Com corrida, apertar encerra. A cada segundo o console mostra o Wi-Fi, a conexão com o servidor, as mensagens enviadas e confirmadas, o RTT (`rtt=último/médio/máximo`), as distâncias, as paredes, o yaw, a bateria (tensão, %, corrente, autonomia), os motores e os encoders.
 
 ### Motores: limite de 5 V
 Pedido da Eletrônica: os motores N20 não podem passar de **5 V**. O driver (`motores.cpp`) limita o PWM a `5 V ÷ tensão da bateria` (59,5 % com a bateria cheia, 8,4 V), recalculado com a leitura do INA226, e sobe a potência em rampa (0 ao máximo em 0,5 s). Sem bateria (só USB) os motores não ligam: os 5 V do USB voltam pelo MP1584 até o DRV8833.
 
 Calibrar com o robô montado: `INVERTE_*` (motor ou encoder espelhado) e `PULSOS_POR_VOLTA` em `motores.h`.
+
+### Corrida automática
+O modo automático (`lib/navegacao/modo_automatico.*`) decide a próxima célula pelo Flood Fill; o `RoboFisico` (`lib/movimento/robo_fisico.*`) gira para ela e anda uma célula com o controle de movimento (`lib/movimento/controle_movimento.*`), e lê as paredes parado no centro. Roda no núcleo 0, junto com o laço: durante o movimento, a telemetria (com a pose do mapa e o estado), a bateria, o console e o OTA continuam rodando.
+
+O controle de movimento:
+- **anda** pelo encoder (média das rodas), mantendo o rumo e centralizando nas paredes dos lados; com parede na frente, para pela distância até ela (corrige o erro dos encoders);
+- **gira** no lugar até o rumo, pelo BNO085 ou, sem ele, pela diferença dos encoders;
+- **sem o BNO085** (ainda falha na bateria), o rumo vem dos encoders e é corrigido pelas paredes laterais enquanto anda. Por isso a **largura do eixo** (`larguraEixoMm` em `controle_movimento.h`, centro a centro das rodas) precisa ser medida com até ~2 mm de erro;
+- guarda o quanto o robô ficou fora do centro de cada célula e compensa no próximo movimento;
+- se as rodas travarem (colisão) ou aparecer parede onde o mapa não tinha, volta de ré ao centro da célula e o modo automático recalcula o caminho (RF16-S).
+
+Primeiro teste no robô, nesta ordem:
+1. Medir a largura do eixo e acertar `larguraEixoMm`; conferir `INVERTE_*` em `motores.h` (comando `m`, rodas no ar).
+2. `L` no centro de uma célula: além dos limiares, salva a distância de cada lado até a parede, que o controle usa para parar e centralizar.
+3. Num corredor: `F`, `3`, `<`, `>`, `U`. Ajustar os ganhos e potências em `ParametrosMovimento` (`controle_movimento.h`; `K` mostra os atuais). Potência mínima baixa demais = robô não sai do lugar e acusa bloqueio; ganho de rumo alto demais = zigue-zague.
+4. `M` e `B` com o labirinto da corrida, `K` para conferir, abrir a corrida no sistema web e `A` (ou BOOT segurado).
+
+Os ganhos atuais foram ajustados no simulador (`test/robo_fisico_simulado.h`), que passa nos critérios do roteiro (parada a ±2 cm do centro, giros a ±5°) com uma roda 15% mais fraca, sem BNO085 e com a largura do eixo errada em 2%. No robô, eles são o ponto de partida.
 
 ### Bateria
 Regras do Contrato de Telemetria (`lib/energia/monitor_bateria.*`): abaixo de 7,0 V por 1 s manda o evento `bateria_critica` (repete só depois de passar de 7,2 V); abaixo de 6,6 V por 1 s para os motores e encerra a corrida como abandonada; INA226 sem resposta faz o mesmo com `falha_sensor_bateria`. O percentual é linear de 6,4 a 8,4 V, como no painel.
