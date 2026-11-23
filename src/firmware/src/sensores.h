@@ -21,6 +21,7 @@ struct LeituraSensores
     float corrente_ma;
     uint32_t imuEventos;       // leituras do BNO085 recebidas desde o boot (~50/s)
     uint16_t imuReinicios;     // resets do BNO085 por ficar mudo
+    uint32_t imuUltimaLeituraMs; // millis() da última leitura do BNO085 (yaw novo)
 };
 
 class Sensores
@@ -34,6 +35,8 @@ public:
     const LeituraSensores &leitura() const { return leitura_; }
     // A orientação atual vira o "Norte" do mapa (largada).
     void zerarYaw();
+    // O reset do BNO085 trava o laço por ~0,5 s: durante um movimento, não.
+    void permitirReinicioImu(bool permitir) { podeReiniciarImu_ = permitir; }
     // Orientação absoluta do mapa a partir do yaw (múltiplo de 90° mais perto).
     Direcao orientacao() const;
     // Máscara de paredes do contrato (N=1, L=2, S=4, O=8) vista dos 3 sensores.
@@ -51,4 +54,6 @@ private:
     float yawBruto_ = 0;
     float yawZero_ = 0;
     uint32_t ultimoEventoImu_ = 0;
+    uint32_t intervaloReinicioImu_ = 1000; // dobra a cada reset sem leitura (até 8 s)
+    bool podeReiniciarImu_ = true;
 };

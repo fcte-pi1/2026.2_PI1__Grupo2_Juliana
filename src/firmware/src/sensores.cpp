@@ -43,7 +43,10 @@ bool iniciarBno()
     pinMode(PINO_BNO_RST, OUTPUT);
     delay(30);
     digitalWrite(PINO_BNO_RST, HIGH);
-    delay(300); // com 200 ms ainda nao mandava leituras; 300 ms validado no USB em 16/11/2026
+    // Com 200 ms ainda nao mandava leituras; 300 ms validado no USB em
+    // 16/11/2026. Na bateria nao manda leitura nenhuma: 600 ms para dar folga
+    // a alimentacao (teste de 23/11/2026).
+    delay(600);
     return bno.begin_I2C(0x4A, &Wire) && bno.enableReport(SH2_GAME_ROTATION_VECTOR, 20000);
 }
 
@@ -123,14 +126,20 @@ void Sensores::atualizar()
 void Sensores::lerImu()
 {
     uint32_t agora = millis();
-    // BNO085 mudo há 1 s (ou falhou no boot): reset pelo pino RST (D18) e liga
-    // o relatório de novo. Sem isso o yaw fica congelado no último valor.
-    if (agora - ultimoEventoImu_ > 1000)
+    // BNO085 mudo (ou falhou no boot): reset pelo pino RST (D18) e liga o
+    // relatório de novo. Sem isso o yaw fica congelado no último valor. O reset
+    // trava o laço por ~0,6 s: o intervalo dobra a cada tentativa sem leitura
+    // (1 s, 2 s, 4 s, 8 s) e não acontece durante um movimento.
+    if (agora - ultimoEventoImu_ > intervaloReinicioImu_)
     {
-        ultimoEventoImu_ = agora;
+        leitura_.imuOk = false; // mudo: o yaw não vale
+        if (!podeReiniciarImu_)
+            return;
         leitura_.imuReinicios++;
         leitura_.imuOk = iniciarBno();
         ultimoEventoImu_ = millis();
+        if (intervaloReinicioImu_ < 8000)
+            intervaloReinicioImu_ *= 2;
         return;
     }
     if (!leitura_.imuOk)
@@ -143,6 +152,8 @@ void Sensores::lerImu()
         if (v.sensorId != SH2_GAME_ROTATION_VECTOR)
             continue;
         ultimoEventoImu_ = agora;
+        leitura_.imuUltimaLeituraMs = agora;
+        intervaloReinicioImu_ = 1000;
         leitura_.imuEventos++;
         float r = v.un.gameRotationVector.real, i = v.un.gameRotationVector.i;
         float j = v.un.gameRotationVector.j, k = v.un.gameRotationVector.k;
