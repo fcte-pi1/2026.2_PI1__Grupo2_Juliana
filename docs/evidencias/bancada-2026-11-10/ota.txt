@@ -1,0 +1,21 @@
+## Saida do pio run -e esp32dev_ota -t upload --upload-port 192.168.0.7
+16:43:19 [INFO]: Starting on 0.0.0.0:8266
+16:43:19 [INFO]: Upload size: 994064
+Sending invitation to 192.168.0.7 
+Authenticating...OK
+16:43:19 [INFO]: Waiting for device...
+Uploading: [============================================================] 100% Done...
+16:43:40 [INFO]: Waiting for result...
+16:43:41 [INFO]: Result: OK
+16:43:41 [INFO]: Success
+======================== [SUCCESS] Took 101.49 seconds ========================
+esp32dev_ota   SUCCESS   00:01:41.485
+
+## Serial durante o OTA
+>>> OTA: recebendo firmware novo
+
+## Boot depois do OTA (reset pela USB)
+=== Micromouse iniciado (firmware de Nov 10 2026 16:42:12) ===
+Buffer de telemetria: reservado (maior bloco livre antes: 110580 B)
+Sensores: 5 de 5 responderam (IMU=1 INA226=1)
+Wi-Fi: conectando em "<rede>", servidor ws://192.168.0.2:8000/ws/telemetria
