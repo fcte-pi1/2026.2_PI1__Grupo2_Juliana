@@ -19,7 +19,7 @@ struct Sensores
     uint32_t versao;
 };
 Sensores entrada = {false, false, false, NORTE, 0};
-Navegacao::Estado saida = {0, 0, NORTE, 0, ESTADO_PARADO, -1, 0, 0, 0, 0, 0, 0};
+Navegacao::Estado saida = {-1, 0, 0, 0, 0, 0, 0};
 
 // ---------- navegação real (robô parado na largada) ----------
 Labirinto mapa;
@@ -121,13 +121,6 @@ NUCLEO1 void tarefaNavegacao(void *)
             uint32_t us = (uint32_t)(esp_timer_get_time() - inicio);
 
             portENTER_CRITICAL(&trava);
-            saida.x = mapa.x();
-            saida.y = mapa.y();
-            saida.orientacao = mapa.orientacao();
-            saida.paredes = mapa.paredesDe(mapa.x(), mapa.y());
-            // Robô parado na largada: o modo automático com o robô real ainda
-            // não roda aqui. Quando rodar, vai o modo.estado().
-            saida.estadoRobo = ESTADO_PARADO;
             saida.valorFlood = d == INFINITO ? -1 : d;
             saida.nucleo = (uint8_t)xPortGetCoreID();
             saida.ciclos++;

@@ -44,9 +44,6 @@ enum MotivoFalha : uint8_t
 };
 
 const char *nomeEstado(EstadoRobo e);
-// Nome para o campo "estado" da telemetria, que só aceita os quatro do
-// contrato: calibrando e falha vão como "parado" (o robô não está andando).
-const char *estadoContrato(EstadoRobo e);
 
 // Corrida inteira sem intervenção depois de ligado (RF13-S):
 // calibrar -> explorar até o objetivo -> voltar à largada (explorando no
