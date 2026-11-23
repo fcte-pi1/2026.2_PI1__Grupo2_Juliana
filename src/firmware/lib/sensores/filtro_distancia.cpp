@@ -60,3 +60,24 @@ void DetectorParede::configurar(uint16_t limiarLiga, uint16_t limiarDesliga)
     liga_ = limiarLiga;
     desliga_ = limiarDesliga < limiarLiga ? limiarLiga : limiarDesliga;
 }
+
+LimiaresParede calcularLimiares(uint16_t comParede, uint16_t semParede)
+{
+    LimiaresParede l = {0, 0, false};
+    if (comParede == 0 || comParede >= DIST_MAX_CONFIAVEL)
+        return l; // sem leitura com a parede: não dá para calibrar
+    // Sem alvo, ou mais longe que a célula seguinte: vale a parede seguinte.
+    uint32_t sem = semParede;
+    if (sem > (uint32_t)comParede + CELULA_MM)
+        sem = (uint32_t)comParede + CELULA_MM;
+    if (sem < (uint32_t)comParede + 40)
+        return l; // diferença pequena demais: a parede não foi tirada?
+    uint32_t meio = (comParede + sem) / 2;
+    uint32_t histerese = (sem - comParede) / 8;
+    if (histerese < 10)
+        histerese = 10;
+    l.liga = (uint16_t)(meio - histerese / 2);
+    l.desliga = (uint16_t)(meio + histerese / 2);
+    l.ok = true;
+    return l;
+}
