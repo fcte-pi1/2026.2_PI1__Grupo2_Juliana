@@ -164,9 +164,9 @@ bool RoboFisico::girarPara(float rumoGraus)
 // Anda e, se bloquear no caminho (toque na parede, parede que o mapa não
 // tinha), volta de ré o que andou: o robô fica no centro da célula de onde
 // saiu, que é onde o mapa o registra (RF16-S).
-bool RoboFisico::andarMm(float mm, float rumoGraus, float lateralInicialMm)
+bool RoboFisico::andarMm(float mm, float rumoGraus, float lateralInicialMm, bool corrigirPeloFundo)
 {
-    controle_.andar(mm, rumoGraus, lateralInicialMm);
+    controle_.andar(mm, rumoGraus, lateralInicialMm, corrigirPeloFundo);
     bool ok = executar();
     percorridoTotal_ = controle_.percorridoMm();
     if (ok)
@@ -207,7 +207,10 @@ bool RoboFisico::mover(Direcao d)
     if (gira && !girarPara(rumo))
         return false;
     float longitudinal = desvioAo(d);
-    bool ok = andarMm(CELULA_MM - longitudinal, rumo, desvioAo(girarDireita(d)));
+    // Sem giro, o robô está parado desde o sentir(): a parede do fundo pode
+    // corrigir a distância. Depois de um giro a mediana do VL53L0X ainda mostra
+    // a direção antiga.
+    bool ok = andarMm(CELULA_MM - longitudinal, rumo, desvioAo(girarDireita(d)), !gira);
     // Parou pela parede da frente: está no centro, dentro da tolerância.
     float novoLongitudinal = ok && controle_.paradaPelaFrente()
                                  ? 0

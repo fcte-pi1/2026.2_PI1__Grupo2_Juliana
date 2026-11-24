@@ -109,9 +109,10 @@ void ControleMovimento::reiniciar(const EntradaMovimento &e, float rumoGraus)
     estado_ = MOV_OCIOSO;
 }
 
-void ControleMovimento::andar(float mm, float rumoGraus, float lateralInicialMm)
+void ControleMovimento::andar(float mm, float rumoGraus, float lateralInicialMm, bool corrigirPeloFundo)
 {
     alvoMm_ = mm;
+    corrigirPeloFundo_ = corrigirPeloFundo;
     lateral_ = lateralInicialMm;
     rumoAlvo_ = normalizarGraus(rumoGraus);
     estado_ = MOV_ANDANDO;
@@ -179,6 +180,28 @@ void ControleMovimento::comecar(const EntradaMovimento &e)
     trocaFonte_ = -p_.estabilizarParedeMm;
     if (estado_ == MOV_GIRANDO)
         lateral_ = 0;
+    // Andando para a frente, parede n células depois do destino (até
+    // alcanceFundoMm): o centro do destino fica a (frente - centro - n
+    // células). Num corredor sem parede logo à frente só os encoders contavam
+    // e o erro de uma manobra ficava (labirinto, 24/11/2026: parou ~9 cm além e
+    // a borda do fim virou parede da própria célula, "sem caminho"). Medido
+    // uma vez, parado (quem chama diz se está: corrigirPeloFundo): andando, a
+    // mediana do VL53L0X atrasa ~10 mm. Só corrige
+    // alinhado (torto, o cone pega a parede do lado) e se discordar dos
+    // encoders em menos de janelaFundoMm (abaixo de meia célula, sem dúvida de n).
+    usouFundo_ = false;
+    if (corrigirPeloFundo_ && estado_ == MOV_ANDANDO && alvoMm_ > 0 && p_.frontalCentroMm > 0 && leituraValida(e.distancia_mm[FRENTE]) &&
+        e.distancia_mm[FRENTE] <= p_.alcanceFundoMm && fabsf(normalizarGraus(rumoAlvo_ - rumo_)) < p_.alinhadoFundoGraus)
+    {
+        float pelaFrente = (float)e.distancia_mm[FRENTE] - p_.frontalCentroMm;
+        float n = roundf((pelaFrente - alvoMm_) / CELULA_MM);
+        float pelaParede = pelaFrente - n * CELULA_MM;
+        if (n >= 1 && fabsf(pelaParede - alvoMm_) < p_.janelaFundoMm)
+        {
+            alvoMm_ = pelaParede;
+            usouFundo_ = true;
+        }
+    }
 }
 
 SaidaMovimento ControleMovimento::atualizar(const EntradaMovimento &e)

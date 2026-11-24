@@ -596,6 +596,37 @@ void test_giro_entalado_insiste_ate_sair()
     TEST_ASSERT_FALSE(sim.colidiu());
 }
 
+// Labirinto, 24/11/2026: subindo a coluna da direita (sem parede na frente da
+// célula seguinte), o robô estava ~7 cm além do que os encoders achavam e parou
+// meia célula depois do centro: a borda do fim virou parede da própria célula
+// e o mapa ficou "sem caminho". A parede 1 célula adiante corrige a distância.
+void test_andando_a_parede_uma_celula_adiante_corrige_a_distancia()
+{
+    ParametrosMovimento p;
+    p.pulsosPorMm = 7.09f;
+    p.frontalCentroMm = 51;
+    ControleMovimento c(p);
+    EntradaMovimento e = {};
+    // A frente lê 347 mm (como em (3,1) na corrida): a parede é a do fim da
+    // célula depois da próxima, então o centro da próxima está a
+    // 347 - 51 - 180 = 116 mm, não aos 180 dos encoders.
+    const float paredeMm = 347;
+    e.distancia_mm[1] = (uint16_t)paredeMm;
+    c.reiniciar(e, 0);
+    c.andar(CELULA_MM, 0, 0, true); // parado, sem giro antes
+    float andou = 0;
+    for (int i = 0; i < 2000 && !c.terminou(); i++)
+    {
+        e.agora_ms += 10;
+        andou += 1; // 1 mm a cada 10 ms
+        e.encoderEsquerdo = e.encoderDireito = (int32_t)lroundf(andou * p.pulsosPorMm);
+        e.distancia_mm[1] = (uint16_t)(paredeMm - andou);
+        c.atualizar(e);
+    }
+    TEST_ASSERT_EQUAL(MOV_CONCLUIDO, c.estado());
+    TEST_ASSERT_FLOAT_WITHIN(10, paredeMm - p.frontalCentroMm - CELULA_MM, andou);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -604,6 +635,7 @@ int main()
     RUN_TEST(test_controle_ocioso_nao_liga_os_motores);
     RUN_TEST(test_sem_bno_o_rumo_vem_dos_encoders);
     RUN_TEST(test_girando_a_roda_adiantada_espera_a_travada);
+    RUN_TEST(test_andando_a_parede_uma_celula_adiante_corrige_a_distancia);
     RUN_TEST(test_girando_a_espera_pela_roda_travada_tem_limite);
     RUN_TEST(test_com_bno_o_rumo_soma_as_variacoes_do_yaw);
     RUN_TEST(test_avanca_uma_celula_e_para_no_centro);

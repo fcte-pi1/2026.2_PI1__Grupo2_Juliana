@@ -87,6 +87,12 @@ struct ParametrosMovimento
     // calibração 'L' (#279). 0 = sem calibração: o controle usa só os encoders
     // para parar e só as duas paredes juntas para centralizar.
     uint16_t frontalCentroMm = 0;
+    // Andando, parede da frente n células depois do destino corrige a distância
+    // (até alcanceFundoMm: mais longe o VL53L0X lê curto), se discordar dos
+    // encoders em menos de janelaFundoMm.
+    uint16_t alcanceFundoMm = 400;
+    float janelaFundoMm = 80;
+    float alinhadoFundoGraus = 5;
     uint16_t esquerdaCentroMm = 0;
     uint16_t direitaCentroMm = 0;
 };
@@ -157,7 +163,9 @@ public:
     // parando pela parede da frente quando houver. lateralInicialMm é quanto
     // o robô já está fora do eixo (+ = à direita): sem parede dos lados, o
     // controle corrige pela odometria.
-    void andar(float mm, float rumoGraus, float lateralInicialMm = 0);
+    // corrigirPeloFundo: parado há tempo (leitura da frente assentada), uma
+    // parede da frente células adiante corrige a distância (ver comecar()).
+    void andar(float mm, float rumoGraus, float lateralInicialMm = 0, bool corrigirPeloFundo = false);
     // Gira no lugar até o rumo.
     void girar(float rumoGraus);
     void parar() { estado_ = MOV_OCIOSO; }
@@ -180,7 +188,7 @@ public:
     // Potência mínima aprendida de cada roda (0 = ainda não travou).
     float reforcoEsquerdo() const { return reforcoE_; }
     float reforcoDireito() const { return reforcoD_; }
-    bool paradaPelaFrente() const { return usouFrente_; }
+    bool paradaPelaFrente() const { return usouFrente_ || usouFundo_; }
 
 private:
     void odometria(const EntradaMovimento &e);
@@ -229,4 +237,6 @@ private:
     bool temLateral_ = false;
     float correcao_ = 0;
     bool usouFrente_ = false;
+    bool usouFundo_ = false; // distância corrigida por uma parede mais adiante
+    bool corrigirPeloFundo_ = false;
 };

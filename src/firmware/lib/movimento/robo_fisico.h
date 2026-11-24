@@ -60,7 +60,7 @@ public:
 
     // Movimentos soltos, para a bancada (CT-SE05 a CT-SE07) e para o mover().
     bool girarPara(float rumoGraus);
-    bool andarMm(float mm, float rumoGraus, float lateralInicialMm = 0);
+    bool andarMm(float mm, float rumoGraus, float lateralInicialMm = 0, bool corrigirPeloFundo = false);
 
     // Direção física do robô agora, pelo rumo estimado.
     Direcao direcao() const { return direcaoDe(controle_.rumo(), inicial_); }
