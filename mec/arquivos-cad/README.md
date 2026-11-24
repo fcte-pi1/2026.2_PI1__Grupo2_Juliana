@@ -4,6 +4,7 @@ Arquivos extraídos de `Estruturas_PI1_2026_2.zip`, recebidos como material do p
 
 - [`chassi/`](./chassi/): montagem SolidWorks (`assembly_chassi.SLDASM`), exportação `assembly_chassi.STEP`, peças e modelos de componentes usados na montagem. Os modelos de eletrônica nesta pasta são referências geométricas do conjunto CAD.
 - [`chassi-atualizado/`](./chassi-atualizado/): novos arquivos da base e do patamar intermediário em SolidWorks e STEP. São versões diferentes das peças de mesmo nome no pacote anterior. A [imagem da montagem atualizada](../modelos-cad/chassi-atualizado.png) mostra o apoio da roda boba.
+- Vistas adicionais do chassi atualizado: [frontal](../modelos-cad/chassi-atualizado-vista-frontal.png), [frontal elevada](../modelos-cad/chassi-atualizado-vista-frontal-elevada.png) e [frontal oblíqua](../modelos-cad/chassi-atualizado-vista-frontal-oblíqua.png).
 - [`desenhos/`](./desenhos/): desenhos editáveis SolidWorks e modelo de folha.
 - [`labirinto/`](./labirinto/): modelo da base, desenho e PDF do gabarito.
 

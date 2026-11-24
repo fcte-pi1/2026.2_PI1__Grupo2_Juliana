@@ -18,7 +18,7 @@ Esta pasta reúne os artefatos do projeto mecânico e estrutural do Micromouse, 
 
 - 3 imagens de componentes e alternativas de apoio;
 - 5 desenhos técnicos em PNG, 1 EBOM em PNG e 10 PDFs de desenhos e montagem;
-- 6 imagens do modelo CAD;
+- 9 imagens do modelo CAD;
 - 37 fotografias de testes, montagem e pesagem;
 - 43 arquivos de montagem, peças, desenhos e gabarito em `arquivos-cad/`;
 - 2 modelos STL comerciais de referência em `impressao-3d/referencias/`.
