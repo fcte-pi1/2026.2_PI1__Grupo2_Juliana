@@ -462,6 +462,8 @@ export default function Dashboard({
   const [corridaAtual, setCorridaAtual] = useState(1)
   const [statusCorrida, setStatusCorrida] = useState('aguardando') // aguardando | em_execucao | concluida | abandonada
   const [motivoFim, setMotivoFim] = useState(null)
+  const [corridaAbertaId, setCorridaAbertaId] = useState(null) // corrida aberta pelo botão do painel
+  const [erroCorridaPainel, setErroCorridaPainel] = useState(null)
   const [tempoMs, setTempoMs] = useState(0)
   const [tempoConclusaoS, setTempoConclusaoS] = useState(null)
   const [consumoMedioMa, setConsumoMedioMa] = useState(null)
@@ -674,6 +676,7 @@ export default function Dashboard({
         } else if (dados.evento === 'fim') {
           const concluida = dados.resultado === 'concluida'
           setStatusCorrida(concluida ? 'concluida' : 'abandonada')
+          setCorridaAbertaId(null) // botão do painel volta a "Iniciar corrida"
           setMotivoFim(dados.motivo || null)
           setEstadoExecucao('parado')
           setVelocidadeAtual(0)
@@ -740,6 +743,45 @@ export default function Dashboard({
   }, [wsUrl])
 
   const baseUrlLimpa = (apiBaseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+
+  // Abre a corrida no backend (POST /corridas). O robô se associa a ela no evento 'inicio'.
+  async function iniciarCorridaPainel() {
+    setErroCorridaPainel(null)
+    try {
+      const dim = dimensoesLabirinto || { largura: 4, altura: 4 }
+      const resLabs = await fetch(`${baseUrlLimpa}/labirintos`)
+      const labirinto = (await resLabs.json()).find(
+        (l) => l.largura_celula === dim.largura && l.altura_celula === dim.altura,
+      )
+      if (!labirinto) throw new Error(`Labirinto ${dim.largura}x${dim.altura} não cadastrado`)
+      const res = await fetch(`${baseUrlLimpa}/corridas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_labirinto: labirinto.id }),
+      })
+      if (res.status === 409) {
+        // Já existe corrida em andamento: assume ela, para poder encerrar.
+        const abertas = await (await fetch(`${baseUrlLimpa}/corridas?status=em_andamento`)).json()
+        setCorridaAbertaId(abertas[0]?.id ?? null)
+        return
+      }
+      if (!res.ok) throw new Error(`Falha ao iniciar corrida (HTTP ${res.status})`)
+      setCorridaAbertaId((await res.json()).id)
+    } catch (erro) {
+      setErroCorridaPainel(erro?.message || 'Erro de rede ao iniciar corrida')
+    }
+  }
+
+  async function encerrarCorridaPainel() {
+    setErroCorridaPainel(null)
+    try {
+      const res = await fetch(`${baseUrlLimpa}/corridas/${corridaAbertaId}/encerrar`, { method: 'POST' })
+      if (!res.ok && res.status !== 409) throw new Error(`Falha ao encerrar corrida (HTTP ${res.status})`)
+      setCorridaAbertaId(null)
+    } catch (erro) {
+      setErroCorridaPainel(erro?.message || 'Erro de rede ao encerrar corrida')
+    }
+  }
 
   // Carrega labirintos e histórico de corridas das rotas 3.8.2 (GET /labirintos e GET /corridas)
   useEffect(() => {
@@ -1166,7 +1208,20 @@ export default function Dashboard({
             </p>
           </div>
 
-          <div className="cabecalho-acoes">
+          <div className="cabecalho-acoes" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {abaAtiva === 'monitoramento' && (
+              <>
+                {erroCorridaPainel && <span className="texto-vermelho" role="alert">{erroCorridaPainel}</span>}
+                <button
+                  type="button"
+                  className="botao-acao-secundario"
+                  data-testid="botao-corrida-painel"
+                  onClick={corridaAbertaId ? encerrarCorridaPainel : iniciarCorridaPainel}
+                >
+                  {corridaAbertaId ? '■ Encerrar corrida' : '▶ Iniciar corrida'}
+                </button>
+              </>
+            )}
             <div className={`pilula-tempo-real ${onlineAtivo ? 'online' : 'offline'}`}>
               <span className="ponto-status" />
               <span>Tempo Real</span>
