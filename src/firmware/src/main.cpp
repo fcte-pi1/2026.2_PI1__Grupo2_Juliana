@@ -292,6 +292,35 @@ void encerrarCorrida(bool concluida, MotivoAbandono motivo = MOTIVO_MANUAL)
     cancelarMovimento = true; // bateria, console ou botão no meio de um movimento: o controle para já
     console.printf("\n>>> corrida %u encerrada (%s)\n", c, concluida ? "concluida" : "abandonada");
 }
+// Corrente da bateria ESTIMADA pelo modelo dos motores: o INA226 da montagem
+// não tem corrente passando pelo shunt (varredura 'n', 24/11/2026: 0 mA com os
+// motores girando), então ele só mede a tensão. Placa (constante) + por motor
+// PWM x (sem carga + (tensão aplicada - tensão contrária da velocidade) / R).
+// Aproximações do N20: ~0,5 A travado a 5 V (R ~10 ohm), ~40 mA girando solto;
+// tensão contrária ~12,5 V por m/s da roda (~0,2 m/s livre com 2,5 V, no robô).
+float correnteEstimadaMa()
+{
+    const float PLACA_MA = 110;          // ESP32 com Wi-Fi e sensores, visto da bateria pelo MP1584
+    const float MOTOR_SEM_CARGA_MA = 40;
+    const float MOTOR_R_OHM = 10;
+    const float MOTOR_KE_V_POR_M_S = 12.5f;
+    float vbat = bateria.tensao() > 5 ? bateria.tensao() : 7.4f;
+    float ppm = controle.parametros().pulsosPorMm;
+    const float pwm[2] = {Motores::pwmEsquerdo(), Motores::pwmDireito()};
+    const float pps[2] = {Encoders::pulsosPorSegundoEsquerda(), Encoders::pulsosPorSegundoDireita()};
+    float total = PLACA_MA;
+    for (int i = 0; i < 2; i++)
+    {
+        float ciclo = fabsf(pwm[i]);
+        if (ciclo < 0.01f || !Motores::habilitado())
+            continue;
+        float velocidade = ppm > 0 ? fabsf(pps[i]) / ppm / 1000 : 0; // m/s
+        float motorMa = MOTOR_SEM_CARGA_MA + fmaxf(0, ciclo * vbat - MOTOR_KE_V_POR_M_S * velocidade) / MOTOR_R_OHM * 1000;
+        total += ciclo * motorMa; // PWM: a bateria fornece a média
+    }
+    return total;
+}
+
 
 void enviarTelemetria()
 {
@@ -314,6 +343,10 @@ void enviarTelemetria()
     MensagemTelemetria tel = criarTelemetria(
         0, 0, millis() - inicioCorrida, (int8_t)n.x, (int8_t)n.y, letra(n.orientacao), n.paredes,
         fabsf(Encoders::velocidadeMs()), tensaoContrato(), n.valorFlood, estadoContrato(n.estadoRobo));
+    // Corrente do INA226 (média móvel); sem leitura, o campo fica fora do pacote.
+    // O percentual o painel calcula da tensão, com a mesma faixa 6,4-8,4 V do firmware.
+    tel.corrente_ma = sensores.leitura().inaOk ? bateria.corrente() : NAN;
+    tel.corrente_estimada_ma = correnteEstimadaMa();
     TelemetriaWifi::publicar(tel);
 }
 
@@ -575,10 +608,10 @@ void mostrarStatus()
                    l.distancia_mm[LADO_FRONTAL], l.distancia_mm[LADO_DIREITO], sensores.mascaraParedes(),
                    l.yawGraus, letra(sensores.orientacao()), ESP.getFreeHeap());
     float autonomia = bateria.autonomiaMinutos();
-    console.printf("         bateria: %s %.2fV %u%% %.0fmA autonomia=%s%.0fmin %s | motores: %s PWM E=%.0f%% D=%.0f%% "
+    console.printf("         bateria: %s %.2fV %u%% %.0fmA (estimada %.0fmA) autonomia=%s%.0fmin %s | motores: %s PWM E=%.0f%% D=%.0f%% "
                    "(max %.0f%%) | encoders E=%ld D=%ld v=%.3fm/s\n",
                    bateria.presente() ? "sim" : "NAO (USB)", bateria.tensao(), bateria.percentual(),
-                   bateria.corrente(), autonomia < 0 ? "-" : "", autonomia < 0 ? 0 : autonomia,
+                   bateria.corrente(), correnteEstimadaMa(), autonomia < 0 ? "-" : "", autonomia < 0 ? 0 : autonomia,
                    bateria.critica() ? "CRITICA" : "", Motores::habilitado() ? "ligados" : "parados",
                    Motores::pwmEsquerdo() * 100, Motores::pwmDireito() * 100, Motores::pwmMaximo() * 100,
                    (long)Encoders::esquerdo(), (long)Encoders::direito(), Encoders::velocidadeMs());
@@ -873,6 +906,7 @@ void aplicarPwmMaximo()
     ParametrosMovimento padrao;
     p.potenciaMinima = padrao.potenciaMinima < teto ? padrao.potenciaMinima : teto;
     p.potenciaGiroMinima = padrao.potenciaGiroMinima < teto ? padrao.potenciaGiroMinima : teto;
+    p.potenciaGiroMinimaDireita = padrao.potenciaGiroMinimaDireita < teto ? padrao.potenciaGiroMinimaDireita : teto;
 }
 
 void mudarPwmMaximo(int passo)
@@ -2184,6 +2218,9 @@ void setup()
     // 5911 e 5753 pulsos em 2 s), na média dos valores antigos (1,0 e 1,6).
     aplicarPulsosPorMm(preferencias.getFloat("ppmE", 1.30f), preferencias.getFloat("ppmD", 1.30f));
     controle.parametros().larguraEixoMm = preferencias.getFloat("eixo", controle.parametros().larguraEixoMm);
+    // O robô montado não cabe girando no centro com parede do lado da varredura
+    // (labirinto novo, (1,1), 24/11/2026): gira 18 mm afastado dela.
+    controle.parametros().afastarNaVarreduraMm = 18;
     controle.parametros().larguraEixoDireitaMm = preferencias.getFloat("eixoD", 0);
     controle.parametros().larguraEixoEsquerdaMm = preferencias.getFloat("eixoE", 0);
     Encoders::iniciar();

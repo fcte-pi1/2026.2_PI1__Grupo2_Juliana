@@ -487,6 +487,11 @@ export default function Dashboard({
 
   const [tensaoBateria, setTensaoBateria] = useState(8.4)
   const [tensaoInicial, setTensaoInicial] = useState(null)
+  // Corrente do INA226 (campo opcional 'corrente_ma' do 'tel'); null = robô não mandou
+  const [correnteBateria, setCorrenteBateria] = useState(null)
+  // Corrente estimada pelo modelo dos motores no robô (campo opcional
+  // 'corrente_estimada_ma'): o INA226 da montagem não mede a corrente
+  const [correnteEstimada, setCorrenteEstimada] = useState(null)
   const [bateriaCriticaAtiva, setBateriaCriticaAtiva] = useState(false)
 
   const [velocidadeAtual, setVelocidadeAtual] = useState(0)
@@ -598,6 +603,8 @@ export default function Dashboard({
       }
 
       if (dados.t === 'tel') {
+        setCorrenteBateria(typeof dados.corrente_ma === 'number' ? dados.corrente_ma : null)
+        setCorrenteEstimada(typeof dados.corrente_estimada_ma === 'number' ? dados.corrente_estimada_ma : null)
         setStatusCorrida((atual) => (atual === 'aguardando' ? 'em_execucao' : atual))
         setEstadoExecucao(dados.estado)
         setVelocidadeAtual(dados.velocidade)
@@ -1280,6 +1287,16 @@ export default function Dashboard({
                     >
                       {formatarDecimalBr(tensaoBateria, 2)} V
                     </span>
+                    {correnteBateria !== null && (
+                      <span className="tensao-badge" data-testid="corrente-bateria-visao-geral">
+                        {formatarDecimalBr(correnteBateria, 1)} mA
+                      </span>
+                    )}
+                    {correnteEstimada !== null && (
+                      <span className="tensao-badge" data-testid="corrente-estimada-bateria-visao-geral">
+                        ≈ {Math.round(correnteEstimada)} mA (estimada)
+                      </span>
+                    )}
                   </div>
                   <strong
                     className={`card-topo-valor ${alertaBateriaCritica ? 'texto-vermelho' : ''}`}
@@ -1736,6 +1753,20 @@ export default function Dashboard({
                     >
                       {formatarDecimalBr(tensaoBateria, 2)} V
                     </span>
+                    {correnteBateria !== null && (
+                      <span className="tensao-badge" data-testid="corrente-bateria">
+                        {formatarDecimalBr(correnteBateria, 1)} mA
+                      </span>
+                    )}
+                    {correnteEstimada !== null && (
+                      <span
+                        className="tensao-badge"
+                        data-testid="corrente-estimada-bateria"
+                        title="Estimada pelo modelo dos motores (PWM e velocidade das rodas); não é leitura do INA226"
+                      >
+                        ≈ {Math.round(correnteEstimada)} mA (estimada)
+                      </span>
+                    )}
                   </div>
 
                   <div className="bateria-linha-principal">

@@ -155,6 +155,23 @@ def validate_frame(raw_text: str) -> ValidationResult:
         if not (0 <= tb <= 9.0):
             return ValidationResult(valid=False, error=f"fora do intervalo: tensao_bateria={tb}")
 
+        # corrente_ma: opcional; INA226 com shunt de 0,1 ohm mede até ±819,2 mA
+        if "corrente_ma" in data:
+            cm = data["corrente_ma"]
+            if not isinstance(cm, (int, float)) or isinstance(cm, bool):
+                return ValidationResult(valid=False, error="tipo invalido: corrente_ma")
+            if not (-1000 <= cm <= 1000):
+                return ValidationResult(valid=False, error=f"fora do intervalo: corrente_ma={cm}")
+
+        # corrente_estimada_ma: opcional; estimada pelo modelo dos motores no
+        # robô (o INA226 da montagem não mede a corrente). Nunca é a lida.
+        if "corrente_estimada_ma" in data:
+            ce = data["corrente_estimada_ma"]
+            if not isinstance(ce, (int, float)) or isinstance(ce, bool):
+                return ValidationResult(valid=False, error="tipo invalido: corrente_estimada_ma")
+            if not (0 <= ce <= 3000):
+                return ValidationResult(valid=False, error=f"fora do intervalo: corrente_estimada_ma={ce}")
+
         # estado
         if not isinstance(data["estado"], str):
             return ValidationResult(valid=False, error="tipo invalido: estado")
