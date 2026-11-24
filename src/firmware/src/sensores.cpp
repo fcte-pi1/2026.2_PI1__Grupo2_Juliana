@@ -189,14 +189,6 @@ uint8_t Sensores::ligarDistancia()
     return ok;
 }
 
-void Sensores::configurarLimiares(LadoSensor lado, uint16_t liga, uint16_t desliga)
-{
-    distancia[lado].detector.configurar(liga, desliga);
-}
-
-uint16_t Sensores::limiarLiga(LadoSensor lado) const { return distancia[lado].detector.limiarLiga(); }
-uint16_t Sensores::limiarDesliga(LadoSensor lado) const { return distancia[lado].detector.limiarDesliga(); }
-
 void Sensores::zerarYaw()
 {
     yawZero_ = yawBruto_;

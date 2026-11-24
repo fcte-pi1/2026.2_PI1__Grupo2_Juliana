@@ -15,8 +15,6 @@
 //   e  mostra e zera os encoders (para medir os pulsos por volta da roda)
 //   p  PARA os motores                             z  zera o yaw
 //   r  zera as estatísticas de RTT
-//   L  calibra os limiares de parede (mede com e sem parede; salva na flash)
-//   Q / G / H  derruba o Wi-Fi por 5 s / 60 s / 12 min (enche o buffer)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <Wire.h>
@@ -456,122 +454,6 @@ void mostrarStatus()
     console.printf("         navegacao: nucleo=%u flood=%d ciclos=%u tempo=%u/%u us corridas simuladas ok=%u erradas=%u\n",
                    n.nucleo, n.valorFlood, n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk,
                    n.corridasErradas);
-}
-
-// ---------- limiares de parede (#279) ----------
-
-const char *const NOME_LADO[3] = {"esquerdo", "frontal", "direito"};
-
-// Limiares calibrados ficam na flash (Preferences) e valem a partir do boot.
-// Sem calibração, ficam os padrões do sensores.cpp.
-void carregarLimiares()
-{
-    for (uint8_t i = 0; i < 3; i++)
-    {
-        char chave[4] = {'p', 'l', (char)('0' + i), 0};
-        uint32_t v = preferencias.getUInt(chave, 0); // liga << 16 | desliga
-        if (v)
-            sensores.configurarLimiares((LadoSensor)i, v >> 16, v & 0xFFFF);
-    }
-}
-
-// Média de cada lado em ms milissegundos (distância já filtrada pela mediana).
-void medirLados(uint32_t ms, uint16_t media[3])
-{
-    uint32_t soma[3] = {0, 0, 0}, n = 0;
-    for (uint32_t t0 = millis(); millis() - t0 < ms; n++)
-    {
-        esperarAtualizando(40); // um VL53L0X mede a cada ~33 ms
-        for (uint8_t i = 0; i < 3; i++)
-            soma[i] += sensores.leitura().distancia_mm[i];
-    }
-    for (uint8_t i = 0; i < 3; i++)
-        media[i] = n ? soma[i] / n : 0;
-}
-
-// Comando 'L': o robô parado no centro de uma célula. Mede os 3 lados com
-// parede e depois sem parede, calcula os limiares de cada lado e salva.
-void calibrarLimiares()
-{
-    uint16_t com[3], sem[3];
-    console.println("\n>>> CALIBRACAO DAS PAREDES (#279), robo parado no centro de uma celula");
-    console.println("    1/2: paredes nos 3 lados (esquerda, frente, direita). Medindo em 5 s...");
-    esperarAtualizando(5000);
-    medirLados(2000, com);
-    console.printf("    com parede: E=%u F=%u D=%u mm\n", com[0], com[1], com[2]);
-    console.println("    2/2: TIRE as 3 paredes. Medindo em 8 s...");
-    esperarAtualizando(8000);
-    medirLados(2000, sem);
-    console.printf("    sem parede: E=%u F=%u D=%u mm\n", sem[0], sem[1], sem[2]);
-    for (uint8_t i = 0; i < 3; i++)
-    {
-        LimiaresParede l = calcularLimiares(com[i], sem[i]);
-        if (!l.ok)
-        {
-            console.printf("    %-8s NAO calibrado (com %u, sem %u mm): mantem %u/%u\n", NOME_LADO[i], com[i], sem[i],
-                           sensores.limiarLiga((LadoSensor)i), sensores.limiarDesliga((LadoSensor)i));
-            continue;
-        }
-        sensores.configurarLimiares((LadoSensor)i, l.liga, l.desliga);
-        char chave[4] = {'p', 'l', (char)('0' + i), 0};
-        preferencias.putUInt(chave, ((uint32_t)l.liga << 16) | l.desliga);
-        console.printf("    %-8s parede abaixo de %u mm, livre acima de %u mm (salvo)\n", NOME_LADO[i], l.liga,
-                       l.desliga);
-    }
-}
-
-// ---------- queda de Wi-Fi provocada (#282) ----------
-
-// Desliga o rádio por alguns segundos com o robô funcionando, para conferir
-// que a navegação segue, que o buffer guarda as leituras e que, na volta, o
-// evento reconexao e os pendentes chegam ao servidor. Comandos Q, G e H.
-uint32_t quedaFim = 0;     // millis() em que o Wi-Fi volta; 0 = sem queda
-uint32_t quedaVolta = 0;   // millis() em que o rádio foi religado
-bool quedaRelatar = false; // falta registrar o resultado no log
-
-void provocarQueda(uint32_t segundos)
-{
-    if (!wifiAtivo)
-    {
-        console.println(">>> Wi-Fi desligado neste firmware (sem credenciais.h)");
-        return;
-    }
-    console.printf(">>> QUEDA DE WI-FI por %lu s (%s). O console Wi-Fi cai: acompanhe pela serial ou "
-                   "reconecte depois e mande 'l'\n",
-                   (unsigned long)segundos, emCorrida ? "corrida em andamento" : "sem corrida: 'i' gera telemetria");
-    delay(100);
-    WiFi.mode(WIFI_OFF);
-    quedaFim = millis() + segundos * 1000;
-    if (quedaFim == 0)
-        quedaFim = 1;
-    quedaRelatar = true;
-}
-
-void acompanharQueda(uint32_t agora)
-{
-    if (quedaFim && (int32_t)(agora - quedaFim) >= 0)
-    {
-        quedaFim = 0;
-        quedaVolta = agora;
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(WIFI_SSID, WIFI_SENHA);
-    }
-    if (!quedaRelatar || quedaFim)
-        return;
-    // Relata quando o buffer esvaziar com o servidor de volta, ou 60 s depois
-    // de religar o rádio (servidor desligado, por exemplo).
-    EstatisticasTelemetria e = TelemetriaWifi::estatisticas();
-    bool descarregou = e.servidor && e.pendentes == 0;
-    if (!descarregou && agora - quedaVolta < 60000)
-        return;
-    quedaRelatar = false;
-    console.printf(">>> fim da queda: %s, pendentes %lu, ocupacao maxima %lu, descartes %lu, heap livre %u B "
-                   "(minimo desde o boot %u B)\n",
-                   descarregou ? "buffer descarregado" : "servidor nao voltou em 60 s", (unsigned long)e.pendentes,
-                   (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes, ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    // O log guarda 60 caracteres: só os números, para ler depois com 'l'.
-    LogErros::registrar(false, "queda: pend %lu max %lu desc %lu heap %u", (unsigned long)e.pendentes,
-                        (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes, ESP.getMinFreeHeap());
 }
 
 void tratarComando(char c)
@@ -1193,10 +1075,6 @@ void tratarComando(char c)
         break;
     }
     case 'p': Motores::parar(); console.println(">>> motores parados"); break;
-    case 'L': calibrarLimiares(); break;     // limiares de parede (#279)
-    case 'Q': provocarQueda(5); break;       // queda curta (#282)
-    case 'G': provocarQueda(60); break;      // queda longa
-    case 'H': provocarQueda(12 * 60); break; // enche o buffer: 3200 leituras = 10 min 40 s a 5 Hz
     case 'z': sensores.zerarYaw(); console.println(">>> yaw zerado"); break;
     case 's': mostrarStatus(); break;
     case 'r': TelemetriaWifi::zerarRtt(); console.println(">>> RTT zerado"); break;
@@ -1258,7 +1136,6 @@ void setup()
 
     preferencias.begin("micromouse", false);
     uint8_t ok = sensores.iniciar();
-    carregarLimiares();
     Encoders::iniciar();
     console.printf("Sensores: %u de 5 responderam\n", ok);
 
@@ -1378,7 +1255,6 @@ void loop()
     for (int c = console.ler(); c >= 0; c = console.ler())
         tratarComando((char)c);
     verificarBotao();
-    acompanharQueda(agora);
 
     if (wifiAtivo && WiFi.status() == WL_CONNECTED)
     {

@@ -57,17 +57,3 @@ private:
     uint16_t desliga_;
     bool parede_ = false;
 };
-
-// Calibração dos limiares de um lado (#279), com o robô centrado na célula:
-// comParede = distância medida com a parede na borda da célula;
-// semParede = distância sem ela (o sensor vê a parede da célula seguinte, ou
-// nada). A parede liga no meio do caminho entre as duas, com histerese de 1/8
-// da diferença (mínimo 10 mm). ok = false se as medidas não dão para separar.
-struct LimiaresParede
-{
-    uint16_t liga;
-    uint16_t desliga;
-    bool ok;
-};
-const uint16_t CELULA_MM = 180;
-LimiaresParede calcularLimiares(uint16_t comParede, uint16_t semParede);
