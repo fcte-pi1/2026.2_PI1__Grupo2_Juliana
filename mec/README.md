@@ -11,22 +11,23 @@ Esta pasta reúne os artefatos do projeto mecânico e estrutural do Micromouse, 
 | [`modelos-cad/`](./modelos-cad/) | Imagens renderizadas do modelo CAD, incluindo vistas completa, explodida, da base e da montagem atualizada. |
 | [`testes/`](./testes/) | Fotografias usadas como evidências dos testes estruturais de inventário, medição, montagem, encaixe de componentes, pesagem, sensores e cabeamento. |
 | [`documentos/`](./documentos/) | Índice dos documentos de projeto, testes estruturais e integração mantidos em `docs/`. |
-| [`arquivos-cad/`](./arquivos-cad/) | Montagem e peças em SolidWorks, montagem STEP, desenhos editáveis e arquivos da base do labirinto. |
+| [`arquivos-cad/`](./arquivos-cad/) | Montagem e peças em SolidWorks e STEP, incluindo as novas peças do chassi, desenhos editáveis e arquivos da base do labirinto. |
 | [`impressao-3d/`](./impressao-3d/) | Modelos STL de referência, cuja correspondência com as peças fabricadas deve ser verificada. |
 
 ## Inventário atual
 
 - 3 imagens de componentes e alternativas de apoio;
-- 5 desenhos técnicos de peças estruturais;
-- 1 EBOM do Micromouse;
-- 5 imagens do modelo CAD;
-- 30 fotografias de testes e da montagem física.
+- 5 desenhos técnicos em PNG, 1 EBOM em PNG e 10 PDFs de desenhos e montagem;
+- 6 imagens do modelo CAD;
+- 37 fotografias de testes, montagem e pesagem;
+- 43 arquivos de montagem, peças, desenhos e gabarito em `arquivos-cad/`;
+- 2 modelos STL comerciais de referência em `impressao-3d/referencias/`.
 
 Os arquivos desta pasta foram organizados a partir dos artefatos estruturais do repositório e do pacote `Estruturas_PI1_2026_2.zip`. As imagens originais em `docs/figs/estruturas/` foram mantidas para preservar os links da documentação.
 
 ## Artefatos pendentes
 
-O pacote CAD disponibilizado é de setembro de 2026. Confirmar se a montagem corresponde à versão final e à atualização descrita no teste 1.5, e verificar as referências ao abrir os arquivos no SolidWorks. Os STLs incluídos são referências comerciais e ainda precisam ser comparados às peças fabricadas. Permanecem pendentes os modelos de impressão das peças finais e demais arquivos do labirinto que não estejam no pacote.
+O pacote CAD de setembro de 2026 não representa a versão final: faltam na montagem o chassi refatorado para a roda boba, os espaçadores adicionais de 15 mm e a IMU BNO085 (o pacote contém modelos MPU6050). As novas peças da base e do patamar intermediário estão em [`arquivos-cad/chassi-atualizado/`](./arquivos-cad/chassi-atualizado/); faltam a montagem completa e os PDFs atualizados. Verificar as referências no SolidWorks. Os STLs incluídos são referências comerciais e ainda precisam ser comparados às peças fabricadas. Permanecem pendentes os STLs das peças fabricadas, os DXFs de corte dos patamares e os modelos CAD/STL dos pilares do labirinto e, se aplicável, dos suportes dos sensores.
 
 Também faltam os registros complementares de massa por componente, centro de gravidade e envelope final, a partir das medições e dados conferidos pela equipe.
 
