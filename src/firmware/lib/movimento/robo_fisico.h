@@ -48,6 +48,8 @@ public:
     // Mais torto que isso em relação ao corredor, os sensores leem as paredes
     // na diagonal: sentir() não marca nada (o mapa ficaria errado).
     static constexpr float ALINHADO_GRAUS = 15;
+    // Giro maior que isso troca a parede que a frente vê (desliga a correção pelo fundo).
+    static constexpr float TROCA_FRENTE_GRAUS = 45;
 
     RoboFisico(HardwareRobo &hw, ControleMovimento &controle, Direcao orientacaoInicial = NORTE)
         : hw_(hw), controle_(controle), inicial_(orientacaoInicial) {}

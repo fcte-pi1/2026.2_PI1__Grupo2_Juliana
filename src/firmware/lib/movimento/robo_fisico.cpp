@@ -193,7 +193,11 @@ bool RoboFisico::mover(Direcao d)
     float rumo = anguloDe(d, inicial_);
     // Gira sempre que o erro passar da tolerância: o alvo é absoluto, então
     // também corrige o desvio que sobrou do movimento anterior.
-    bool gira = fabsf(normalizarGraus(rumo - controle_.rumo())) > controle_.parametros().toleranciaGiroGraus;
+    float erroRumo = fabsf(normalizarGraus(rumo - controle_.rumo()));
+    bool gira = erroRumo > controle_.parametros().toleranciaGiroGraus;
+    // Ajuste de poucos graus (sem BNO085 acontece quase toda célula) não muda
+    // o que a frente vê; só um giro de verdade troca a parede da frente.
+    bool trocaFrente = erroRumo > TROCA_FRENTE_GRAUS;
     // Antes de girar, volta ao centro da célula: o robô tem ~2 cm de folga de
     // cada lado e, parado além do centro, o canto pega a parede no giro
     // (labirinto, 23/11/2026: parou 15 mm além e travou no meio da meia-volta).
@@ -207,10 +211,11 @@ bool RoboFisico::mover(Direcao d)
     if (gira && !girarPara(rumo))
         return false;
     float longitudinal = desvioAo(d);
-    // Sem giro, o robô está parado desde o sentir(): a parede do fundo pode
-    // corrigir a distância. Depois de um giro a mediana do VL53L0X ainda mostra
-    // a direção antiga.
-    bool ok = andarMm(CELULA_MM - longitudinal, rumo, desvioAo(girarDireita(d)), !gira);
+    // Sem trocar de direção, o robô está parado desde o sentir(): a parede do
+    // fundo pode corrigir a distância. Depois de um giro de verdade a mediana
+    // do VL53L0X ainda mostra a direção antiga. (Labirinto, 24/11/2026: um
+    // ajuste de 2,5° em (3,1) desligava a correção e o robô passava do ponto.)
+    bool ok = andarMm(CELULA_MM - longitudinal, rumo, desvioAo(girarDireita(d)), !trocaFrente);
     // Parou pela parede da frente: está no centro, dentro da tolerância.
     float novoLongitudinal = ok && controle_.paradaPelaFrente()
                                  ? 0
