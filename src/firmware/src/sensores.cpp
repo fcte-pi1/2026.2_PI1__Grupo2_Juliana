@@ -28,7 +28,24 @@ SensorDistancia distancia[3] = {
     {PINO_XSHUT_DIREITO, 0x32, VL53L0X(), false, FiltroDistancia(), DetectorParede()},
 };
 
-Adafruit_BNO08x bno(PINO_BNO_RST);
+Adafruit_BNO08x bno(-1); // reset feito à mão em iniciarBno()
+
+// Reset pelo RST (D18) e espera o BNO085 iniciar (300 ms) antes de falar com
+// ele, como no bancada/teste_diagnostico_v3.cpp. O reset da biblioteca chamava
+// cedo demais: o sensor respondia no I2C mas nunca mandava leituras (yaw em 0).
+// LIMITE CONHECIDO (16/11/2026): no USB funciona (50 leituras/s); na bateria a
+// configuração pelo I2C ainda falha, mesmo sem Wi-Fi e sem os VL53L0X. Suspeita:
+// alimentação de 3,3 V vinda do MP1584. Comando 'b' do console mostra o estado.
+bool iniciarBno()
+{
+    pinMode(PINO_BNO_INT, INPUT_PULLUP);
+    digitalWrite(PINO_BNO_RST, LOW);
+    pinMode(PINO_BNO_RST, OUTPUT);
+    delay(30);
+    digitalWrite(PINO_BNO_RST, HIGH);
+    delay(300); // com 200 ms ainda nao mandava leituras; 300 ms validado no USB em 16/11/2026
+    return bno.begin_I2C(0x4A, &Wire) && bno.enableReport(SH2_GAME_ROTATION_VECTOR, 20000);
+}
 
 const uint8_t INA226_ENDERECO = 0x40;
 const float INA226_SHUNT_OHM = 0.1f; // resistor R100 do módulo
@@ -58,31 +75,13 @@ float normalizar(float graus)
 uint8_t Sensores::iniciar()
 {
     Wire.begin(PINO_SDA, PINO_SCL);
-    Wire.setClock(400000);
+    Wire.setClock(100000); // BNO085 nao manda leituras a 400 kHz nesta placa (16/11/2026)
     Wire.setTimeOut(50);
 
-    uint8_t ok = 0;
-    for (auto &s : distancia)
-    {
-        pinMode(s.xshut, OUTPUT);
-        digitalWrite(s.xshut, LOW);
-    }
-    delay(20);
-    for (auto &s : distancia)
-    {
-        digitalWrite(s.xshut, HIGH);
-        delay(50); // o VL53L0X precisa desse tempo depois do XSHUT
-        s.dev.setTimeout(100);
-        s.ok = s.dev.init();
-        if (s.ok)
-        {
-            s.dev.setAddress(s.endereco);
-            s.dev.startContinuous();
-            ok++;
-        }
-    }
+    uint8_t ok = ligarDistancia();
 
-    leitura_.imuOk = bno.begin_I2C(0x4A, &Wire) && bno.enableReport(SH2_GAME_ROTATION_VECTOR, 20000);
+    leitura_.imuOk = iniciarBno();
+    ultimoEventoImu_ = millis();
     if (leitura_.imuOk)
         ok++;
 
@@ -123,6 +122,17 @@ void Sensores::atualizar()
 
 void Sensores::lerImu()
 {
+    uint32_t agora = millis();
+    // BNO085 mudo há 1 s (ou falhou no boot): reset pelo pino RST (D18) e liga
+    // o relatório de novo. Sem isso o yaw fica congelado no último valor.
+    // Se já está falhando, para após 3 tentativas: cada uma bloqueia ~330 ms.
+    if (agora - ultimoEventoImu_ > 1000 && (leitura_.imuOk || leitura_.imuReinicios < 3))
+    {
+        leitura_.imuReinicios++;
+        leitura_.imuOk = iniciarBno();
+        ultimoEventoImu_ = millis();
+        return;
+    }
     if (!leitura_.imuOk)
         return;
     if (bno.wasReset())
@@ -132,6 +142,8 @@ void Sensores::lerImu()
     {
         if (v.sensorId != SH2_GAME_ROTATION_VECTOR)
             continue;
+        ultimoEventoImu_ = agora;
+        leitura_.imuEventos++;
         float r = v.un.gameRotationVector.real, i = v.un.gameRotationVector.i;
         float j = v.un.gameRotationVector.j, k = v.un.gameRotationVector.k;
         yawBruto_ = atan2f(2 * (r * k + i * j), 1 - 2 * (j * j + k * k)) * RAD_TO_DEG;
@@ -147,6 +159,34 @@ void Sensores::lerIna()
         return;
     leitura_.tensao_v = barramento * 0.00125f;                                // LSB 1,25 mV
     leitura_.corrente_ma = (int16_t)shunt * 0.0025f / INA226_SHUNT_OHM;       // LSB 2,5 uV
+}
+
+// Liga os 3 VL53L0X um por vez e troca o endereço de cada um (todos acordam em 0x29).
+uint8_t Sensores::ligarDistancia()
+{
+    for (auto &s : distancia)
+    {
+        pinMode(s.xshut, OUTPUT);
+        digitalWrite(s.xshut, LOW); // XSHUT em 0: o VL53L0X desliga e sai do I2C
+        s.ok = false;
+    }
+    delay(20);
+    uint8_t ok = 0;
+    for (auto &s : distancia)
+    {
+        digitalWrite(s.xshut, HIGH);
+        delay(50); // o VL53L0X precisa desse tempo depois do XSHUT
+        s.dev = VL53L0X(); // acorda no endereço de fábrica (0x29), não no 0x3x de antes
+        s.dev.setTimeout(100);
+        s.ok = s.dev.init();
+        if (s.ok)
+        {
+            s.dev.setAddress(s.endereco);
+            s.dev.startContinuous();
+            ok++;
+        }
+    }
+    return ok;
 }
 
 void Sensores::zerarYaw()
