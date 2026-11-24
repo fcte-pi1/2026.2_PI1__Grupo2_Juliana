@@ -192,6 +192,7 @@ void test_limiares_histerese_minima() {
 void test_limiares_recusa_medidas_ruins() {
     TEST_ASSERT_FALSE(calcularLimiares(0, 240).ok);             // sensor sem leitura
     TEST_ASSERT_FALSE(calcularLimiares(DIST_SEM_ALVO, 240).ok); // parede não estava lá
+    TEST_ASSERT_FALSE(calcularLimiares(380, DIST_SEM_ALVO).ok); // parede esquecida: viu obstáculo fora da célula
     TEST_ASSERT_FALSE(calcularLimiares(60, 80).ok);             // parede não foi tirada
 }
 
