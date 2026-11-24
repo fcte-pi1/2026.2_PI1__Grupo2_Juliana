@@ -2,11 +2,11 @@
 
 #include <string.h>
 
-static const Direcao TODAS[] = {NORTE, LESTE, SUL, OESTE};
+static const NUCLEO1_DADOS Direcao TODAS[] = {NORTE, LESTE, SUL, OESTE};
 
 // Busca em largura a partir do objetivo: cada vizinho alcançável recebe a
 // distância da célula de onde veio + 1.
-void FloodFill::recalcular(const Labirinto &lab, ModoFlood modo)
+NUCLEO1 void FloodFill::recalcular(const Labirinto &lab, ModoFlood modo)
 {
     modo_ = modo;
     memset(dist_, INFINITO, sizeof(dist_));
@@ -48,26 +48,26 @@ void FloodFill::recalcular(const Labirinto &lab, ModoFlood modo)
     }
 }
 
-uint8_t FloodFill::distancia(uint8_t x, uint8_t y) const
+NUCLEO1 uint8_t FloodFill::distancia(uint8_t x, uint8_t y) const
 {
     if (x >= MAX_LARG || y >= MAX_ALT)
         return INFINITO;
     return dist_[x][y];
 }
 
-uint8_t FloodFill::valorAtual(const Labirinto &lab) const
+NUCLEO1 uint8_t FloodFill::valorAtual(const Labirinto &lab) const
 {
     return distancia(lab.x(), lab.y());
 }
 
-bool FloodFill::proximaDirecao(const Labirinto &lab, Direcao &saida) const
+NUCLEO1 bool FloodFill::proximaDirecao(const Labirinto &lab, Direcao &saida) const
 {
     if (distancia(lab.x(), lab.y()) == INFINITO)
         return false;
     return escolher(lab, lab.x(), lab.y(), lab.orientacao(), INFINITO, saida);
 }
 
-uint8_t FloodFill::rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t max)
+NUCLEO1 uint8_t FloodFill::rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t max)
 {
     recalcular(lab, RAPIDO);
     uint8_t passos = dist_[0][0];
@@ -91,7 +91,7 @@ uint8_t FloodFill::rotaMaisCurta(const Labirinto &lab, Direcao saida[], uint8_t 
     return passos;
 }
 
-bool FloodFill::rotaGarantida(const Labirinto &lab)
+NUCLEO1 bool FloodFill::rotaGarantida(const Labirinto &lab)
 {
     recalcular(lab, EXPLORACAO);
     uint8_t otimista = dist_[0][0];
@@ -101,7 +101,7 @@ bool FloodFill::rotaGarantida(const Labirinto &lab)
 
 // Desconhecido conta como aberto na exploração e como fechado na rota rápida.
 // As bordas já são paredes conhecidas, então o vizinho sempre existe.
-bool FloodFill::passavel(const Labirinto &lab, uint8_t x, uint8_t y, Direcao d) const
+NUCLEO1 bool FloodFill::passavel(const Labirinto &lab, uint8_t x, uint8_t y, Direcao d) const
 {
     if (lab.temParede(x, y, d))
         return false;
@@ -110,7 +110,7 @@ bool FloodFill::passavel(const Labirinto &lab, uint8_t x, uint8_t y, Direcao d) 
 
 // Vizinho passável com a menor distância abaixo de limite. A ordem da lista
 // decide o empate: reto, direita, esquerda e trás.
-bool FloodFill::escolher(const Labirinto &lab, uint8_t x, uint8_t y, Direcao frente,
+NUCLEO1 bool FloodFill::escolher(const Labirinto &lab, uint8_t x, uint8_t y, Direcao frente,
                          uint8_t limite, Direcao &saida) const
 {
     const Direcao ordem[] = {frente, girarDireita(frente), girarEsquerda(frente), oposta(frente)};
