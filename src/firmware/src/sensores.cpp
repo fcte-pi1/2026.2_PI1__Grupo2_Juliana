@@ -129,8 +129,9 @@ void Sensores::lerImu()
     // BNO085 mudo (ou falhou no boot): reset pelo pino RST (D18) e liga o
     // relatório de novo. Sem isso o yaw fica congelado no último valor. O reset
     // trava o laço por ~0,6 s: o intervalo dobra a cada tentativa sem leitura
-    // (1 s, 2 s, 4 s, 8 s) e não acontece durante um movimento.
-    if (agora - ultimoEventoImu_ > intervaloReinicioImu_)
+    // (1 s, 2 s, 4 s, 8 s) e não acontece durante um movimento. Se nunca
+    // respondeu, para após 3 tentativas (develop).
+    if (agora - ultimoEventoImu_ > intervaloReinicioImu_ && (leitura_.imuOk || leitura_.imuReinicios < 3))
     {
         leitura_.imuOk = false; // mudo: o yaw não vale
         if (!podeReiniciarImu_)

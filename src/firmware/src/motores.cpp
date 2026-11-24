@@ -205,6 +205,7 @@ void zerar()
     contE = contD = 0;
     interrupts();
     anteriorE = anteriorD = 0;
+    ppsE = ppsD = 0;
 }
 
 int32_t esquerdo() { return INVERTE_ESQUERDO ? -contE : contE; }

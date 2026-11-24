@@ -17,14 +17,15 @@ bool MonitorBateria::Persistencia::durou(bool condicao, uint32_t agora)
 
 EventoBateria MonitorBateria::atualizar(uint32_t agora, bool valida, float tensao_v, float corrente_ma)
 {
-    if (parado_)
-        return BATERIA_OK; // já mandou parar; só volta com reset
-
     // INA226 sem resposta: só conta se havia bateria (no USB pode nem ter INA).
     if (falha_.durou(!valida && presente_, agora))
     {
-        parado_ = true;
-        return BATERIA_FALHA_SENSOR;
+        if (!parado_)
+        {
+            parado_ = true;
+            return BATERIA_FALHA_SENSOR;
+        }
+        return BATERIA_OK;
     }
     if (!valida)
         return BATERIA_OK;
@@ -42,7 +43,17 @@ EventoBateria MonitorBateria::atualizar(uint32_t agora, bool valida, float tensa
     if (!presente_)
     {
         aviso_.ativa = parada_.ativa = false;
+        parado_ = false;
         return BATERIA_OK;
+    }
+    // Já mandou parar: a janela continua atualizando (console e telemetria
+    // mostram a tensão real), mas só rearma acima de REARME_V.
+    if (parado_)
+    {
+        if (v >= REARME_V)
+            parado_ = false;
+        else
+            return BATERIA_OK;
     }
 
     if (parada_.durou(v < PARADA_V, agora))
