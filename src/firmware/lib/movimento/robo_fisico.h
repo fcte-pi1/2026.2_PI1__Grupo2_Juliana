@@ -38,14 +38,19 @@ public:
     // Giro bloqueado (encostou ou pivotou): manobra isso (ré ou frente) e
     // tenta girar de novo, até MAX_TENTATIVAS_GIRO vezes no total.
     static constexpr float RECUO_MM = 30;
-    static const uint8_t MAX_TENTATIVAS_GIRO = 4;
+    static const uint8_t MAX_TENTATIVAS_GIRO = 10; // era 4: desistia com o giro quase saindo (pedido da equipe, 24/11/2026)
+    // Depois de 3 tentativas sem o giro avançar isso, desiste (roda morta, preso).
+    static constexpr float PROGRESSO_MINIMO_GIRO_GRAUS = 5;
     // Manobra para a frente só com a frente mais longe que isso.
     static const uint16_t FRENTE_LIVRE_MANOBRA_MM = 70;
-    // Giro de 90° perto da parede da varredura: avanço no meio (ver girarPara).
-    static constexpr float AVANCO_MEIO_GIRO_MM = 15;
     // Giro que parou (bloqueado ou tempo esgotado) faltando até isso: vale.
     static constexpr float QUASE_NO_RUMO_GRAUS = 10;
-    static const uint16_t PERTO_DA_VARREDURA_MM = 5; // parede pelo menos isso mais perto que o centro
+    // Giro de 90° com parede do lado da varredura (até a referência do centro +
+    // PAREDE_NA_VARREDURA_MM): gira num ponto afastarNaVarreduraMm (parâmetro
+    // do controle, da geometria do robô) mais longe dela (ver girarPara);
+    // ANGULO_DESVIO_GRAUS antes do contato (~27° em (1,1)).
+    static const uint16_t PAREDE_NA_VARREDURA_MM = 15;
+    static constexpr float ANGULO_DESVIO_GRAUS = 25;
     // Manobra que andou menos que isso: preso desse lado, tenta o outro.
     static constexpr float MANOBRA_MINIMA_MM = 5;
     // Andar bloqueado: a próxima tentativa exagera o desvio lateral nisso.
@@ -117,6 +122,7 @@ private:
     uint16_t recuperacoes_ = 0;
     uint16_t leiturasTortas_ = 0;
     uint16_t rumosCorrigidos_ = 0;
+    uint16_t ladosNaBatida_[2] = {0, 0}; // esquerda e direita no instante do último bloqueio andando
     bool aprendeuFrente_ = false;
     float percorridoTotal_ = 0; // ida e volta do último andarMm
     float desvioX_ = 0, desvioY_ = 0;

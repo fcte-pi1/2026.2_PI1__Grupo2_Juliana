@@ -180,27 +180,33 @@ void RoboFisico::somarDesvioPeloRumo(float mm)
 // labirinto (24/11/2026) o robô ficava fora do lugar e lia parede falsa.
 bool RoboFisico::girarPara(float rumoGraus)
 {
-    // Giro de ~90° com a parede do lado da varredura mais perto que o centro:
-    // gira metade, avança um pouco na diagonal (a traseira se afasta dessa
-    // parede) e gira o resto. Girando à direita a traseira vai para a esquerda,
-    // e vice-versa. Labirinto novo, 24/11/2026: em (1,1) o robô chegava 8-15 mm
-    // encostado na parede Sul e o giro de Oeste para Norte travava nela.
+    // Giro de ~90° com parede do lado para onde a traseira varre (girando à
+    // direita ela vai para a esquerda, e vice-versa): no centro o canto de trás
+    // pega nela (labirinto novo, 24/11/2026: em (1,1), centrado, o giro de Oeste
+    // para Norte parava sempre em 153° com as duas rodas a 0,6). Gira num ponto
+    // afastarNaVarreduraMm mais longe da parede, no mesmo lugar ao longo do
+    // corredor: recua, gira ANGULO_DESVIO_GRAUS, avança na diagonal, gira o resto.
     float falta = normalizarGraus(rumoGraus - controle_.rumo());
-    if (fabsf(falta) > 60 && fabsf(falta) < 120)
+    if (controle_.parametros().afastarNaVarreduraMm > 0 && fabsf(falta) > 60 && fabsf(falta) < 120)
     {
         EntradaMovimento e = hw_.ler();
         ParametrosMovimento &p = controle_.parametros();
-        uint8_t lado = falta < 0 ? 0 : 2; // esquerda (giro à direita) ou direita
+        uint8_t lado = falta < 0 ? 0 : 2;
         uint16_t ref = lado == 0 ? p.esquerdaCentroMm : p.direitaCentroMm;
         uint16_t dist = e.distancia_mm[lado];
-        if (ref && dist > 0 && dist + PERTO_DA_VARREDURA_MM < ref)
+        if (ref && dist > 0 && dist < ref + PAREDE_NA_VARREDURA_MM)
         {
-            controle_.girar(normalizarGraus(controle_.rumo() + falta / 2));
+            const float a = ANGULO_DESVIO_GRAUS / 57.2957795f;
+            const float diagonal = p.afastarNaVarreduraMm / sinf(a);
+            float rumo0 = controle_.rumo();
+            controle_.andar(-diagonal * cosf(a), rumo0);
             executar();
-            e = hw_.ler();
-            if (!hw_.abortado() && (e.distancia_mm[1] == 0 || e.distancia_mm[1] > FRENTE_LIVRE_MANOBRA_MM))
+            somarDesvioPeloRumo(controle_.percorridoMm());
+            controle_.girar(normalizarGraus(rumo0 + (falta < 0 ? -ANGULO_DESVIO_GRAUS : ANGULO_DESVIO_GRAUS)));
+            executar();
+            if (!hw_.abortado())
             {
-                controle_.andar(AVANCO_MEIO_GIRO_MM, controle_.rumo());
+                controle_.andar(diagonal, controle_.rumo());
                 executar();
                 somarDesvioPeloRumo(controle_.percorridoMm());
             }
@@ -209,8 +215,13 @@ bool RoboFisico::girarPara(float rumoGraus)
     controle_.girar(rumoGraus);
     if (executar() || quaseNoRumo(rumoGraus))
         return true;
+    const float faltaInicial = fabsf(normalizarGraus(rumoGraus - controle_.rumo()));
     for (uint8_t tentativa = 1; tentativa < MAX_TENTATIVAS_GIRO; tentativa++)
     {
+        // Insiste enquanto o giro avança; sem avanço nenhum em 3 tentativas
+        // (roda morta, robô preso), as manobras só pivotam e ele bate.
+        if (tentativa > 3 && faltaInicial - fabsf(normalizarGraus(rumoGraus - controle_.rumo())) < PROGRESSO_MINIMO_GIRO_GRAUS)
+            return false;
         // Tempo esgotado também: o giro se arrastando no fim, faltando 2,7°, era
         // desistência com o robô praticamente alinhado (bancada J, 24/11/2026).
         if ((ultimo_ != MOV_BLOQUEADO && ultimo_ != MOV_TEMPO_ESGOTADO) || hw_.abortado())
@@ -275,6 +286,11 @@ bool RoboFisico::andarMm(float mm, float rumoGraus, float lateralInicialMm, bool
         return true;
     EstadoMovimento falha = ultimo_;
     float andou = percorridoTotal_;
+    // Lados no instante da batida (antes da ré): dizem de que lado está a
+    // pilastra em que encostou (mover() desvia dela na tentativa seguinte).
+    EntradaMovimento eb = hw_.ler();
+    ladosNaBatida_[0] = eb.distancia_mm[0];
+    ladosNaBatida_[1] = eb.distancia_mm[2];
     if (hw_.abortado() || fabsf(andou) < 10)
         return false;
     recuperacoes_++;
@@ -359,9 +375,24 @@ bool RoboFisico::mover(Direcao d)
     // lateral conhecido conta EMPURRAO_LATERAL_MM a mais, e a correção de
     // trajetória vira mais para o lado oposto (labirinto novo, 24/11/2026: em
     // (1,1), 16 mm à esquerda, o robô batia na coluna da esquerda ao subir).
+    // O lado vem dos sensores no instante da batida: o mais perto que o normal
+    // (referência do centro) é o da pilastra; sem leitura que decida, o desvio
+    // conhecido. Antes era só o desvio pelos encoders, que errava o lado e o
+    // robô batia na mesma pilastra várias vezes (labirinto novo, 24/11/2026:
+    // 43 s indo e voltando em (1,1)).
     float lateral = desvioAo(girarDireita(d));
-    if (!ok && ultimo_ == MOV_BLOQUEADO && fabsf(lateral) > 3)
-        somarDesvio(girarDireita(d), lateral > 0 ? EMPURRAO_LATERAL_MM : -EMPURRAO_LATERAL_MM);
+    if (!ok && ultimo_ == MOV_BLOQUEADO)
+    {
+        ParametrosMovimento &p = controle_.parametros();
+        float pertoE = ladosNaBatida_[0] > 0 && p.esquerdaCentroMm ? (float)p.esquerdaCentroMm - ladosNaBatida_[0] : 0;
+        float pertoD = ladosNaBatida_[1] > 0 && p.direitaCentroMm ? (float)p.direitaCentroMm - ladosNaBatida_[1] : 0;
+        if (pertoE > pertoD + 5)
+            somarDesvio(girarEsquerda(d), EMPURRAO_LATERAL_MM); // encostado à esquerda: desvia para a direita
+        else if (pertoD > pertoE + 5)
+            somarDesvio(girarDireita(d), EMPURRAO_LATERAL_MM);
+        else if (fabsf(lateral) > 3)
+            somarDesvio(girarDireita(d), lateral > 0 ? EMPURRAO_LATERAL_MM : -EMPURRAO_LATERAL_MM);
+    }
     return ok;
 }
 

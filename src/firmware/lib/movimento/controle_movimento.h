@@ -31,7 +31,7 @@ struct ParametrosMovimento
     float ganhoRumo = 0.015f;         // potência de giro por grau de erro
     float correcaoMaxima = 0.5f;      // potência de giro máxima andando (0,25 saturava e o robô batia na parede direita)
     float ganhoLateral = 0.4f;        // graus de correção por mm fora do centro
-    float correcaoLateralMaxima = 12; // graus
+    float correcaoLateralMaxima = 20; // graus (era 12: ~19 mm de correção até a coluna seguinte; depois das manobras de um giro o robô saía 17-32 mm fora e batia nela, labirinto novo 24/11/2026)
     // Sem o BNO085: o rumo medido pelas paredes (variação do erro lateral ao
     // longo de pelo menos baseRumoParedeMm) corrige o rumo dos encoders.
     float baseRumoParedeMm = 50;
@@ -53,6 +53,14 @@ struct ParametrosMovimento
     // Girar no lugar
     float potenciaGiroMaxima = 0.31f;
     float potenciaGiroMinima = 0.40f; // 0,24: freando, a esquerda (para trás) travava abaixo de ~0,35 no labirinto (24/11/2026)
+    // Girando à direita a roda direita vai para trás e precisa de mais: com 0,40
+    // ela travava, a outra esperava e o giro saía em trancos (90° em 7,3 s contra
+    // 1,2 s à esquerda; labirinto novo, 24/11/2026).
+    float potenciaGiroMinimaDireita = 0.52f;
+    // Robô maior que o do projeto (o de verdade, ~13 x 14,5 cm): giro de 90° com
+    // parede do lado da varredura é feito isso mais longe dela (RoboFisico::
+    // girarPara). 0 = no centro (robô do simulador). O main.cpp liga.
+    float afastarNaVarreduraMm = 0;
     float ganhoGiro = 0.008f; // potência por grau de erro
     float toleranciaGiroGraus = 2;
     uint16_t assentarGiroMs = 80; // tempo parado dentro da tolerância

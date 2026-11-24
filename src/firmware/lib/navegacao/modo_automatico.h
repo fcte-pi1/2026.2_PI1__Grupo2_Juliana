@@ -56,7 +56,7 @@ class ModoAutomatico
 {
 public:
     static const uint8_t MAX_ROTA = 192;           // 12x4 ida e volta, com folga
-    static const uint8_t MAX_TENTATIVAS_MOVER = 3; // falhas seguidas antes de desistir
+    static const uint8_t MAX_TENTATIVAS_MOVER = 10; // falhas seguidas antes de desistir (era 3; pedido da equipe, 24/11/2026)
 
     ModoAutomatico(InterfaceRobo &robo, Labirinto &mapa, uint16_t limitePassos = 2000)
         : robo_(robo), mapa_(mapa), limitePassos_(limitePassos) {}

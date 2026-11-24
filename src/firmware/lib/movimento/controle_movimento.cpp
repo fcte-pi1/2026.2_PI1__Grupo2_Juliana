@@ -322,6 +322,14 @@ void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMov
         s.esquerdo = sinal(s.esquerdo) * e2 * (s.esquerdo != 0);
         s.direito = sinal(s.direito) * d2 * (s.direito != 0);
     }
+    // A roda travada recebe pelo menos o próprio reforço, mesmo que a diferença
+    // da correção de rumo encolha: com a outra no teto, subir as duas juntas a
+    // deixava presa abaixo do que precisa para sair (labirinto novo, 24/11/2026,
+    // (1,2): esquerda em 0,40 e direita em 0,60 por 10 s, sem um pulso na esquerda).
+    if (paradaE)
+        s.esquerdo = sinal(s.esquerdo) * fmaxf(fabsf(s.esquerdo), reforcoE_);
+    if (paradaD)
+        s.direito = sinal(s.direito) * fmaxf(fabsf(s.direito), reforcoD_);
     if (!esperar)
         return;
     if (paradaE && !paradaD && s.direito != 0)
@@ -501,7 +509,9 @@ SaidaMovimento ControleMovimento::girando(const EntradaMovimento &e)
     if (!vigiar(e))
         return {0, 0, true};
     float p = fabsf(erro) * p_.ganhoGiro;
-    p = p > p_.potenciaGiroMaxima ? p_.potenciaGiroMaxima : (p < p_.potenciaGiroMinima ? p_.potenciaGiroMinima : p);
+    const float minima = erro < 0 ? p_.potenciaGiroMinimaDireita : p_.potenciaGiroMinima;
+    p = p < minima ? minima : p;
+    p = p > p_.potenciaGiroMaxima ? p_.potenciaGiroMaxima : p;
     correcao_ = sinal(erro) * p;
     // As duas rodas o mesmo tanto: a adiantada perde potência, a atrasada ganha.
     float aE = fabsf((float)(e.encoderEsquerdo - inicioE_)) / p_.pulsosPorMm;
