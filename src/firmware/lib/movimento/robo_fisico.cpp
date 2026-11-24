@@ -231,5 +231,12 @@ bool RoboFisico::mover(Direcao d)
                                  ? 0
                                  : longitudinal + percorridoTotal_ - (ok ? CELULA_MM : 0);
     definirDesvio(d, novoLongitudinal, controle_.lateralMm());
+    // Bloqueou andando (raspou numa coluna): na próxima tentativa o desvio
+    // lateral conhecido conta EMPURRAO_LATERAL_MM a mais, e a correção de
+    // trajetória vira mais para o lado oposto (labirinto novo, 24/11/2026: em
+    // (1,1), 16 mm à esquerda, o robô batia na coluna da esquerda ao subir).
+    float lateral = desvioAo(girarDireita(d));
+    if (!ok && ultimo_ == MOV_BLOQUEADO && fabsf(lateral) > 3)
+        somarDesvio(girarDireita(d), lateral > 0 ? EMPURRAO_LATERAL_MM : -EMPURRAO_LATERAL_MM);
     return ok;
 }
