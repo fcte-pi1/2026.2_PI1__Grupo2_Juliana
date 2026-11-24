@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "direcao.h"
+#include "modo_automatico.h"
 
 // Navegação no núcleo 1.
 //
@@ -15,14 +16,20 @@
 //
 // Na bancada (robô parado na largada) ela:
 //  - marca no mapa as paredes que os sensores veem e recalcula o Flood Fill
-//    a cada 20 ms; o valor vai na telemetria (valor_flood);
+//    a cada 20 ms; pose, paredes da célula, valor do Flood Fill e estado vão
+//    na telemetria;
 //  - uma vez por segundo roda uma corrida completa simulada com o modo
 //    automático, como carga, e confere a rota.
 namespace Navegacao
 {
 struct Estado
 {
-    int16_t valorFlood;       // distância da largada ao objetivo, -1 se ainda não calculou
+    // Dados da navegação para a telemetria (Contrato, docs/4.4.7, seção 2.2)
+    uint8_t x, y;             // célula atual no mapa
+    Direcao orientacao;       // para onde o robô aponta
+    uint8_t paredes;          // máscara 0..15 da célula atual (o que o mapa já sabe)
+    EstadoRobo estadoRobo;    // ESTADO_PARADO enquanto o robô não anda sozinho
+    int16_t valorFlood;       // distância da célula atual ao objetivo, -1 se ainda não calculou
     uint8_t nucleo;           // núcleo onde a tarefa está rodando (deve ser 1)
     uint32_t ciclos;          // recálculos do Flood Fill
     uint32_t tempoMedioUs;    // tempo de um recálculo

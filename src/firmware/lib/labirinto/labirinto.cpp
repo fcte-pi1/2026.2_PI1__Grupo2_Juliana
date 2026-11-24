@@ -14,7 +14,8 @@ NUCLEO1 bool Labirinto::iniciar(uint8_t largura, uint8_t altura, Direcao orienta
 {
     if (!tamanhoDoRoteiro(largura, altura))
         return false;
-    if (orientacaoInicial != NORTE && orientacaoInicial != LESTE)
+    if (orientacaoInicial != NORTE && orientacaoInicial != LESTE && orientacaoInicial != SUL &&
+        orientacaoInicial != OESTE)
         return false;
     largura_ = largura;
     altura_ = altura;
@@ -43,14 +44,18 @@ NUCLEO1 bool Labirinto::iniciar(uint8_t largura, uint8_t altura, Direcao orienta
 }
 
 // Virado para o Norte, a direita é o Leste (largura); virado para o Leste, a
-// esquerda é o Norte (altura). Ver labirinto.h.
+// esquerda é o Norte (altura). Virado para a borda, "à frente" é ao longo do
+// eixo do robô (as células ficam atrás dele). Ver labirinto.h.
 NUCLEO1 bool Labirinto::iniciarNaLargada(LadoBorda borda, uint8_t celulasAFrente, uint8_t celulasAoLado)
 {
-    if (borda == BORDA_ESQUERDA)
-        return iniciar(celulasAoLado, celulasAFrente, NORTE);
-    if (borda == BORDA_DIREITA)
-        return iniciar(celulasAFrente, celulasAoLado, LESTE);
-    return false;
+    switch (borda)
+    {
+    case BORDA_ESQUERDA: return iniciar(celulasAoLado, celulasAFrente, NORTE);
+    case BORDA_DIREITA: return iniciar(celulasAFrente, celulasAoLado, LESTE);
+    case BORDA_FRENTE_DIREITA: return iniciar(celulasAoLado, celulasAFrente, SUL);
+    case BORDA_FRENTE_ESQUERDA: return iniciar(celulasAFrente, celulasAoLado, OESTE);
+    default: return false;
+    }
 }
 
 NUCLEO1 void Labirinto::marcarParede(uint8_t x, uint8_t y, Direcao d) { gravar(x, y, d, true); }

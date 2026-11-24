@@ -227,9 +227,13 @@ void atualizar(uint32_t agora)
 float pulsosPorSegundoEsquerda() { return ppsE; }
 float pulsosPorSegundoDireita() { return ppsD; }
 
+float pulsosPorVoltaMedidos = 0;
+void definirPulsosPorVolta(float pulsos) { pulsosPorVoltaMedidos = pulsos; }
+
 float velocidadeMs()
 {
-    const float metrosPorPulso = 3.14159265f * DIAMETRO_RODA_MM / 1000.0f / PULSOS_POR_VOLTA;
+    float ppv = pulsosPorVoltaMedidos > 0 ? pulsosPorVoltaMedidos : PULSOS_POR_VOLTA;
+    const float metrosPorPulso = 3.14159265f * DIAMETRO_RODA_MM / 1000.0f / ppv;
     return (ppsE + ppsD) / 2.0f * metrosPorPulso;
 }
 } // namespace Encoders

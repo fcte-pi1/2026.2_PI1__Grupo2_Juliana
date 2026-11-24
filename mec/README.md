@@ -20,14 +20,14 @@ Esta pasta reúne os artefatos do projeto mecânico e estrutural do Micromouse, 
 - 5 desenhos técnicos em PNG, 1 EBOM em PNG e 10 PDFs de desenhos e montagem;
 - 9 imagens do modelo CAD;
 - 37 fotografias de testes, montagem e pesagem;
-- 43 arquivos de montagem, peças, desenhos e gabarito em `arquivos-cad/`;
+- 44 arquivos de montagem, peças, desenhos e gabarito em `arquivos-cad/`;
 - 2 modelos STL comerciais de referência em `impressao-3d/referencias/`.
 
 Os arquivos desta pasta foram organizados a partir dos artefatos estruturais do repositório e do pacote `Estruturas_PI1_2026_2.zip`. As imagens originais em `docs/figs/estruturas/` foram mantidas para preservar os links da documentação.
 
 ## Artefatos pendentes
 
-O pacote CAD de setembro de 2026 não representa a versão final: faltam na montagem o chassi refatorado para a roda boba, os espaçadores adicionais de 15 mm e a IMU BNO085 (o pacote contém modelos MPU6050). As novas peças da base e do patamar intermediário estão em [`arquivos-cad/chassi-atualizado/`](./arquivos-cad/chassi-atualizado/); faltam a montagem completa e os PDFs atualizados. Verificar as referências no SolidWorks. Os STLs incluídos são referências comerciais e ainda precisam ser comparados às peças fabricadas. Permanecem pendentes os STLs das peças fabricadas, os DXFs de corte dos patamares e os modelos CAD/STL dos pilares do labirinto e, se aplicável, dos suportes dos sensores.
+O pacote CAD de setembro de 2026 não representa a versão final: faltam na montagem o chassi refatorado para a roda boba, os espaçadores adicionais de 15 mm e a IMU BNO085 (o pacote contém modelos MPU6050). As novas peças da base e do patamar intermediário estão em [`arquivos-cad/chassi-atualizado/`](./arquivos-cad/chassi-atualizado/); faltam a montagem completa e os PDFs atualizados. Verificar as referências no SolidWorks. Os STLs incluídos são referências comerciais e ainda precisam ser comparados às peças fabricadas. Permanecem pendentes os STLs das peças fabricadas, os DXFs de corte dos patamares e o STL dos pilares do labirinto e, se aplicável, os modelos CAD/STL dos suportes dos sensores. O modelo editável do poste do labirinto está em [arquivos-cad/labirinto/](./arquivos-cad/labirinto/).
 
 Também faltam os registros complementares de massa por componente, centro de gravidade e envelope final, a partir das medições e dados conferidos pela equipe.
 

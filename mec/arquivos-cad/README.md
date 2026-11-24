@@ -6,7 +6,7 @@ Arquivos extraídos de `Estruturas_PI1_2026_2.zip`, recebidos como material do p
 - [`chassi-atualizado/`](./chassi-atualizado/): novos arquivos da base e do patamar intermediário em SolidWorks e STEP. São versões diferentes das peças de mesmo nome no pacote anterior. A [imagem da montagem atualizada](../modelos-cad/chassi-atualizado.png) mostra o apoio da roda boba.
 - Vistas adicionais do chassi atualizado: [frontal](../modelos-cad/chassi-atualizado-vista-frontal.png), [frontal elevada](../modelos-cad/chassi-atualizado-vista-frontal-elevada.png) e [frontal oblíqua](../modelos-cad/chassi-atualizado-vista-frontal-oblíqua.png).
 - [`desenhos/`](./desenhos/): desenhos editáveis SolidWorks e modelo de folha.
-- [`labirinto/`](./labirinto/): modelo da base, desenho e PDF do gabarito.
+- [`labirinto/`](./labirinto/): modelo da base, desenho e PDF do gabarito, e [modelo editável do poste de suporte](./labirinto/poste_suporte_labirinto.SLDPRT).
 
 Os arquivos da montagem foram mantidos juntos para preservar suas possíveis referências. A abertura completa da montagem e a resolução de referências externas ainda devem ser verificadas no SolidWorks. Os desenhos em PDF estão em [`../desenhos-tecnicos/pdf/`](../desenhos-tecnicos/pdf/) e as imagens em [`../modelos-cad/`](../modelos-cad/).
 
