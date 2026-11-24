@@ -125,9 +125,9 @@ void Sensores::lerImu()
     uint32_t agora = millis();
     // BNO085 mudo há 1 s (ou falhou no boot): reset pelo pino RST (D18) e liga
     // o relatório de novo. Sem isso o yaw fica congelado no último valor.
-    if (agora - ultimoEventoImu_ > 1000)
+    // Se já está falhando, para após 3 tentativas: cada uma bloqueia ~330 ms.
+    if (agora - ultimoEventoImu_ > 1000 && (leitura_.imuOk || leitura_.imuReinicios < 3))
     {
-        ultimoEventoImu_ = agora;
         leitura_.imuReinicios++;
         leitura_.imuOk = iniciarBno();
         ultimoEventoImu_ = millis();
