@@ -204,13 +204,58 @@ SaidaMovimento ControleMovimento::atualizar(const EntradaMovimento &e)
 void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMovimento &s)
 {
     float passo = p_.reforcoPorSegundo * (e.agora_ms - ultimoCiclo_) / 1000.0f;
-    const float limite = p_.potenciaArranqueMaxima;
+    const bool girando = estado_ == MOV_GIRANDO;
+    // Arrancar do zero (girando ou andando) pode passar do teto do PWM até trancoGiro: no
+    // chão, com PWM 80, o robô às vezes não saía do lugar andando reto (23/11/2026).
+    const float limite = p_.trancoGiro > p_.potenciaArranqueMaxima ? p_.trancoGiro : p_.potenciaArranqueMaxima;
     bool paradaE = s.esquerdo != 0 && e.agora_ms - ultimoPulsoE_ > p_.rodaParadaMs;
     bool paradaD = s.direito != 0 && e.agora_ms - ultimoPulsoD_ > p_.rodaParadaMs;
     if (paradaE)
         reforcoE_ = fminf((reforcoE_ > fabsf(s.esquerdo) ? reforcoE_ : fabsf(s.esquerdo)) + passo, limite);
     if (paradaD)
         reforcoD_ = fminf((reforcoD_ > fabsf(s.direito) ? reforcoD_ : fabsf(s.direito)) + passo, limite);
+    // Acima do teto o reforço é só o tranco para sair do lugar: com a roda já
+    // girando, ele desce de volta ao teto (o robô não fica rápido depois de arrancar).
+    if (!paradaE && reforcoE_ > p_.potenciaArranqueMaxima)
+        reforcoE_ = fmaxf(reforcoE_ - 2 * passo, p_.potenciaArranqueMaxima);
+    if (!paradaD && reforcoD_ > p_.potenciaArranqueMaxima)
+        reforcoD_ = fmaxf(reforcoD_ - 2 * passo, p_.potenciaArranqueMaxima);
+
+    // Uma parada e a outra andando: a que anda espera. Contar a espera como
+    // pulso evita que ela também pareça travada; o bloqueio continua vindo do
+    // tempo sem pulso nenhum (vigiar). Espera só até esperaMaximaMs: no chão a
+    // roda esquerda (mais dura) sozinha não arrasta o robô, nem com 0,6
+    // (23 e 24/11/2026: "bloqueado" e recuo); passado isso, as duas vão juntas.
+    if (!(paradaE ^ paradaD))
+        esperaDesde_ = 0;
+    else if (esperaDesde_ == 0)
+        esperaDesde_ = e.agora_ms;
+    const bool esperar = !(esperaDesde_ && e.agora_ms - esperaDesde_ > p_.esperaMaximaMs);
+
+    // Girando, o reforço vai só para a roda travada e a outra espera parada:
+    // somado nas duas, empurrava a que anda e o robô pivotava na travada até a
+    // parede (labirinto, 24/11/2026: a esquerda parou freando e a direita seguiu
+    // ~14 mm sozinha). As duas travadas, ou a espera esgotada: cada uma com o seu reforço.
+    if (girando)
+    {
+        if (paradaE || !esperar)
+            s.esquerdo = sinal(s.esquerdo) * fmaxf(fabsf(s.esquerdo), reforcoE_);
+        if (paradaD || !esperar)
+            s.direito = sinal(s.direito) * fmaxf(fabsf(s.direito), reforcoD_);
+        if (!esperar)
+            return;
+        if (paradaE && !paradaD && s.direito != 0)
+        {
+            s.direito = 0;
+            ultimoPulsoD_ = e.agora_ms; // esperando de propósito, não travada
+        }
+        else if (paradaD && !paradaE && s.esquerdo != 0)
+        {
+            s.esquerdo = 0;
+            ultimoPulsoE_ = e.agora_ms;
+        }
+        return;
+    }
 
     float falta = 0;
     if (s.esquerdo != 0 && reforcoE_ - fabsf(s.esquerdo) > falta)
@@ -230,9 +275,8 @@ void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMov
         s.esquerdo = sinal(s.esquerdo) * e2 * (s.esquerdo != 0);
         s.direito = sinal(s.direito) * d2 * (s.direito != 0);
     }
-    // Uma parada e a outra andando: a que anda espera. Contar a espera como
-    // pulso evita que ela também pareça travada; o bloqueio continua vindo do
-    // tempo sem pulso nenhum (vigiar).
+    if (!esperar)
+        return;
     if (paradaE && !paradaD && s.direito != 0)
     {
         s.direito = 0;
@@ -400,6 +444,10 @@ SaidaMovimento ControleMovimento::girando(const EntradaMovimento &e)
     float p = fabsf(erro) * p_.ganhoGiro;
     p = p > p_.potenciaGiroMaxima ? p_.potenciaGiroMaxima : (p < p_.potenciaGiroMinima ? p_.potenciaGiroMinima : p);
     correcao_ = sinal(erro) * p;
+    // As duas rodas o mesmo tanto: a adiantada perde potência, a atrasada ganha.
+    float aE = fabsf((float)(e.encoderEsquerdo - inicioE_)) / p_.pulsosPorMm;
+    float aD = fabsf((float)(e.encoderDireito - inicioD_)) / p_.pulsosPorMm;
+    float sinc = limitar(p_.ganhoSincronia * (aE - aD), p);
     // Erro positivo = girar à esquerda: esquerda para trás, direita para frente.
-    return {-correcao_, correcao_, false};
+    return {-sinal(erro) * (p - sinc), sinal(erro) * (p + sinc), false};
 }

@@ -82,6 +82,88 @@ void test_sem_bno_o_rumo_vem_dos_encoders()
     TEST_ASSERT_FLOAT_WITHIN(1, 90, c.rumo());
 }
 
+// Labirinto, 24/11/2026 (log 'O' do giro de 90 no beco, sem BNO085): as rodas
+// giravam juntas até ~48°; freando, a esquerda (para trás) parou e a direita
+// seguiu, ganhando ainda o reforço da esquerda. O robô pivotou na esquerda e
+// encostou na parede. Girando, a roda adiantada espera a travada, e o reforço
+// vai só para a travada.
+void test_girando_a_roda_adiantada_espera_a_travada()
+{
+    ParametrosMovimento p;
+    p.pulsosPorMm = 7.09f;
+    p.potenciaGiroMaxima = p.potenciaArranqueMaxima = 0.51f; // PWM 80 com a bateria em 8,0 V
+    ControleMovimento c(p);
+    EntradaMovimento e = {};
+    for (uint8_t i = 0; i < 3; i++)
+        e.distancia_mm[i] = 8190;
+    c.reiniciar(e, 0);
+    c.girar(90);
+    SaidaMovimento s = {};
+    // As duas juntas até ~50° (300 pulsos cada uma).
+    for (int i = 0; i < 60; i++)
+    {
+        e.agora_ms += 10;
+        e.encoderEsquerdo -= 5;
+        e.encoderDireito += 5;
+        s = c.atualizar(e);
+    }
+    TEST_ASSERT_FLOAT_WITHIN(5, 50, c.rumo());
+    // A esquerda para; a direita ainda anda 150 ms: ~6 mm à frente.
+    for (int i = 0; i < 15; i++)
+    {
+        e.agora_ms += 10;
+        e.encoderDireito += 3;
+        s = c.atualizar(e);
+    }
+    TEST_ASSERT_EQUAL(MOV_GIRANDO, c.estado());
+    TEST_ASSERT_EQUAL_FLOAT(0, s.direito); // a direita espera
+    // A direita parada esperando, a esquerda ainda travada: só ela ganha reforço.
+    for (int i = 0; i < 20; i++)
+    {
+        e.agora_ms += 10;
+        s = c.atualizar(e);
+    }
+    TEST_ASSERT_EQUAL(MOV_GIRANDO, c.estado());
+    TEST_ASSERT_EQUAL_FLOAT(0, s.direito);
+    TEST_ASSERT_TRUE(s.esquerdo < -0.4f);
+}
+
+// Labirinto, 24/11/2026: faltando ~12°, a esquerda travou, a direita esperou e a
+// esquerda sozinha, nem com 0,6, arrastou o robô: "bloqueado" e recuo de 30 mm.
+// A espera acaba em esperaMaximaMs e as duas empurram juntas.
+void test_girando_a_espera_pela_roda_travada_tem_limite()
+{
+    ParametrosMovimento p;
+    p.pulsosPorMm = 7.09f;
+    ControleMovimento c(p);
+    EntradaMovimento e = {};
+    for (uint8_t i = 0; i < 3; i++)
+        e.distancia_mm[i] = 8190;
+    c.reiniciar(e, 0);
+    c.girar(90);
+    SaidaMovimento s = {};
+    for (int i = 0; i < 30; i++) // as duas juntas um pouco
+    {
+        e.agora_ms += 10;
+        e.encoderEsquerdo -= 5;
+        e.encoderDireito += 5;
+        s = c.atualizar(e);
+    }
+    bool esperou = false;
+    for (int i = 0; i < 60; i++) // a esquerda trava; a direita para quando manda esperar
+    {
+        e.agora_ms += 10;
+        if (s.direito != 0)
+            e.encoderDireito += 1;
+        s = c.atualizar(e);
+        esperou |= s.direito == 0;
+    }
+    TEST_ASSERT_TRUE(esperou);
+    TEST_ASSERT_EQUAL(MOV_GIRANDO, c.estado());
+    TEST_ASSERT_TRUE(s.direito > 0.2f); // passou de esperaMaximaMs: a direita ajuda
+    TEST_ASSERT_TRUE(s.esquerdo < -0.4f);
+}
+
 void test_com_bno_o_rumo_soma_as_variacoes_do_yaw()
 {
     ControleMovimento c;
@@ -340,7 +422,8 @@ void test_aprende_a_referencia_da_frente_na_primeira_parede()
 // ---------- CT-SE13: corrida completa com o robô físico simulado ----------
 
 static void corridaCompleta(const LabirintoTeste &f, Direcao o, bool yawOk, ParametrosMovimento p,
-                            float rodaDireita = 0.93f, float larguraEixoReal = 95, float zonaMortaEsquerda = 0.12f)
+                            float rodaDireita = 0.93f, float larguraEixoReal = 95, float zonaMortaEsquerda = 0.12f,
+                            float escalaEncoderDireito = 1.0f)
 {
     Labirinto gab, mapa;
     TEST_ASSERT_TRUE_MESSAGE(carregar(f.ascii, gab, o), f.nome);
@@ -353,6 +436,7 @@ static void corridaCompleta(const LabirintoTeste &f, Direcao o, bool yawOk, Para
     sim.ganhoRodaDireita = rodaDireita;
     sim.larguraEixoReal = larguraEixoReal;
     sim.zonaMortaEsquerda = zonaMortaEsquerda;
+    sim.escalaEncoderDireito = escalaEncoderDireito;
     ControleMovimento c(p);
     RoboFisico robo(sim, c, o);
     ModoAutomatico modo(robo, mapa);
@@ -463,6 +547,35 @@ void test_giro_que_pivota_para_antes_de_bater_na_parede()
     TEST_ASSERT_FALSE(sim.colidiu());
 }
 
+// Pedido da equipe (23/11/2026): girar 360° no próprio eixo e voltar ao mesmo
+// lugar. No chão, com PWM baixo, nenhuma roda saía do lugar até ~80/255 e,
+// acima disso, uma andava e a outra esperava (pivôs alternados). As duas rodas
+// duras, sem BNO085 e com a potência de PWM 50: o giro anda com as duas juntas.
+void test_giro_de_360_no_proprio_eixo_com_as_rodas_duras()
+{
+    Labirinto gab;
+    carregarDesenho(BANCADA_23_11_ASCII, gab, SUL);
+    RoboFisicoSimulado sim(gab);
+    sim.yawOk = false;
+    sim.zonaMortaEsquerda = 0.45f;
+    sim.zonaMortaDireita = 0.40f;
+    ParametrosMovimento p;
+    p.potenciaGiroMaxima = p.potenciaArranqueMaxima = 0.30f; // aplicarPwmMaximo com PWM 50 e bateria 7,65 V
+    ControleMovimento c(p);
+    RoboFisico robo(sim, c, SUL);
+    robo.calibrar();
+    float maiorFora = 0;
+    for (int k = 1; k <= 4; k++)
+    {
+        TEST_ASSERT_TRUE(robo.girarPara(normalizarGraus(k * 90.0f)));
+        TEST_ASSERT_FLOAT_WITHIN(ERRO_GIRO_GRAUS, 0, normalizarGraus(sim.rumoVerdadeiro() - k * 90.0f));
+        maiorFora = fmaxf(maiorFora, sim.foraDoCentro());
+    }
+    TEST_ASSERT_EQUAL(0, robo.recuperacoes());
+    TEST_ASSERT_FALSE(sim.colidiu());
+    TEST_ASSERT_FLOAT_WITHIN(10, 0, maiorFora); // no próprio eixo: o centro sai no máximo 1 cm
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -470,6 +583,8 @@ int main()
     RUN_TEST(test_direcao_mais_perto_do_angulo);
     RUN_TEST(test_controle_ocioso_nao_liga_os_motores);
     RUN_TEST(test_sem_bno_o_rumo_vem_dos_encoders);
+    RUN_TEST(test_girando_a_roda_adiantada_espera_a_travada);
+    RUN_TEST(test_girando_a_espera_pela_roda_travada_tem_limite);
     RUN_TEST(test_com_bno_o_rumo_soma_as_variacoes_do_yaw);
     RUN_TEST(test_avanca_uma_celula_e_para_no_centro);
     RUN_TEST(test_avanca_tres_celulas_e_para_no_centro);
@@ -492,5 +607,6 @@ int main()
     RUN_TEST(test_roda_dura_recebe_reforco_e_o_robo_gira_no_lugar);
     RUN_TEST(test_corrida_na_bancada_com_a_roda_esquerda_dura);
     RUN_TEST(test_giro_que_pivota_para_antes_de_bater_na_parede);
+    RUN_TEST(test_giro_de_360_no_proprio_eixo_com_as_rodas_duras);
     return UNITY_END();
 }

@@ -117,6 +117,9 @@ public:
     float ganhoRodaEsquerda = 1.0f;
     float ganhoRodaDireita = 0.93f;    // uma roda mais fraca: o controle precisa corrigir
     float larguraEixoReal = 95.0f;
+    // Encoder direito contando diferente do que o controle acha (escala do Y
+    // errada): andando reto, o rumo pelos encoders parece virar.
+    float escalaEncoderDireito = 1.0f;
     // Potência mínima para cada roda sair do lugar parada (atrito estático,
     // motor mais duro). Girando, basta ZONA_MORTA.
     float zonaMortaEsquerda = ZONA_MORTA;
@@ -179,7 +182,7 @@ private:
             y_ = ny;
             phi_ = nphi;
             pulsosE_ += velE_ * dt * pulsosPorMm_;
-            pulsosD_ += velD_ * dt * pulsosPorMm_;
+            pulsosD_ += velD_ * dt * pulsosPorMm_ * escalaEncoderDireito;
         }
         if (agora_ - ultimaMedida_ >= 33) // VL53L0X em modo contínuo
         {

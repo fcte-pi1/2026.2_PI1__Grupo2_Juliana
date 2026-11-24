@@ -164,8 +164,18 @@ bool RoboFisico::mover(Direcao d)
     float rumo = anguloDe(d, inicial_);
     // Gira sempre que o erro passar da tolerância: o alvo é absoluto, então
     // também corrige o desvio que sobrou do movimento anterior.
-    if (fabsf(normalizarGraus(rumo - controle_.rumo())) > controle_.parametros().toleranciaGiroGraus &&
-        !girarPara(rumo))
+    bool gira = fabsf(normalizarGraus(rumo - controle_.rumo())) > controle_.parametros().toleranciaGiroGraus;
+    // Antes de girar, volta ao centro da célula: o robô tem ~2 cm de folga de
+    // cada lado e, parado além do centro, o canto pega a parede no giro
+    // (labirinto, 23/11/2026: parou 15 mm além e travou no meio da meia-volta).
+    Direcao atual = direcao();
+    float alem = desvioAo(atual);
+    if (gira && fabsf(alem) > CENTRALIZAR_ANTES_DO_GIRO_MM)
+    {
+        andarMm(-alem, anguloDe(atual, inicial_));
+        somarDesvio(atual, percorridoTotal_);
+    }
+    if (gira && !girarPara(rumo))
         return false;
     float longitudinal = desvioAo(d);
     bool ok = andarMm(CELULA_MM - longitudinal, rumo, desvioAo(girarDireita(d)));

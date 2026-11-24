@@ -26,7 +26,7 @@ struct ParametrosMovimento
     float potenciaMinima = 0.22f;     // abaixo disso o N20 pode não sair do lugar
     float ganhoDistancia = 0.005f;    // potência por mm que falta
     float ganhoRumo = 0.015f;         // potência de giro por grau de erro
-    float correcaoMaxima = 0.25f;     // potência de giro máxima andando
+    float correcaoMaxima = 0.5f;      // potência de giro máxima andando (0,25 saturava e o robô batia na parede direita)
     float ganhoLateral = 0.4f;        // graus de correção por mm fora do centro
     float correcaoLateralMaxima = 12; // graus
     // Sem o BNO085: o rumo medido pelas paredes (variação do erro lateral ao
@@ -45,10 +45,18 @@ struct ParametrosMovimento
 
     // Girar no lugar
     float potenciaGiroMaxima = 0.31f;
-    float potenciaGiroMinima = 0.24f;
+    float potenciaGiroMinima = 0.40f; // 0,24: freando, a esquerda (para trás) travava abaixo de ~0,35 no labirinto (24/11/2026)
     float ganhoGiro = 0.008f; // potência por grau de erro
     float toleranciaGiroGraus = 2;
     uint16_t assentarGiroMs = 80; // tempo parado dentro da tolerância
+    // No giro as duas rodas andam sempre juntas, em sentidos opostos (no
+    // próprio eixo). A que se adianta perde potência e a outra ganha
+    // ganhoSincronia por mm de diferença. Roda parada: as duas sobem juntas o
+    // reforço até trancoGiro, mesmo acima do teto do PWM, só para vencer o atrito
+    // parado (chão, 23/11/2026: com PWM até 70 nenhuma roda saía do lugar e,
+    // esperando uma pela outra, o robô pivotava numa roda e depois na outra).
+    float ganhoSincronia = 0.01f;
+    float trancoGiro = 0.6f;
 
     uint16_t tempoMaximoMs = 4000; // por comando
     uint16_t tempoParadoMs = 800;  // com potência e sem pulsos nas duas rodas: bloqueado (colisão)
@@ -62,6 +70,7 @@ struct ParametrosMovimento
     uint16_t rodaParadaMs = 120;
     float reforcoPorSegundo = 1.2f;
     float potenciaArranqueMaxima = 0.65f;
+    uint16_t esperaMaximaMs = 400; // andando, a roda que anda espera a travada no máximo isso
 
     // Parede da frente mais perto que isso, girando ou andando: para na hora,
     // calibrado ou não (no centro da célula a parede fica a ~4-6 cm).
@@ -188,6 +197,7 @@ private:
     // reforço de arranque de cada roda
     uint32_t ultimoPulsoE_ = 0, ultimoPulsoD_ = 0, ultimoCiclo_ = 0;
     float reforcoE_ = 0, reforcoD_ = 0;
+    uint32_t esperaDesde_ = 0; // uma roda travada e a outra esperando desde
     bool yawAnteriorOk_ = false;
     float yawAnterior_ = 0;
     float avancoUltimo_ = 0; // mm andados no último ciclo (média das rodas)

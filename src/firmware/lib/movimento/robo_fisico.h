@@ -37,6 +37,8 @@ public:
     static const uint16_t ESPERA_SENSORES_MS = 200;
     // Giro bloqueado (encostou ou pivotou): recua isso e tenta girar de novo.
     static constexpr float RECUO_MM = 30;
+    // Mais longe que isso do centro (ao longo da direção atual), volta antes de girar.
+    static constexpr float CENTRALIZAR_ANTES_DO_GIRO_MM = 8;
     // Mais torto que isso em relação ao corredor, os sensores leem as paredes
     // na diagonal: sentir() não marca nada (o mapa ficaria errado).
     static constexpr float ALINHADO_GRAUS = 15;
