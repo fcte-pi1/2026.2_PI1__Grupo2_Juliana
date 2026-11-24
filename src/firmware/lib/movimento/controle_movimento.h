@@ -19,6 +19,9 @@ struct ParametrosMovimento
 {
     float pulsosPorMm = 3305.0f / (3.14159265f * 34.0f); // encoder (motores.h) / perímetro da roda
     float larguraEixoMm = 95.0f; // MEDIR: centro a centro das rodas. Só vale sem o BNO085.
+    // Larguras efetivas medidas pelo giro (comando Z), por sentido; 0 = larguraEixoMm.
+    float larguraEixoDireitaMm = 0;
+    float larguraEixoEsquerdaMm = 0;
 
     // Andar (potência = fração dos 5 V, como Motores::definir). Máximo pedido
     // pela equipe: PWM 50 de 255 com a bateria em 7,9 V = 1,56 V no motor.
@@ -40,6 +43,10 @@ struct ParametrosMovimento
     float estabilizarParedeMm = 40;
     float saltoLateralMm = 8;
     float lateralMaximoMm = 40;
+    // Só uma parede ao lado: anda isso mais longe dela que o centro. 0: com 12, em
+    // (1,3) do labirinto novo o robô foi para o lado da coluna da passagem seguinte e
+    // bateu nela (24/11/2026). Fica o ajuste para labirintos mais folgados.
+    float afastadoUmaParedeMm = 0;
     float pesoRumoParede = 0.5f; // 0 = desliga, 1 = confia só na parede
     float toleranciaDistanciaMm = 5;
 
@@ -57,6 +64,11 @@ struct ParametrosMovimento
     // esperando uma pela outra, o robô pivotava numa roda e depois na outra).
     float ganhoSincronia = 0.01f;
     float trancoGiro = 0.6f;
+    // As duas rodas travadas há trancoForteAposMs: trancoForte nas duas por
+    // trancoForteMs (emenda do piso, robô encostado). 0,85 = ~4,3 V no N20 (6 V nominal).
+    float trancoForte = 0.85f;
+    uint16_t trancoForteAposMs = 300;
+    uint16_t trancoForteMs = 150;
 
     uint16_t tempoMaximoMs = 4000; // por comando
     uint16_t tempoParadoMs = 800;  // com potência e sem pulsos nas duas rodas: bloqueado (colisão)
@@ -213,6 +225,7 @@ private:
     uint32_t ultimoPulsoE_ = 0, ultimoPulsoD_ = 0, ultimoCiclo_ = 0;
     float reforcoE_ = 0, reforcoD_ = 0;
     uint32_t esperaDesde_ = 0; // uma roda travada e a outra esperando desde
+    uint32_t ambasParadasDesde_ = 0; // as duas rodas travadas desde
     bool yawAnteriorOk_ = false;
     float yawAnterior_ = 0;
     float avancoUltimo_ = 0; // mm andados no último ciclo (média das rodas)

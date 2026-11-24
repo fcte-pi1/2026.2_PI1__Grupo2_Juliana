@@ -153,7 +153,12 @@ void ControleMovimento::odometria(const EntradaMovimento &e)
     if (e.yawOk && yawAnteriorOk_ && fabsf(variacaoYaw) < SALTO_YAW_GRAUS)
         rumo_ = normalizarGraus(rumo_ + variacaoYaw);
     else
-        rumo_ = normalizarGraus(rumo_ + (dD - dE) / p_.larguraEixoMm * RAD_GRAUS);
+    {
+        // Largura efetiva por sentido (calibração Z): girando à direita a roda
+        // direita vai para trás e patina diferente da esquerda.
+        float largura = dD - dE < 0 ? p_.larguraEixoDireitaMm : p_.larguraEixoEsquerdaMm;
+        rumo_ = normalizarGraus(rumo_ + (dD - dE) / (largura > 0 ? largura : p_.larguraEixoMm) * RAD_GRAUS);
+    }
     yawAnteriorOk_ = e.yawOk;
     yawAnterior_ = e.yawGraus;
 }
@@ -162,6 +167,7 @@ void ControleMovimento::comecar(const EntradaMovimento &e)
 {
     comecou_ = true;
     ultimoPulsoE_ = ultimoPulsoD_ = ultimoCiclo_ = e.agora_ms;
+    ambasParadasDesde_ = 0;
     inicioE_ = e.encoderEsquerdo;
     inicioD_ = e.encoderDireito;
     inicio_ = e.agora_ms;
@@ -233,6 +239,24 @@ void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMov
     const float limite = p_.trancoGiro > p_.potenciaArranqueMaxima ? p_.trancoGiro : p_.potenciaArranqueMaxima;
     bool paradaE = s.esquerdo != 0 && e.agora_ms - ultimoPulsoE_ > p_.rodaParadaMs;
     bool paradaD = s.direito != 0 && e.agora_ms - ultimoPulsoD_ > p_.rodaParadaMs;
+    // As duas rodas travadas juntas (robô engatado numa emenda do piso ou
+    // encostado): depois de 300 ms, um tranco curto forte nas duas, acima do
+    // reforço. Labirinto novo, 24/11/2026: em (2,0), reto e centrado, as duas
+    // a 0,6 não davam um pulso e o robô desistia.
+    if (paradaE && paradaD)
+    {
+        if (ambasParadasDesde_ == 0)
+            ambasParadasDesde_ = e.agora_ms;
+        uint32_t t = e.agora_ms - ambasParadasDesde_;
+        if (t >= p_.trancoForteAposMs && t < (uint32_t)p_.trancoForteAposMs + p_.trancoForteMs)
+        {
+            s.esquerdo = sinal(s.esquerdo) * p_.trancoForte;
+            s.direito = sinal(s.direito) * p_.trancoForte;
+            return;
+        }
+    }
+    else
+        ambasParadasDesde_ = 0;
     if (paradaE)
         reforcoE_ = fminf((reforcoE_ > fabsf(s.esquerdo) ? reforcoE_ : fabsf(s.esquerdo)) + passo, limite);
     if (paradaD)
@@ -409,6 +433,14 @@ SaidaMovimento ControleMovimento::andando(const EntradaMovimento &e)
     // Erro lateral (+ = robô à direita do centro) pelas paredes dos lados.
     float medida = 0;
     uint8_t fonte = medirLateral(e, p_, medida);
+    // Parede de um lado só: anda afastadoUmaParedeMm mais longe dela que o
+    // centro. O canto traseiro do robô passa a ~9-10 cm do eixo no meio de um
+    // giro e a parede fica a ~8,4 cm do centro: chegando colado nela, o giro
+    // seguinte travava (labirinto novo, 24/11/2026, (1,1) só com a parede Sul).
+    if (fonte == 2)
+        medida -= p_.afastadoUmaParedeMm; // parede à esquerda: alvo à direita
+    else if (fonte == 3)
+        medida += p_.afastadoUmaParedeMm; // parede à direita: alvo à esquerda
     if (fonte != fonteAtual_ || fabsf(medida - medidaAnterior_) > p_.saltoLateralMm)
     {
         fonteAtual_ = fonte;

@@ -41,14 +41,31 @@ public:
     static const uint8_t MAX_TENTATIVAS_GIRO = 4;
     // Manobra para a frente só com a frente mais longe que isso.
     static const uint16_t FRENTE_LIVRE_MANOBRA_MM = 70;
+    // Giro de 90° perto da parede da varredura: avanço no meio (ver girarPara).
+    static constexpr float AVANCO_MEIO_GIRO_MM = 15;
+    // Giro que parou (bloqueado ou tempo esgotado) faltando até isso: vale.
+    static constexpr float QUASE_NO_RUMO_GRAUS = 10;
+    static const uint16_t PERTO_DA_VARREDURA_MM = 5; // parede pelo menos isso mais perto que o centro
     // Manobra que andou menos que isso: preso desse lado, tenta o outro.
     static constexpr float MANOBRA_MINIMA_MM = 5;
     // Andar bloqueado: a próxima tentativa exagera o desvio lateral nisso.
     static constexpr float EMPURRAO_LATERAL_MM = 15;
+    // Confirmação do giro pelos sensores (confirmarGiro): só paredes até esse
+    // alcance contam; erro médio até a tolerância é "virou certo"; senão
+    // procura até BUSCA_MAX_GRAUS para cada lado, em passos de BUSCA_PASSO_GRAUS.
+    static const uint16_t ALCANCE_CONFIRMACAO_MM = 400;
+    static constexpr float TOLERANCIA_CONFIRMACAO_MM = 30;
+    static constexpr float ERRO_MAXIMO_CONFIRMACAO_MM = 150;
+    static constexpr float BUSCA_MAX_GRAUS = 40;
+    static constexpr float BUSCA_PASSO_GRAUS = 10;
     // Mais longe que isso do centro (pelos encoders), sentir() não marca nada.
     static constexpr float FORA_DO_CENTRO_MM = 40;
+    // Parede lida a mais que isso além da referência do centro do sensor: não marca.
+    static const uint16_t PAREDE_AMBIGUA_MM = 40;
     // Mais longe que isso do centro (ao longo da direção atual), volta antes de girar.
     static constexpr float CENTRALIZAR_ANTES_DO_GIRO_MM = 8;
+    // No sentir, mais longe que isso do centro pela parede da frente: acerta antes de ler os lados.
+    static constexpr float CENTRALIZAR_NO_SENTIR_MM = 18;
     // Mais torto que isso em relação ao corredor, os sensores leem as paredes
     // na diagonal: sentir() não marca nada (o mapa ficaria errado).
     static constexpr float ALINHADO_GRAUS = 15;
@@ -72,6 +89,7 @@ public:
     Direcao direcao() const { return direcaoDe(controle_.rumo(), inicial_); }
     EstadoMovimento ultimoResultado() const { return ultimo_; }
     uint16_t recuperacoes() const { return recuperacoes_; } // voltas ao centro depois de bloqueio (RF16-S)
+    uint16_t rumosCorrigidos() const { return rumosCorrigidos_; } // giros corrigidos pelos sensores
     uint16_t leiturasTortas() const { return leiturasTortas_; } // sentir() sem marcar, robô torto ou fora do centro
     // Sem calibração da frente, a primeira parada no centro de uma célula com
     // parede na frente (pelos encoders) ensina a distância de referência.
@@ -83,6 +101,7 @@ public:
 
 private:
     bool executar();
+    void confirmarGiro(const uint16_t antes[3], Direcao frenteAntes, Direcao frenteAgora, float rumo);
     void esperar(uint16_t ms);
 
     HardwareRobo &hw_;
@@ -91,10 +110,13 @@ private:
     void definirDesvio(Direcao d, float longitudinal, float lateral);
     float desvioAo(Direcao d) const;
     void somarDesvio(Direcao d, float mm);
+    void somarDesvioPeloRumo(float mm);
+    bool quaseNoRumo(float rumoGraus);
 
     EstadoMovimento ultimo_ = MOV_OCIOSO;
     uint16_t recuperacoes_ = 0;
     uint16_t leiturasTortas_ = 0;
+    uint16_t rumosCorrigidos_ = 0;
     bool aprendeuFrente_ = false;
     float percorridoTotal_ = 0; // ida e volta do último andarMm
     float desvioX_ = 0, desvioY_ = 0;
