@@ -1,31 +1,47 @@
 # Backend
 
-Servidor de telemetria do Micromouse em Python com [FastAPI](https://fastapi.tiangolo.com/).
+A API do Micromouse usa Python 3.13, FastAPI e Uvicorn. As rotas em `app/routers/` recebem requisições HTTP e conexões WebSocket. Os serviços em `app/services/` validam os quadros de telemetria, associam as leituras às corridas e preparam consultas e exportações. O acesso ao PostgreSQL 16 passa pelo SQLAlchemy com o driver psycopg. O Alembic mantém o esquema do banco.
 
-## Requisitos
-- Python 3.13
+## Configuração e execução local
 
-## Instalação
+Na raiz do repositório, prepare o ambiente de desenvolvimento com Python 3.13 e Docker Compose.
+
 ```bash
 cd src/backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate | Linux/macOS: source .venv/bin/activate
+python3.13 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements-dev.txt
+cp .env.example .env
 ```
 
-## Rodar
+No Windows, ative o ambiente pelo PowerShell com `.venv\Scripts\Activate.ps1`. Edite o arquivo local `.env` antes de iniciar o banco.
+
+| Variável | Uso |
+| --- | --- |
+| `POSTGRES_USER` | Usuário criado pelo contêiner na primeira inicialização |
+| `POSTGRES_PASSWORD` | Senha desse usuário. Substitua a senha de exemplo e evite `%`, que o Alembic interpreta |
+| `POSTGRES_DB` | Nome do banco criado pelo contêiner |
+| `DATABASE_URL` | URL usada pela API, pelas migrações e pelos testes. Use o mesmo usuário, senha e banco no formato `postgresql+psycopg://usuario:senha@localhost:5432/banco` |
+
+Mantenha o `.env` fora do Git. No mesmo terminal, suba o banco, aplique as migrações e inicie a API.
+
 ```bash
+docker compose up -d --wait
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
-A API sobe em http://localhost:8000 (documentação em http://localhost:8000/docs).
 
-## Testar
+O Python executa a aplicação diretamente. Confira a resposta `{"status":"ok"}` em [GET /health](http://localhost:8000/health) e consulte as rotas HTTP em [Swagger UI](http://localhost:8000/docs).
+
+## Testes
+
+Com o ambiente virtual ativo em `src/backend`, use um banco de desenvolvimento ou de testes com as migrações aplicadas e sem corrida em andamento. Os testes de restrição exercitam o índice que permite apenas uma corrida aberta por vez.
+
 ```bash
 pytest
 ```
-Os testes ficam em `tests/` e a cobertura do pacote `app` é mostrada ao final. O mesmo comando roda no GitHub Actions em todo Pull Request.
 
-> **Atenção (Banco local):** Devido à restrição que permite apenas uma corrida `em_andamento` por vez (índice `uq_corrida_uma_em_andamento`), certifique-se de que não haja corridas abertas no seu banco local (deixadas por execuções manuais ou pelo simulador) antes de rodar o `pytest`, caso contrário os testes de restrição falharão. Se necessário, encerre-as ou limpe o banco antes da execução.
+O pytest executa a suíte em `tests/` e mostra a cobertura de `app/`. Para testar também o fluxo ao vivo com o painel, use o [simulador](simulador.py).
 
 ## Consulta de logs
 
@@ -99,7 +115,7 @@ por vírgula). Os filtros opcionais podem ser combinados:
 | `id_corrida` | ID do banco, inteiro positivo |
 | `id_labirinto` | ID do banco, inteiro positivo |
 
-Exemplo: `/exportacao/corridas.csv?id_labirinto=1`.
+O CSV de corridas também aceita `status`, `num_tentativa` e `data`. Exemplo: `/exportacao/corridas.csv?id_labirinto=1`.
 
 Cada linha é uma leitura de telemetria, com os dados da corrida repetidos à
 esquerda: `id_corrida`, `labirinto`, `num_tentativa`, `num_corrida_robo`,
@@ -111,8 +127,8 @@ de leitura vazias. Valor nulo vira célula vazia. Sem resultados, o arquivo tem
 só o cabeçalho; parâmetros inválidos retornam HTTP 422.
 
 `GET /exportacao/logs.csv` baixa o arquivo `logs.csv` com os eventos de
-`log_evento` (início/fim, desconexões, descartes, bateria crítica), aceitando
-os mesmos filtros. As colunas são `id`, `id_corrida`, `tipo`, `origem`,
+`log_evento` (início/fim, desconexões, descartes, bateria crítica), com filtros por
+`id_corrida`, `id_labirinto`, `tipo`, `origem`, `busca` e `data`. As colunas são `id`, `id_corrida`, `tipo`, `origem`,
 `mensagem` e `ocorrido_em`, do evento mais antigo ao mais recente. Sem filtro,
 inclui também os logs sem corrida (`id_corrida` vazio); com `id_labirinto`, só
 entram os logs ligados a uma corrida daquele labirinto. Os testes ficam em
@@ -121,25 +137,6 @@ entram os logs ligados a uma corrida daquele labirinto. Os testes ficam em
 ## Como rodar o banco de dados
 
 O banco é um PostgreSQL 16 rodando em Docker. As tabelas seguem o Dicionário de Dados da [4.4.4 - Persistência de Dados](../../docs/4.4.4%20-%20Persistencia%20de%20Dados.md) e são criadas pelas migrações do Alembic.
-
-### Pré-requisitos
-
-- Docker com o plugin Compose (`docker compose version`)
-- Python 3.13 com o módulo `venv` (no Ubuntu: `sudo apt install python3.13-venv`)
-
-### Primeira vez
-
-Todos os comandos são executados dentro de `src/backend`:
-
-```bash
-cp .env.example .env              # depois troque a senha no .env
-docker compose up -d              # sobe o PostgreSQL; aguarde "healthy" em docker compose ps
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-alembic upgrade head              # cria as tabelas e os labirintos 4x4, 8x4 e 12x4
-pytest                            # testa as restrições de integridade
-```
 
 ### No dia a dia
 

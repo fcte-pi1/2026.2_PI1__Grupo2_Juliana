@@ -64,8 +64,10 @@ void DetectorParede::configurar(uint16_t limiarLiga, uint16_t limiarDesliga)
 LimiaresParede calcularLimiares(uint16_t comParede, uint16_t semParede)
 {
     LimiaresParede l = {0, 0, false};
-    if (comParede == 0 || comParede >= DIST_MAX_CONFIAVEL)
-        return l; // sem leitura com a parede: não dá para calibrar
+    // Dentro da célula a parede nunca fica a 180 mm ou mais: leitura maior é
+    // parede esquecida na etapa 1/2 (o sensor viu algo mais longe).
+    if (comParede == 0 || comParede >= CELULA_MM)
+        return l; // sem parede na célula atual: não dá para calibrar
     // Sem alvo, ou mais longe que a célula seguinte: vale a parede seguinte.
     uint32_t sem = semParede;
     if (sem > (uint32_t)comParede + CELULA_MM)

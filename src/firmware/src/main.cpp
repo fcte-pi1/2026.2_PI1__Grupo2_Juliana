@@ -721,9 +721,10 @@ void calibrarLimiares()
 // Desliga o rádio por alguns segundos com o robô funcionando, para conferir
 // que a navegação segue, que o buffer guarda as leituras e que, na volta, o
 // evento reconexao e os pendentes chegam ao servidor. Comandos Q, G e H.
-uint32_t quedaFim = 0;     // millis() em que o Wi-Fi volta; 0 = sem queda
-uint32_t quedaVolta = 0;   // millis() em que o rádio foi religado
-bool quedaRelatar = false; // falta registrar o resultado no log
+uint32_t quedaFim = 0;       // millis() em que o Wi-Fi volta; 0 = sem queda
+uint32_t quedaVolta = 0;     // millis() em que o rádio foi religado
+uint32_t quedaPendentes = 0; // pendentes acumulados no instante da volta
+bool quedaRelatar = false;   // falta registrar o resultado no log
 
 void provocarQueda(uint32_t segundos)
 {
@@ -749,7 +750,9 @@ void acompanharQueda(uint32_t agora)
     {
         quedaFim = 0;
         quedaVolta = agora;
+        quedaPendentes = TelemetriaWifi::estatisticas().pendentes;
         WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false); // WIFI_OFF -> STA volta com modem sleep; mantém a latência baixa
         WiFi.begin(WIFI_SSID, WIFI_SENHA);
     }
     if (!quedaRelatar || quedaFim)
@@ -761,13 +764,15 @@ void acompanharQueda(uint32_t agora)
     if (!descarregou && agora - quedaVolta < 60000)
         return;
     quedaRelatar = false;
-    console.printf(">>> fim da queda: %s, pendentes %lu, ocupacao maxima %lu, descartes %lu, heap livre %u B "
-                   "(minimo desde o boot %u B)\n",
-                   descarregou ? "buffer descarregado" : "servidor nao voltou em 60 s", (unsigned long)e.pendentes,
-                   (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes, ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    console.printf(">>> fim da queda: %s, acumulados na volta %lu (restam %lu), ocupacao maxima %lu, descartes %lu, "
+                   "heap livre %u B (minimo desde o boot %u B)\n",
+                   descarregou ? "buffer descarregado" : "servidor nao voltou em 60 s",
+                   (unsigned long)quedaPendentes, (unsigned long)e.pendentes, (unsigned long)e.ocupacaoMaxima,
+                   (unsigned long)e.descartes, ESP.getFreeHeap(), ESP.getMinFreeHeap());
     // O log guarda 60 caracteres: só os números, para ler depois com 'l'.
-    LogErros::registrar(false, "queda: pend %lu max %lu desc %lu heap %u", (unsigned long)e.pendentes,
-                        (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes, ESP.getMinFreeHeap());
+    LogErros::registrar(false, "queda: volta %lu pend %lu max %lu desc %lu heap %u", (unsigned long)quedaPendentes,
+                        (unsigned long)e.pendentes, (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes,
+                        ESP.getMinFreeHeap());
 }
 
 // ---------- laço: o que roda parado e durante o movimento ----------
