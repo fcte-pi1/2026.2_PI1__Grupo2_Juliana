@@ -1,0 +1,59 @@
+#pragma once
+
+#include <stdint.h>
+
+#include "direcao.h"
+
+// Leitura dos sensores do robô: 3 VL53L0X (com filtro e detecção de parede),
+// BNO085 (yaw) e INA226 (tensão e corrente da bateria). Só roda no ESP32.
+
+enum LadoSensor : uint8_t { LADO_ESQUERDO, LADO_FRONTAL, LADO_DIREITO };
+
+struct LeituraSensores
+{
+    uint16_t distancia_mm[3]; // filtrada; DIST_SEM_ALVO se nada no alcance
+    bool parede[3];
+    bool defeito[3];           // VL53L0X sem resposta
+    bool imuOk;
+    float yawGraus;            // relativo à largada; positivo = giro à esquerda
+    bool inaOk;
+    float tensao_v;            // ~0 V sem bateria (só USB)
+    float corrente_ma;
+    uint32_t imuEventos;       // leituras do BNO085 recebidas desde o boot (~50/s)
+    uint16_t imuReinicios;     // resets do BNO085 por ficar mudo
+    uint32_t imuUltimaLeituraMs; // millis() da última leitura do BNO085 (yaw novo)
+};
+
+class Sensores
+{
+public:
+    // Liga e configura tudo. Devolve quantos dos 5 sensores responderam
+    // (3 VL53L0X, BNO085 e INA226).
+    uint8_t iniciar();
+    // Lê todos os sensores e atualiza os filtros. Chamar no laço principal.
+    void atualizar();
+    const LeituraSensores &leitura() const { return leitura_; }
+    // A orientação atual vira o "Norte" do mapa (largada).
+    void zerarYaw();
+    // O reset do BNO085 trava o laço por ~0,5 s: durante um movimento, não.
+    void permitirReinicioImu(bool permitir) { podeReiniciarImu_ = permitir; }
+    // Orientação absoluta do mapa a partir do yaw (múltiplo de 90° mais perto).
+    Direcao orientacao() const;
+    // Máscara de paredes do contrato (N=1, L=2, S=4, O=8) vista dos 3 sensores.
+    uint8_t mascaraParedes() const;
+    // Limiares da detecção de parede de um lado, em mm (calibração, #279).
+    void configurarLimiares(LadoSensor lado, uint16_t liga, uint16_t desliga);
+    uint16_t limiarLiga(LadoSensor lado) const;
+    uint16_t limiarDesliga(LadoSensor lado) const;
+
+private:
+    uint8_t ligarDistancia(); // liga os 3 VL53L0X um por vez e troca o endereço
+    void lerImu();
+    void lerIna();
+    LeituraSensores leitura_ = {};
+    float yawBruto_ = 0;
+    float yawZero_ = 0;
+    uint32_t ultimoEventoImu_ = 0;
+    uint32_t intervaloReinicioImu_ = 1000; // dobra a cada reset sem leitura (até 8 s)
+    bool podeReiniciarImu_ = true;
+};
