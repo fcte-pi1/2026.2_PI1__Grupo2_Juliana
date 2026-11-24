@@ -867,8 +867,114 @@ void test_reconexao_reporta_apenas_pendentes_retidos_apos_overflow() {
   TEST_ASSERT_FALSE(buf.confirmarAck(1, 1));
 }
 
+// ==============================================================================
+// #282: os 3 cenários de queda da issue (telemetria a 5 Hz, ack imediato online)
+// ==============================================================================
+struct ResultadoQueda {
+  uint32_t enviadosOffline; // leituras geradas durante a queda
+  uint32_t pendentesEvento; // campo "pendentes" do evento reconexao
+  uint32_t recebidos;       // leituras que chegaram ao servidor depois da volta
+  uint32_t descartes;       // descartadas por buffer cheio (contabilizadas)
+  uint32_t primeiroSeq;     // seq da primeira leitura recebida depois da volta
+  uint32_t foraDeOrdem;     // tempo_ms que não aumenta (fora de ordem ou duplicada)
+  uint32_t lacunas;         // saltos maiores que 200 ms entre leituras recebidas
+  bool reconexaoPrimeiro;   // o evento reconexao saiu antes dos pendentes
+};
+
+static ResultadoQueda simularQueda(uint32_t segundosOffline) {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  const uint32_t corrida = 9;
+  uint32_t seq = 0, t = 0;
+  MensagemTelemetria msg;
+  bool reenvio;
+  // 10 s online: cada leitura sai e recebe ack
+  for (int i = 0; i < 50; i++, t += 200) {
+    buf.enfileirar(criarTelemetria(corrida, seq++, t, 0, 0, 'N', 0, 0.3f, 7.4f, 1, "explorando"));
+    TEST_ASSERT_TRUE(buf.obterProximoEnvio(t, msg, reenvio));
+    buf.registrarEnvio(msg.corrida, msg.seq, t);
+    TEST_ASSERT_TRUE(buf.confirmarAck(msg.corrida, msg.seq));
+  }
+  // queda: o robô segue navegando e gerando leituras a 5 Hz
+  buf.registrarQuedaConexao(t);
+  ResultadoQueda r = {};
+  r.enviadosOffline = segundosOffline * 5;
+  for (uint32_t i = 0; i < r.enviadosOffline; i++, t += 200)
+    buf.enfileirar(criarTelemetria(corrida, seq++, t, 0, 0, 'N', 0, 0.3f, 7.4f, 1, "explorando"));
+  // volta: reconexao e depois os pendentes, confirmados na ordem em que chegam
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(t, t, corrida, seq++, msg));
+  r.pendentesEvento = msg.pendentes;
+  bool primeiraMensagem = true, primeiraLeitura = true;
+  uint32_t ultimoTempo = 0;
+  while (buf.obterProximoEnvio(t, msg, reenvio)) {
+    buf.registrarEnvio(msg.corrida, msg.seq, t);
+    buf.confirmarAck(msg.corrida, msg.seq);
+    if (primeiraMensagem)
+      r.reconexaoPrimeiro = msg.tipo == EVT_RECONEXAO;
+    primeiraMensagem = false;
+    if (msg.tipo != TIPO_TEL)
+      continue;
+    if (primeiraLeitura)
+      r.primeiroSeq = msg.seq;
+    else if (msg.tempo_ms <= ultimoTempo)
+      r.foraDeOrdem++;
+    else if (msg.tempo_ms - ultimoTempo > 200)
+      r.lacunas++;
+    primeiraLeitura = false;
+    ultimoTempo = msg.tempo_ms;
+    r.recebidos++;
+  }
+  r.descartes = buf.totalDescartesOverflow();
+  TEST_ASSERT_TRUE(buf.vazio());
+  return r;
+}
+
+void test_queda_curta_5s_entrega_tudo_em_ordem() {
+  ResultadoQueda r = simularQueda(5);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_EQUAL_UINT32(25, r.pendentesEvento);
+  TEST_ASSERT_EQUAL_UINT32(25, r.recebidos);
+  TEST_ASSERT_EQUAL_UINT32(0, r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(50, r.primeiroSeq); // a primeira leitura da queda
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_queda_longa_60s_entrega_tudo_em_ordem() {
+  ResultadoQueda r = simularQueda(60);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_EQUAL_UINT32(300, r.pendentesEvento);
+  TEST_ASSERT_EQUAL_UINT32(300, r.recebidos);
+  TEST_ASSERT_EQUAL_UINT32(0, r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(50, r.primeiroSeq);
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_queda_com_buffer_cheio_descarta_as_mais_antigas() {
+  // 12 min offline = 3600 leituras, mais que as 3200 do buffer
+  ResultadoQueda r = simularQueda(12 * 60);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_TRUE(r.descartes > 0);
+  // o que não chegou foi descartado e contado; o resto chega inteiro
+  TEST_ASSERT_EQUAL_UINT32(r.enviadosOffline, r.recebidos + r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(r.recebidos, r.pendentesEvento);
+  // as descartadas são as mais antigas: chega a partir da primeira que sobrou
+  TEST_ASSERT_EQUAL_UINT32(50 + r.descartes, r.primeiroSeq);
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_buffer_guarda_10_minutos_a_5hz() {
+  TEST_ASSERT_TRUE(CAPACIDADE_BUFFER_PADRAO >= 10u * 60u * 5u);
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_queda_curta_5s_entrega_tudo_em_ordem);
+  RUN_TEST(test_queda_longa_60s_entrega_tudo_em_ordem);
+  RUN_TEST(test_queda_com_buffer_cheio_descarta_as_mais_antigas);
+  RUN_TEST(test_buffer_guarda_10_minutos_a_5hz);
   RUN_TEST(test_ack_recusa_json_e_numeros_invalidos_com_crc_correto);
   RUN_TEST(test_ack_aceita_espacos_ordem_e_limites);
   RUN_TEST(test_fim_preserva_consumo_acima_de_uint16_escalado);
