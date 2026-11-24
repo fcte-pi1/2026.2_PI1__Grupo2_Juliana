@@ -61,6 +61,10 @@ public:
     ModoAutomatico(InterfaceRobo &robo, Labirinto &mapa, uint16_t limitePassos = 2000)
         : robo_(robo), mapa_(mapa), limitePassos_(limitePassos) {}
 
+    // true: a corrida termina ao chegar ao centro do objetivo (sem voltar à
+    // largada nem a corrida rápida). No robô físico a chegada é um beco onde
+    // ele não cabe girando (24/11/2026).
+    void pararNoObjetivo(bool parar) { pararNoObjetivo_ = parar; }
     // Começa uma corrida. O mapa já deve estar iniciado (tamanho e largada).
     void iniciar();
     // Executa uma etapa: a calibração ou uma célula. Devolve o novo estado.
@@ -93,6 +97,7 @@ private:
     uint8_t objetivoX_ = 0;
     uint8_t objetivoY_ = 0;
     uint8_t viagens_ = 0;
+    bool pararNoObjetivo_ = false;
     Direcao rota_[MAX_ROTA];
     uint8_t tamanhoRota_ = 0;
     uint8_t indiceRota_ = 0;

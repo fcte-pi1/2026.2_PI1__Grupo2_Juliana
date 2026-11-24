@@ -1140,6 +1140,7 @@ void iniciarCorridaAutomatica()
         servicoDuranteMovimento();
     if (!emCorrida || cancelarMovimento)
         return;
+    modo.pararNoObjetivo(true); // chegou ao centro da chegada: para (a chegada é um beco)
     modo.iniciar();
 }
 
