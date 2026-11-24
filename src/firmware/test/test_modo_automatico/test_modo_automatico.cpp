@@ -235,6 +235,16 @@ void test_nomes_dos_estados_seguem_o_contrato()
     TEST_ASSERT_EQUAL_STRING("falha", nomeEstado(ESTADO_FALHA));
 }
 
+void test_estado_da_telemetria_so_usa_os_nomes_do_contrato()
+{
+    TEST_ASSERT_EQUAL_STRING("explorando", estadoContrato(ESTADO_EXPLORANDO));
+    TEST_ASSERT_EQUAL_STRING("retornando", estadoContrato(ESTADO_RETORNANDO));
+    TEST_ASSERT_EQUAL_STRING("rapido", estadoContrato(ESTADO_RAPIDO));
+    TEST_ASSERT_EQUAL_STRING("parado", estadoContrato(ESTADO_PARADO));
+    TEST_ASSERT_EQUAL_STRING("parado", estadoContrato(ESTADO_CALIBRANDO));
+    TEST_ASSERT_EQUAL_STRING("parado", estadoContrato(ESTADO_FALHA));
+}
+
 void test_parado_e_falha_nao_mudam_mais()
 {
     Labirinto gabarito, mapa;
@@ -261,6 +271,7 @@ int main()
     RUN_TEST(test_limite_de_passos_impede_laco_infinito);
     RUN_TEST(test_objetivo_sem_caminho_vira_falha);
     RUN_TEST(test_nomes_dos_estados_seguem_o_contrato);
+    RUN_TEST(test_estado_da_telemetria_so_usa_os_nomes_do_contrato);
     RUN_TEST(test_parado_e_falha_nao_mudam_mais);
     return UNITY_END();
 }

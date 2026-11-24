@@ -123,6 +123,22 @@ static const char ARMADILHA_12X4_ASCII[] = R"MAZE(+---+---+---+---+---+---+---+-
 +---+---+---+---+---+---+---+---+---+---+---+---+
 )MAZE";
 
+// Labirinto montado na bancada em 23/11/2026, transcrito da foto (Norte = cima
+// da foto). Largada no canto de baixo à esquerda, num beco com saída para o
+// Leste; o robô foi posto virado para a borda de baixo (Sul). Rota mínima de
+// 14 movimentos, conferida à mão: L L L N O O N O N L L S L N.
+static const char BANCADA_23_11_ASCII[] = R"MAZE(+---+---+---+---+
+|           |   |
++   +---+   +   +
+|       |       |
++---+   +---+---+
+|               |
++---+---+---+   +
+|               |
++---+---+---+---+
+)MAZE";
+static const LabirintoTeste BANCADA_23_11 = {"BANCADA_23_11", 4, 4, 3, 3, 14, BANCADA_23_11_ASCII};
+
 static const LabirintoTeste LABIRINTOS_TESTE[] = {
     {"MISTO_4X4", 4, 4, 3, 3, 6, MISTO_4X4_ASCII},
     {"BARREIRAS_8X4", 8, 4, 7, 3, 16, BARREIRAS_8X4_ASCII},
