@@ -576,6 +576,26 @@ void test_giro_de_360_no_proprio_eixo_com_as_rodas_duras()
     TEST_ASSERT_FLOAT_WITHIN(10, 0, maiorFora); // no próprio eixo: o centro sai no máximo 1 cm
 }
 
+// Labirinto, 24/11/2026: o giro travava (robô entalado), recuava uma vez,
+// travava de novo e desistia; fora do lugar, o robô lia parede falsa. Agora
+// manobra e tenta até MAX_TENTATIVAS_GIRO: rodas presas por 3 s, o giro sai.
+void test_giro_entalado_insiste_ate_sair()
+{
+    Labirinto gab;
+    carregarDesenho(BANCADA_23_11_ASCII, gab, SUL);
+    RoboFisicoSimulado sim(gab);
+    ParametrosMovimento p;
+    ControleMovimento c(p);
+    RoboFisico robo(sim, c, SUL);
+    robo.calibrar();
+    sim.rodasPresasAte = sim.agora() + 3000;
+    // Uma tentativa só (antes): o 2º giro também caía nos 3 s presos.
+    TEST_ASSERT_TRUE(robo.girarPara(normalizarGraus(anguloDe(SUL, SUL) + 180)));
+    TEST_ASSERT_TRUE(robo.recuperacoes() >= 1);
+    TEST_ASSERT_FLOAT_WITHIN(ERRO_GIRO_GRAUS, 180, fabsf(sim.rumoVerdadeiro()));
+    TEST_ASSERT_FALSE(sim.colidiu());
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -607,6 +627,7 @@ int main()
     RUN_TEST(test_roda_dura_recebe_reforco_e_o_robo_gira_no_lugar);
     RUN_TEST(test_corrida_na_bancada_com_a_roda_esquerda_dura);
     RUN_TEST(test_giro_que_pivota_para_antes_de_bater_na_parede);
+    RUN_TEST(test_giro_entalado_insiste_ate_sair);
     RUN_TEST(test_giro_de_360_no_proprio_eixo_com_as_rodas_duras);
     return UNITY_END();
 }

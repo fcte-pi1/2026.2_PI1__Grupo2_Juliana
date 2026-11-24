@@ -437,7 +437,11 @@ SaidaMovimento ControleMovimento::girando(const EntradaMovimento &e)
     dentro_ = false;
     // Girando no lugar a frente não deveria se aproximar da parede: se chegar
     // perto demais, o robô está pivotando (uma roda não anda) e vai bater.
-    if (frenteMuitoPerto(e))
+    // Mas no próprio eixo a frente passa perto da parede do lado (só geometria):
+    // entre distanciaMinimaFrenteGiroMm e distanciaMinimaFrenteMm, bloqueia só
+    // se o robô já saiu do lugar (avanço médio das rodas) mais que pivoMaximoMm.
+    float saiu = fabsf((float)(e.encoderEsquerdo - inicioE_ + e.encoderDireito - inicioD_)) / 2 / p_.pulsosPorMm;
+    if (frenteMuitoPerto(e) && (saiu > p_.pivoMaximoMm || e.distancia_mm[FRENTE] < p_.distanciaMinimaFrenteGiroMm))
         return terminar(MOV_BLOQUEADO);
     if (!vigiar(e))
         return {0, 0, true};

@@ -57,6 +57,14 @@ void RoboFisico::sentir(Labirinto &mapa)
         leiturasTortas_++;
         return;
     }
+    // Muito fora do centro (giro que travou, manobra), os sensores veem as
+    // paredes de outro jeito: parede falsa no mapa e "sem caminho" no fim
+    // (labirinto, 24/11/2026). Também não marca.
+    if (fabsf(desvioX_) > FORA_DO_CENTRO_MM || fabsf(desvioY_) > FORA_DO_CENTRO_MM)
+    {
+        leiturasTortas_++;
+        return;
+    }
     const Direcao lados[3] = {girarEsquerda(frente), frente, girarDireita(frente)};
     for (uint8_t i = 0; i < 3; i++)
     {
@@ -112,24 +120,45 @@ void RoboFisico::somarDesvio(Direcao d, float mm)
     desvioY_ += deslocamentoY(d) * mm;
 }
 
-// Gira até o rumo. Se bloquear (a frente chegou perto da parede ou as rodas
-// travaram), recua um pouco na direção em que está e tenta mais uma vez.
+// Gira até o rumo. Se bloquear (encostou na parede ou as rodas travaram),
+// manobra e tenta de novo, até MAX_TENTATIVAS_GIRO: alterna ré e frente
+// curtas (frente só com espaço no sensor da frente), como uma baliza, e, com
+// 90° ou mais faltando, começa a tentativa seguinte girando para o outro lado
+// (numa meia-volta dá no mesmo). Antes tentava uma vez só e desistia: no
+// labirinto (24/11/2026) o robô ficava fora do lugar e lia parede falsa.
 bool RoboFisico::girarPara(float rumoGraus)
 {
     controle_.girar(rumoGraus);
     if (executar())
         return true;
-    if (ultimo_ != MOV_BLOQUEADO || hw_.abortado())
-        return false;
-    recuperacoes_++;
-    Direcao d = direcao();
-    controle_.andar(-RECUO_MM, controle_.rumo());
-    executar();
-    somarDesvio(d, controle_.percorridoMm());
-    if (hw_.abortado())
-        return false;
-    controle_.girar(rumoGraus);
-    return executar();
+    for (uint8_t tentativa = 1; tentativa < MAX_TENTATIVAS_GIRO; tentativa++)
+    {
+        if (ultimo_ != MOV_BLOQUEADO || hw_.abortado())
+            return false;
+        recuperacoes_++;
+        Direcao d = direcao();
+        EntradaMovimento e = hw_.ler();
+        bool frenteLivre = e.distancia_mm[1] == 0 || e.distancia_mm[1] > FRENTE_LIVRE_MANOBRA_MM;
+        float manobra = (tentativa % 2 == 0 && frenteLivre) ? RECUO_MM : -RECUO_MM;
+        controle_.andar(manobra, controle_.rumo());
+        executar();
+        somarDesvio(d, controle_.percorridoMm());
+        if (hw_.abortado())
+            return false;
+        float falta = normalizarGraus(rumoGraus - controle_.rumo());
+        if (tentativa % 2 == 1 && fabsf(falta) >= 90)
+        {
+            // Um quarto de volta pelo outro lado; dali o giro curto até o rumo
+            // continua nesse sentido.
+            controle_.girar(normalizarGraus(controle_.rumo() - (falta > 0 ? 90 : -90)));
+            if (!executar() && hw_.abortado())
+                return false;
+        }
+        controle_.girar(rumoGraus);
+        if (executar())
+            return true;
+    }
+    return false;
 }
 
 // Anda e, se bloquear no caminho (toque na parede, parede que o mapa não

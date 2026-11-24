@@ -35,8 +35,14 @@ public:
     // Depois de parar, espera a mediana dos VL53L0X (5 leituras de ~33 ms)
     // trocar as leituras do caminho pelas do centro da célula.
     static const uint16_t ESPERA_SENSORES_MS = 200;
-    // Giro bloqueado (encostou ou pivotou): recua isso e tenta girar de novo.
+    // Giro bloqueado (encostou ou pivotou): manobra isso (ré ou frente) e
+    // tenta girar de novo, até MAX_TENTATIVAS_GIRO vezes no total.
     static constexpr float RECUO_MM = 30;
+    static const uint8_t MAX_TENTATIVAS_GIRO = 4;
+    // Manobra para a frente só com a frente mais longe que isso.
+    static const uint16_t FRENTE_LIVRE_MANOBRA_MM = 70;
+    // Mais longe que isso do centro (pelos encoders), sentir() não marca nada.
+    static constexpr float FORA_DO_CENTRO_MM = 40;
     // Mais longe que isso do centro (ao longo da direção atual), volta antes de girar.
     static constexpr float CENTRALIZAR_ANTES_DO_GIRO_MM = 8;
     // Mais torto que isso em relação ao corredor, os sensores leem as paredes
@@ -60,7 +66,7 @@ public:
     Direcao direcao() const { return direcaoDe(controle_.rumo(), inicial_); }
     EstadoMovimento ultimoResultado() const { return ultimo_; }
     uint16_t recuperacoes() const { return recuperacoes_; } // voltas ao centro depois de bloqueio (RF16-S)
-    uint16_t leiturasTortas() const { return leiturasTortas_; } // sentir() sem marcar, robô torto
+    uint16_t leiturasTortas() const { return leiturasTortas_; } // sentir() sem marcar, robô torto ou fora do centro
     // Sem calibração da frente, a primeira parada no centro de uma célula com
     // parede na frente (pelos encoders) ensina a distância de referência.
     bool aprendeuFrente() const { return aprendeuFrente_; }

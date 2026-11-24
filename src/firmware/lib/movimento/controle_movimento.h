@@ -75,6 +75,13 @@ struct ParametrosMovimento
     // Parede da frente mais perto que isso, girando ou andando: para na hora,
     // calibrado ou não (no centro da célula a parede fica a ~4-6 cm).
     uint16_t distanciaMinimaFrenteMm = 25;
+    // Girando: o sensor da frente fica a ~53 mm do eixo das rodas e passa a
+    // ~21-23 mm da parede do lado com o robô 1 cm fora do centro, sem encostar
+    // (beco, 24/11/2026): 25 bloqueava o giro ali. Abaixo de 25 só bloqueia se
+    // o robô saiu do lugar mais que pivoMaximoMm (pivotando numa roda); abaixo
+    // de distanciaMinimaFrenteGiroMm, sempre.
+    uint16_t distanciaMinimaFrenteGiroMm = 15;
+    float pivoMaximoMm = 10; // giros bons no labirinto: até ~8 mm
 
     // Distâncias com o robô no centro da célula e parede do lado, medidas pela
     // calibração 'L' (#279). 0 = sem calibração: o controle usa só os encoders

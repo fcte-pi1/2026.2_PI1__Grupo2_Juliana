@@ -1011,7 +1011,9 @@ void calibrarGiro()
     // outra esperar, senão o robô pivota numa roda e sai do lugar (1ª tentativa
     // na bancada, 23/11/2026: a esquerda não saiu e o robô pivotou nela).
     EstadoMovimento fim = MOV_CONCLUIDO;
-    bool pertoDemais = false; // algum sensor a menos de 3 cm: para antes de encostar (fios, cantos)
+    // Algum sensor a menos de 15 mm: para antes de encostar (fios, cantos). Era 30: no beco,
+    // 9 mm fora do centro, a frente passa a ~29 mm da parede do lado sem sair do lugar (24/11/2026).
+    bool pertoDemais = false;
     for (int quarto = 1; quarto <= 6 && d < total && fim == MOV_CONCLUIDO && !cancelarMovimento && !pertoDemais;
          quarto++)
     {
@@ -1020,7 +1022,7 @@ void calibrarGiro()
         {
             EntradaMovimento e = hardware.ler();
             for (uint8_t i = 0; i < 3; i++)
-                if (e.distancia_mm[i] > 0 && e.distancia_mm[i] < 30 && !pertoDemais)
+                if (e.distancia_mm[i] > 0 && e.distancia_mm[i] < 15 && !pertoDemais)
                 {
                     pertoDemais = true;
                     console.printf(">>> PAROU: sensor %s a %u mm de algo\n",

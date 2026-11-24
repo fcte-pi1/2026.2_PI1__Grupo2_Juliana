@@ -124,6 +124,8 @@ public:
     // motor mais duro). Girando, basta ZONA_MORTA.
     float zonaMortaEsquerda = ZONA_MORTA;
     float zonaMortaDireita = ZONA_MORTA;
+    // Rodas presas (robô entalado) até esse instante (ms).
+    uint32_t rodasPresasAte = 0;
     uint32_t abortarEm_ = 0;
     float maiorErroLateralDepois_ = 0; // depois do primeiro segundo de movimento
 
@@ -164,6 +166,8 @@ private:
         rampaD_ = aproximar(rampaD_, cmdD_, RAMPA_POR_S * dt);
         velE_ += (velocidade(rampaE_, ganhoRodaEsquerda, zonaMortaEsquerda, velE_) - velE_) * dt / ATRASO_S;
         velD_ += (velocidade(rampaD_, ganhoRodaDireita, zonaMortaDireita, velD_) - velD_) * dt / ATRASO_S;
+        if (agora_ < rodasPresasAte)
+            velE_ = velD_ = 0;
 
         float v = (velE_ + velD_) / 2;
         float w = (velD_ - velE_) / larguraEixoReal;
