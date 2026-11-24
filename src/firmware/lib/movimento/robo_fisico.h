@@ -41,6 +41,8 @@ public:
     static const uint8_t MAX_TENTATIVAS_GIRO = 4;
     // Manobra para a frente só com a frente mais longe que isso.
     static const uint16_t FRENTE_LIVRE_MANOBRA_MM = 70;
+    // Manobra que andou menos que isso: preso desse lado, tenta o outro.
+    static constexpr float MANOBRA_MINIMA_MM = 5;
     // Mais longe que isso do centro (pelos encoders), sentir() não marca nada.
     static constexpr float FORA_DO_CENTRO_MM = 40;
     // Mais longe que isso do centro (ao longo da direção atual), volta antes de girar.

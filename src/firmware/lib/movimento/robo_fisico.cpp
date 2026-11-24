@@ -143,6 +143,16 @@ bool RoboFisico::girarPara(float rumoGraus)
         controle_.andar(manobra, controle_.rumo());
         executar();
         somarDesvio(d, controle_.percorridoMm());
+        // Não saiu do lugar: o canto preso está desse lado. Tenta o outro na
+        // hora (labirinto novo, 24/11/2026: a ré não andava nada e só a manobra
+        // para a frente, na tentativa seguinte, desentalava o giro).
+        if (fabsf(controle_.percorridoMm()) < MANOBRA_MINIMA_MM && !hw_.abortado() &&
+            (manobra < 0 ? frenteLivre : true))
+        {
+            controle_.andar(-manobra, controle_.rumo());
+            executar();
+            somarDesvio(d, controle_.percorridoMm());
+        }
         if (hw_.abortado())
             return false;
         float falta = normalizarGraus(rumoGraus - controle_.rumo());
