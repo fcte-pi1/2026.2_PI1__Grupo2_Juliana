@@ -1,7 +1,9 @@
 // Firmware do Micromouse (ESP32-DEVKIT-V1).
 //
 // Lê os sensores, monitora a bateria, aciona os motores (limitados a 5 V) e
-// envia a telemetria pelo Wi-Fi. A navegação (Flood Fill) roda no núcleo 1.
+// envia a telemetria pelo Wi-Fi. Na corrida automática, o modo automático
+// (Flood Fill) decide o caminho e o controle de movimento anda célula a célula
+// (lib/movimento). Sem corrida, o núcleo 1 recalcula o Flood Fill do robô parado.
 //
 // A bateria e o USB não podem ficar ligados juntos: com a bateria, use o
 // console pelo Wi-Fi (python console_wifi.py <IP>, porta 23) e grave por OTA.
@@ -15,6 +17,22 @@
 //   e  mostra e zera os encoders (para medir os pulsos por volta da roda)
 //   p  PARA os motores                             z  zera o yaw
 //   r  zera as estatísticas de RTT
+//   L  calibra os limiares de parede (mede com e sem parede; salva na flash)
+//   Q / G / H  derruba o Wi-Fi por 5 s / 60 s / 12 min (enche o buffer)
+//
+// Corrida automática e movimento (ROBÔ NO CHÃO, bateria ligada):
+//   A  corrida automática: explora, volta e faz a corrida rápida (RF13-S)
+//      BOOT segurado por 1 s faz o mesmo; durante a corrida, BOOT, p ou a param
+//   M  tamanho do labirinto (células à frente x ao lado na largada)
+//   B  bordas do canto na largada: atrás e à esquerda / atrás e à direita /
+//      à frente e à direita / à frente e à esquerda (robô virado para a borda)
+//   F  anda 1 célula      3  anda 3 células       (CT-SE05)
+//   <  gira 90° à esquerda   >  90° à direita   U  meia-volta   (CT-SE06)
+//   O  liga/desliga o log do controle (CSV a cada 50 ms, CT-SE07)
+//   K  parâmetros do controle e referências da calibração das paredes
+//   + / -  PWM máximo do movimento (0 a 255, passos de 5; padrão 20)
+//   Y  calibra os encoders: anda ~20 cm para a parede da frente e compara os
+//      pulsos com a distância medida (pulsos por mm e sentido; salva na flash)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <Wire.h>
@@ -25,13 +43,17 @@
 #include <esp_heap_caps.h>
 
 #include "console.h"
+#include "controle_movimento.h"
 #include "filtro_distancia.h"
+#include "labirinto.h"
 #include "log_erros.h"
+#include "modo_automatico.h"
 #include "monitor_bateria.h"
 #include "motores.h"
 #include "navegacao_nucleo1.h"
 #include "pacote.h"
 #include "pinos.h"
+#include "robo_fisico.h"
 #include "sensores.h"
 #include "telemetria_wifi.h"
 
@@ -62,6 +84,83 @@ uint32_t inicioCorrida = 0;
 uint32_t ultimaTelemetria = 0;
 uint32_t ultimaBateria = 0;
 uint32_t ultimoStatus = 0;
+
+// ---------- corrida automática (#210) e controle de movimento ----------
+ControleMovimento controle;
+// Pulsos por mm de cada roda (comando Y). Os encoders desta placa não contam
+// igual (bancada, 23/11/2026: esquerda 1,0, direita 1,6): o controle recebe as
+// contagens já na escala da média, como se as duas rodas fossem iguais.
+float ppmEsquerda = 0, ppmDireita = 0;
+Labirinto mapaCorrida;
+bool automatico = false;        // corrida com o robô andando sozinho
+bool cancelarMovimento = false; // pedido para parar o movimento atual (console, botão, fim da corrida)
+bool logMovimento = false;      // CSV do controle no console (CT-SE07)
+// Labirinto da corrida, como a equipe vê o robô na largada (labirinto.h).
+uint8_t celulasAFrente = 4, celulasAoLado = 4;
+LadoBorda borda = BORDA_ESQUERDA;
+
+void servicoDuranteMovimento();
+
+// O hardware para o RoboFisico. ler() faz o que o laço principal faria
+// (sensores, bateria, telemetria, console, OTA) enquanto o robô se move.
+class HardwareReal : public HardwareRobo
+{
+public:
+    EntradaMovimento ler() override
+    {
+        sensores.permitirReinicioImu(false);
+        servicoDuranteMovimento();
+        const LeituraSensores &l = sensores.leitura();
+        EntradaMovimento e = {};
+        e.agora_ms = millis();
+        float media = controle.parametros().pulsosPorMm;
+        e.encoderEsquerdo = ppmEsquerda > 0 ? (int32_t)lroundf(Encoders::esquerdo() * media / ppmEsquerda)
+                                            : Encoders::esquerdo();
+        e.encoderDireito = ppmDireita > 0 ? (int32_t)lroundf(Encoders::direito() * media / ppmDireita)
+                                          : Encoders::direito();
+        // Só yaw novo: logo depois de um reset o BNO085 diz que está ok, mas o
+        // yaw fica parado até a primeira leitura e o robô pareceria não girar.
+        e.yawOk = l.imuOk && millis() - l.imuUltimaLeituraMs < 100;
+        e.yawGraus = l.yawGraus;
+        for (uint8_t i = 0; i < 3; i++)
+        {
+            e.distancia_mm[i] = l.distancia_mm[i];
+            e.parede[i] = l.parede[i];
+        }
+        return e;
+    }
+
+    void aplicar(const SaidaMovimento &s) override
+    {
+        if (s.frear)
+            Motores::frear();
+        else
+            Motores::definir(s.esquerdo, s.direito);
+    }
+
+    bool sensoresOk() override
+    {
+        const LeituraSensores &l = sensores.leitura();
+        return !l.defeito[LADO_ESQUERDO] && !l.defeito[LADO_FRONTAL] && !l.defeito[LADO_DIREITO];
+    }
+
+    bool abortado() override { return cancelarMovimento || !bateria.presente(); }
+
+    // CT-SE07: uma linha a cada 50 ms com o erro lateral e o sinal de controle.
+    void observar(const ControleMovimento &c) override
+    {
+        static uint32_t ultimo = 0;
+        if (!logMovimento || millis() - ultimo < 50)
+            return;
+        ultimo = millis();
+        console.printf("mov,%lu,%s,%.0f,%.1f,%d,%.1f,%.3f\n", (unsigned long)ultimo, nomeMovimento(c.estado()),
+                       c.percorridoMm(), c.erroLateralMm(), c.temReferenciaLateral(), c.rumo(), c.sinalControle());
+    }
+};
+
+HardwareReal hardware;
+RoboFisico roboFisico(hardware, controle);
+ModoAutomatico modo(roboFisico, mapaCorrida);
 
 float tensaoContrato()
 {
@@ -110,7 +209,7 @@ bool calibrar(bool testarMotores)
         if (l.defeito[i])
             LogErros::registrar(true, "VL53L0X %s sem resposta", nomes[i]);
     if (!l.imuOk)
-        LogErros::registrar(true, "BNO085 sem resposta");
+        LogErros::registrar(false, "BNO085 sem resposta: rumo pelos encoders e paredes");
     if (!l.inaOk)
         LogErros::registrar(true, "INA226 sem resposta (sem leitura da bateria)");
 
@@ -173,15 +272,29 @@ void encerrarCorrida(bool concluida, MotivoAbandono motivo = MOTIVO_MANUAL)
     TelemetriaWifi::publicar(fim);
     TelemetriaWifi::encerrarCorrida();
     emCorrida = false;
+    automatico = false;
+    cancelarMovimento = true; // bateria, console ou botão no meio de um movimento: o controle para já
     console.printf("\n>>> corrida %u encerrada (%s)\n", c, concluida ? "concluida" : "abandonada");
 }
 
 void enviarTelemetria()
 {
-    // Posição (0,0) por enquanto: a pose vem da navegação quando o robô andar.
+    // Na corrida automática, pose, paredes, Flood Fill e estado vêm do modo
+    // automático; com o robô parado, da navegação do núcleo 1.
+    Navegacao::Estado n = Navegacao::estado();
+    if (automatico)
+    {
+        uint8_t d = modo.floodFill().valorAtual(mapaCorrida);
+        n.x = mapaCorrida.x();
+        n.y = mapaCorrida.y();
+        n.orientacao = mapaCorrida.orientacao();
+        n.paredes = mapaCorrida.paredesDe(n.x, n.y);
+        n.valorFlood = d == INFINITO ? -1 : d;
+        n.estadoRobo = modo.estado();
+    }
     MensagemTelemetria tel = criarTelemetria(
-        0, 0, millis() - inicioCorrida, 0, 0, letra(sensores.orientacao()), sensores.mascaraParedes(),
-        fabsf(Encoders::velocidadeMs()), tensaoContrato(), Navegacao::estado().valorFlood, "parado");
+        0, 0, millis() - inicioCorrida, (int8_t)n.x, (int8_t)n.y, letra(n.orientacao), n.paredes,
+        fabsf(Encoders::velocidadeMs()), tensaoContrato(), n.valorFlood, estadoContrato(n.estadoRobo));
     TelemetriaWifi::publicar(tel);
 }
 
@@ -451,9 +564,548 @@ void mostrarStatus()
                    Motores::pwmEsquerdo() * 100, Motores::pwmDireito() * 100, Motores::pwmMaximo() * 100,
                    (long)Encoders::esquerdo(), (long)Encoders::direito(), Encoders::velocidadeMs());
     Navegacao::Estado n = Navegacao::estado();
-    console.printf("         navegacao: nucleo=%u flood=%d ciclos=%u tempo=%u/%u us corridas simuladas ok=%u erradas=%u\n",
-                   n.nucleo, n.valorFlood, n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk,
-                   n.corridasErradas);
+    console.printf("         navegacao: (%u,%u) %c paredes=%2u %s nucleo=%u flood=%d ciclos=%u tempo=%u/%u us "
+                   "corridas simuladas ok=%u erradas=%u\n",
+                   n.x, n.y, letra(n.orientacao), n.paredes, estadoContrato(n.estadoRobo), n.nucleo, n.valorFlood,
+                   n.ciclos, n.tempoMedioUs, n.tempoMaxUs, n.corridasOk, n.corridasErradas);
+    if (automatico)
+        console.printf("         corrida automatica: (%u,%u) %c %s passos=%u viagens=%u rumo=%.1f desvio=(%.0f,%.0f) mm "
+                       "recuperacoes=%u\n",
+                       mapaCorrida.x(), mapaCorrida.y(), letra(mapaCorrida.orientacao()), nomeEstado(modo.estado()),
+                       modo.passos(), modo.viagens(), controle.rumo(), roboFisico.desvioX(), roboFisico.desvioY(),
+                       roboFisico.recuperacoes());
+}
+
+// ---------- limiares de parede (#279) ----------
+
+const char *const NOME_LADO[3] = {"esquerdo", "frontal", "direito"};
+
+// Distância de um lado com o robô no centro da célula e a parede ali: o
+// controle de movimento centraliza e para por ela.
+void definirReferencia(uint8_t lado, uint16_t mm)
+{
+    ParametrosMovimento &p = controle.parametros();
+    (lado == LADO_ESQUERDO ? p.esquerdaCentroMm : lado == LADO_FRONTAL ? p.frontalCentroMm : p.direitaCentroMm) = mm;
+}
+
+// Limiares e referências calibrados ficam na flash (Preferences) e valem a
+// partir do boot. Sem calibração, ficam os padrões do sensores.cpp e o
+// controle de movimento anda só pelos encoders.
+void carregarLimiares()
+{
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        char chave[4] = {'p', 'l', (char)('0' + i), 0};
+        uint32_t v = preferencias.getUInt(chave, 0); // liga << 16 | desliga
+        if (v)
+            sensores.configurarLimiares((LadoSensor)i, v >> 16, v & 0xFFFF);
+        chave[1] = 'c';
+        definirReferencia(i, preferencias.getUShort(chave, 0));
+    }
+}
+
+// Média de cada lado em ms milissegundos (distância já filtrada pela mediana).
+void medirLados(uint32_t ms, uint16_t media[3])
+{
+    uint32_t soma[3] = {0, 0, 0}, n = 0;
+    for (uint32_t t0 = millis(); millis() - t0 < ms; n++)
+    {
+        esperarAtualizando(40); // um VL53L0X mede a cada ~33 ms
+        for (uint8_t i = 0; i < 3; i++)
+            soma[i] += sensores.leitura().distancia_mm[i];
+    }
+    for (uint8_t i = 0; i < 3; i++)
+        media[i] = n ? soma[i] / n : 0;
+}
+
+// Comando 'L': o robô parado no centro de uma célula. Mede os 3 lados com
+// parede e depois sem parede, calcula os limiares de cada lado e salva.
+void calibrarLimiares()
+{
+    uint16_t com[3], sem[3];
+    console.println("\n>>> CALIBRACAO DAS PAREDES (#279), robo parado no centro de uma celula");
+    console.println("    1/2: paredes nos 3 lados (esquerda, frente, direita). Medindo em 5 s...");
+    esperarAtualizando(5000);
+    medirLados(2000, com);
+    console.printf("    com parede: E=%u F=%u D=%u mm\n", com[0], com[1], com[2]);
+    console.println("    2/2: TIRE as 3 paredes. Medindo em 8 s...");
+    esperarAtualizando(8000);
+    medirLados(2000, sem);
+    console.printf("    sem parede: E=%u F=%u D=%u mm\n", sem[0], sem[1], sem[2]);
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        LimiaresParede l = calcularLimiares(com[i], sem[i]);
+        if (!l.ok)
+        {
+            console.printf("    %-8s NAO calibrado (com %u, sem %u mm): mantem %u/%u\n", NOME_LADO[i], com[i], sem[i],
+                           sensores.limiarLiga((LadoSensor)i), sensores.limiarDesliga((LadoSensor)i));
+            continue;
+        }
+        sensores.configurarLimiares((LadoSensor)i, l.liga, l.desliga);
+        char chave[4] = {'p', 'l', (char)('0' + i), 0};
+        preferencias.putUInt(chave, ((uint32_t)l.liga << 16) | l.desliga);
+        chave[1] = 'c';
+        preferencias.putUShort(chave, com[i]);
+        definirReferencia(i, com[i]);
+        console.printf("    %-8s parede abaixo de %u mm, livre acima de %u mm, centro a %u mm (salvo)\n", NOME_LADO[i],
+                       l.liga, l.desliga, com[i]);
+    }
+}
+
+// ---------- queda de Wi-Fi provocada (#282) ----------
+
+// Desliga o rádio por alguns segundos com o robô funcionando, para conferir
+// que a navegação segue, que o buffer guarda as leituras e que, na volta, o
+// evento reconexao e os pendentes chegam ao servidor. Comandos Q, G e H.
+uint32_t quedaFim = 0;       // millis() em que o Wi-Fi volta; 0 = sem queda
+uint32_t quedaVolta = 0;     // millis() em que o rádio foi religado
+uint32_t quedaPendentes = 0; // pendentes acumulados no instante da volta
+bool quedaRelatar = false;   // falta registrar o resultado no log
+
+void provocarQueda(uint32_t segundos)
+{
+    if (!wifiAtivo)
+    {
+        console.println(">>> Wi-Fi desligado neste firmware (sem credenciais.h)");
+        return;
+    }
+    console.printf(">>> QUEDA DE WI-FI por %lu s (%s). O console Wi-Fi cai: acompanhe pela serial ou "
+                   "reconecte depois e mande 'l'\n",
+                   (unsigned long)segundos, emCorrida ? "corrida em andamento" : "sem corrida: 'i' gera telemetria");
+    delay(100);
+    WiFi.mode(WIFI_OFF);
+    quedaFim = millis() + segundos * 1000;
+    if (quedaFim == 0)
+        quedaFim = 1;
+    quedaRelatar = true;
+}
+
+void acompanharQueda(uint32_t agora)
+{
+    if (quedaFim && (int32_t)(agora - quedaFim) >= 0)
+    {
+        quedaFim = 0;
+        quedaVolta = agora;
+        quedaPendentes = TelemetriaWifi::estatisticas().pendentes;
+        WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false); // WIFI_OFF -> STA volta com modem sleep; mantém a latência baixa
+        WiFi.begin(WIFI_SSID, WIFI_SENHA);
+    }
+    if (!quedaRelatar || quedaFim)
+        return;
+    // Relata quando o buffer esvaziar com o servidor de volta, ou 60 s depois
+    // de religar o rádio (servidor desligado, por exemplo).
+    EstatisticasTelemetria e = TelemetriaWifi::estatisticas();
+    bool descarregou = e.servidor && e.pendentes == 0;
+    if (!descarregou && agora - quedaVolta < 60000)
+        return;
+    quedaRelatar = false;
+    console.printf(">>> fim da queda: %s, acumulados na volta %lu (restam %lu), ocupacao maxima %lu, descartes %lu, "
+                   "heap livre %u B (minimo desde o boot %u B)\n",
+                   descarregou ? "buffer descarregado" : "servidor nao voltou em 60 s",
+                   (unsigned long)quedaPendentes, (unsigned long)e.pendentes, (unsigned long)e.ocupacaoMaxima,
+                   (unsigned long)e.descartes, ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    // O log guarda 60 caracteres: só os números, para ler depois com 'l'.
+    LogErros::registrar(false, "queda: volta %lu pend %lu max %lu desc %lu heap %u", (unsigned long)quedaPendentes,
+                        (unsigned long)e.pendentes, (unsigned long)e.ocupacaoMaxima, (unsigned long)e.descartes,
+                        ESP.getMinFreeHeap());
+}
+
+// ---------- laço: o que roda parado e durante o movimento ----------
+
+void verificarBotao(bool podeIniciar);
+void iniciarOta();
+
+// Bateria, telemetria, status e rede. Os sensores e os motores já foram
+// atualizados por quem chama.
+void tarefasPeriodicas(uint32_t agora)
+{
+    const LeituraSensores &lido = sensores.leitura();
+    Navegacao::atualizarSensores(lido.parede[LADO_FRONTAL], lido.parede[LADO_ESQUERDO], lido.parede[LADO_DIREITO],
+                                 sensores.orientacao());
+    if (agora - ultimaBateria >= PERIODO_BATERIA_MS)
+    {
+        ultimaBateria = agora;
+        verificarBateria(agora);
+    }
+    if (emCorrida && agora - ultimaTelemetria >= PERIODO_TELEMETRIA_MS)
+    {
+        // Soma o período em vez de copiar o relógio: o atraso de um laço não
+        // se acumula e a média fica em 5 Hz. Se atrasar muito, recomeça.
+        ultimaTelemetria += PERIODO_TELEMETRIA_MS;
+        if (agora - ultimaTelemetria >= PERIODO_TELEMETRIA_MS)
+            ultimaTelemetria = agora;
+        enviarTelemetria();
+    }
+    if (agora - ultimoStatus >= PERIODO_STATUS_MS)
+    {
+        ultimoStatus = agora;
+        mostrarStatus();
+        digitalWrite(PINO_LED, TelemetriaWifi::estatisticas().servidor); // LED aceso = servidor conectado
+    }
+    acompanharQueda(agora);
+    if (wifiAtivo && WiFi.status() == WL_CONNECTED)
+    {
+        if (!otaIniciado)
+            iniciarOta();
+        ArduinoOTA.handle();
+        console.atender();
+    }
+}
+
+// Um ciclo enquanto o robô se move (HardwareReal::ler). Do console só valem
+// os comandos de parar, o status e o log; o botão BOOT também para.
+void servicoDuranteMovimento()
+{
+    uint32_t agora = millis();
+    sensores.atualizar();
+    Motores::atualizar(agora);
+    Encoders::atualizar(agora);
+    tarefasPeriodicas(agora);
+    for (int c = console.ler(); c >= 0; c = console.ler())
+    {
+        if (c == 'p' || c == 'a')
+        {
+            cancelarMovimento = true;
+            console.println("\n>>> movimento interrompido pelo console");
+            if (emCorrida)
+                encerrarCorrida(false);
+        }
+        else if (c == 's')
+            mostrarStatus();
+        else if (c == 'O')
+            logMovimento = !logMovimento;
+    }
+    verificarBotao(false);
+    vTaskDelay(1); // watchdog do núcleo 0
+}
+
+// ---------- labirinto da corrida ----------
+
+void carregarLabirinto()
+{
+    celulasAFrente = preferencias.getUChar("lf", 4);
+    celulasAoLado = preferencias.getUChar("ll", 4);
+    uint8_t b = preferencias.getUChar("lb", BORDA_ESQUERDA);
+    borda = b <= BORDA_FRENTE_ESQUERDA ? (LadoBorda)b : BORDA_ESQUERDA;
+}
+
+void mostrarLabirinto()
+{
+    Labirinto teste;
+    bool ok = teste.iniciarNaLargada(borda, celulasAFrente, celulasAoLado);
+    const char *nomes[] = {"atras e a esquerda", "atras e a direita", "a frente e a direita", "a frente e a esquerda"};
+    console.printf(">>> labirinto: %u celulas a frente x %u ao lado, borda %s", celulasAFrente, celulasAoLado,
+                   nomes[borda]);
+    if (ok)
+        console.printf(" -> mapa %ux%u, largada virada para %c, objetivo (%u,%u)\n", teste.largura(), teste.altura(),
+                       letra(teste.orientacaoInicial()), teste.largura() - 1, teste.altura() - 1);
+    else
+        console.println(" -> tamanho fora do TAP");
+}
+
+// 'M': passa pelos tamanhos do TAP, vistos da largada.
+void trocarTamanho()
+{
+    const uint8_t tamanhos[][2] = {{4, 4}, {4, 8}, {8, 4}, {4, 12}, {12, 4}};
+    const uint8_t n = sizeof(tamanhos) / sizeof(tamanhos[0]);
+    uint8_t i = 0;
+    while (i < n && !(tamanhos[i][0] == celulasAFrente && tamanhos[i][1] == celulasAoLado))
+        i++;
+    i = (i + 1) % n;
+    celulasAFrente = tamanhos[i][0];
+    celulasAoLado = tamanhos[i][1];
+    preferencias.putUChar("lf", celulasAFrente);
+    preferencias.putUChar("ll", celulasAoLado);
+    mostrarLabirinto();
+}
+
+// 'B': onde ficam as bordas do canto, vistas pelo robô na largada.
+void trocarBorda()
+{
+    borda = (LadoBorda)((borda + 1) % (BORDA_FRENTE_ESQUERDA + 1));
+    preferencias.putUChar("lb", borda);
+    mostrarLabirinto();
+}
+
+// ---------- velocidade: PWM máximo de 0 a 255 ----------
+
+// Teto do PWM (0 a 255, como no analogWrite) para tudo o que o controle faz:
+// andar, girar e o reforço da roda parada. Pedido da equipe em 23/11/2026:
+// devagar, 20. Ajuste com + e - (passos de 5); fica salvo na flash.
+uint8_t pwmMaximo255 = 20;
+
+// O controle trabalha em fração dos 5 V do motor; o PWM de verdade é essa
+// fração vezes Motores::pwmMaximo() (5 V / bateria). Converte o teto para a
+// tensão de agora: chamar antes de cada movimento.
+void aplicarPwmMaximo()
+{
+    ParametrosMovimento &p = controle.parametros();
+    float teto = (pwmMaximo255 / 255.0f) / Motores::pwmMaximo();
+    teto = teto > 1 ? 1 : teto;
+    p.potenciaMaxima = p.potenciaGiroMaxima = p.potenciaArranqueMaxima = teto;
+    ParametrosMovimento padrao;
+    p.potenciaMinima = padrao.potenciaMinima < teto ? padrao.potenciaMinima : teto;
+    p.potenciaGiroMinima = padrao.potenciaGiroMinima < teto ? padrao.potenciaGiroMinima : teto;
+}
+
+void mudarPwmMaximo(int passo)
+{
+    int v = pwmMaximo255 + passo;
+    pwmMaximo255 = (uint8_t)(v < 5 ? 5 : (v > 255 ? 255 : v));
+    preferencias.putUChar("pwm", pwmMaximo255);
+    aplicarPwmMaximo();
+    console.printf(">>> PWM maximo %u de 255 (%.0f%%, ~%.2f V no motor com a bateria em %.2f V)\n", pwmMaximo255,
+                   pwmMaximo255 / 2.55f, pwmMaximo255 / 255.0f * bateria.tensao(), bateria.tensao());
+}
+
+// ---------- calibração dos encoders pelo sensor da frente (comando Y) ----------
+
+// Pulsos por mm de cada roda, medidos no robô e salvos na flash; 0 = o valor
+// do motores.h. O controle usa a média; HardwareReal::ler corrige cada roda.
+void aplicarPulsosPorMm(float esquerda, float direita)
+{
+    if (esquerda <= 0 || direita <= 0)
+        return;
+    ppmEsquerda = esquerda;
+    ppmDireita = direita;
+    float media = (esquerda + direita) / 2;
+    controle.parametros().pulsosPorMm = media;
+    Encoders::definirPulsosPorVolta(media * 3.14159265f * Encoders::DIAMETRO_RODA_MM);
+}
+
+// Robô parado num corredor, com a parede do fim dele a 30-90 cm na frente.
+// Anda devagar em linha reta uns 20 cm e compara o quanto a distância da
+// frente diminuiu com os pulsos de cada encoder: dá os pulsos por mm de
+// verdade e mostra se algum encoder ou motor está invertido (bancada,
+// 23/11/2026: o robô andou 31 cm e os encoders contaram ~1,5 cm).
+void calibrarEncoders()
+{
+    if (emCorrida || !bateria.presente())
+    {
+        console.println(emCorrida ? ">>> durante uma corrida, nao" : ">>> sem bateria, motores bloqueados");
+        return;
+    }
+    uint16_t ini[3], fim[3];
+    medirLados(600, ini);
+    if (ini[LADO_FRONTAL] < 300 || ini[LADO_FRONTAL] > 900)
+    {
+        console.printf(">>> calibracao dos encoders: precisa de parede a 30-90 cm na frente (agora %u mm)\n",
+                       ini[LADO_FRONTAL]);
+        return;
+    }
+    aplicarPwmMaximo();
+    float p = controle.parametros().potenciaMaxima;
+    console.printf("\n>>> CALIBRACAO DOS ENCODERS: andando ~20 cm em linha reta (PWM %u/255, 'p' para)\n", pwmMaximo255);
+    Encoders::zerar();
+    uint32_t t0 = millis(), ultimoAumento = t0;
+    bool parou = false;
+    Motores::definir(p, p);
+    while (millis() - t0 < 5000)
+    {
+        esperarAtualizando(10);
+        const LeituraSensores &l = sensores.leitura();
+        if (l.distancia_mm[LADO_FRONTAL] < ini[LADO_FRONTAL] - 200 || l.distancia_mm[LADO_FRONTAL] < 120)
+            break;
+        if (console.ler() == 'p')
+        {
+            parou = true;
+            break;
+        }
+        // Não saiu do lugar: sobe a potência aos poucos (no máximo 0,65 = ~3 V).
+        bool andou = Encoders::esquerdo() != 0 || Encoders::direito() != 0 ||
+                     ini[LADO_FRONTAL] - l.distancia_mm[LADO_FRONTAL] > 15;
+        if (!andou && millis() - ultimoAumento > 300 && p < 0.65f)
+        {
+            p += 0.03f;
+            ultimoAumento = millis();
+            Motores::definir(p, p);
+        }
+    }
+    Motores::parar();
+    esperarAtualizando(400);
+    medirLados(600, fim);
+    int32_t pe = Encoders::esquerdo(), pd = Encoders::direito();
+    int dF = (int)ini[LADO_FRONTAL] - fim[LADO_FRONTAL];
+    int dE = (int)fim[LADO_ESQUERDO] - ini[LADO_ESQUERDO], dD = (int)fim[LADO_DIREITO] - ini[LADO_DIREITO];
+    console.printf(">>> frente %u -> %u mm (andou %d mm), lados E %u->%u D %u->%u, encoders E=%ld D=%ld, potencia %.2f%s\n",
+                   ini[LADO_FRONTAL], fim[LADO_FRONTAL], dF, ini[LADO_ESQUERDO], fim[LADO_ESQUERDO], ini[LADO_DIREITO],
+                   fim[LADO_DIREITO], (long)pe, (long)pd, p, parou ? " (interrompido)" : "");
+    if (dF < -40)
+        console.println(">>> o robo andou para TRAS com os dois motores 'para frente': motores invertidos (INVERTE_* em motores.h)");
+    if (abs(dE) > 40 || abs(dD) > 40)
+        console.println(">>> as paredes dos lados mudaram muito: o robo girou (um motor invertido ou muito mais fraco)");
+    if (dF > 40 && pe < 0)
+        console.println(">>> encoder ESQUERDO conta para tras andando para frente: inverta Encoders::INVERTE_ESQUERDO");
+    if (dF > 40 && pd < 0)
+        console.println(">>> encoder DIREITO conta para tras andando para frente: inverta Encoders::INVERTE_DIREITO");
+    if (dF < 60 || abs(dE) > 40 || abs(dD) > 40 || pe == 0 || pd == 0)
+    {
+        console.println(">>> calibracao NAO salva: o robo precisa andar pelo menos 6 cm em linha reta");
+        return;
+    }
+    // Cada roda pela sua contagem. O desvio lateral medido (as paredes dos
+    // lados) é pequeno perto do avanço, então as duas andaram quase o mesmo.
+    float ppmE = labs(pe) / (float)dF, ppmD = labs(pd) / (float)dF;
+    console.printf(">>> pulsos por mm: E=%.2f D=%.2f (era %.2f nas duas) -> %.0f e %.0f pulsos por volta da roda (salvo)\n",
+                   ppmE, ppmD, controle.parametros().pulsosPorMm, ppmE * 3.14159265f * Encoders::DIAMETRO_RODA_MM,
+                   ppmD * 3.14159265f * Encoders::DIAMETRO_RODA_MM);
+    preferencias.putFloat("ppmE", ppmE);
+    preferencias.putFloat("ppmD", ppmD);
+    aplicarPulsosPorMm(ppmE, ppmD);
+}
+
+// ---------- corrida automática (#210, RF13-S) ----------
+
+const char *nomeFalha(MotivoFalha m)
+{
+    switch (m)
+    {
+    case FALHA_CALIBRACAO: return "sensor de distancia sem resposta na largada";
+    case FALHA_SEM_CAMINHO: return "mapa sem caminho ate o destino";
+    case FALHA_MOVIMENTO: return "robo nao conseguiu andar (colisao?)";
+    case FALHA_LIMITE: return "passos demais";
+    default: return "sem falha";
+    }
+}
+
+// O contrato só tem estes motivos: colisão e tempo esgotado são os mais
+// próximos; o motivo exato vai para o log de erros.
+MotivoAbandono motivoContrato(MotivoFalha m)
+{
+    return m == FALHA_MOVIMENTO ? MOTIVO_COLISAO : (m == FALHA_LIMITE ? MOTIVO_TEMPO_ESGOTADO : MOTIVO_MANUAL);
+}
+
+// Sem a calibração 'L', usa o que os sensores veem na largada (o robô parado
+// no beco): com as duas paredes dos lados, a média delas vira a referência
+// dos dois lados (centraliza entre elas); com parede na frente, a distância
+// de agora. Vale só para esta corrida: a flash continua sem calibração.
+void referenciasDaLargada()
+{
+    ParametrosMovimento &p = controle.parametros();
+    carregarLimiares(); // volta ao calibrado (ou a 0) antes de completar
+    const LeituraSensores &l = sensores.leitura();
+    bool pe = l.parede[LADO_ESQUERDO], pf = l.parede[LADO_FRONTAL], pd = l.parede[LADO_DIREITO];
+    if (p.esquerdaCentroMm == 0 && p.direitaCentroMm == 0 && pe && pd)
+        p.esquerdaCentroMm = p.direitaCentroMm =
+            (l.distancia_mm[LADO_ESQUERDO] + l.distancia_mm[LADO_DIREITO]) / 2;
+    if (p.frontalCentroMm == 0 && pf)
+        p.frontalCentroMm = l.distancia_mm[LADO_FRONTAL];
+    console.printf(">>> paredes na largada: E=%s F=%s D=%s; referencias do centro: frente %u, esquerda %u, direita %u mm%s\n",
+                   pe ? "sim" : "nao", pf ? "sim" : "nao", pd ? "sim" : "nao", p.frontalCentroMm, p.esquerdaCentroMm,
+                   p.direitaCentroMm, preferencias.getUShort("pc1", 0) ? " (calibradas)" : " (da largada, sem L)");
+}
+
+void iniciarCorridaAutomatica()
+{
+    if (emCorrida)
+        return;
+    if (!bateria.presente())
+    {
+        console.println(">>> corrida automatica: sem bateria, motores bloqueados");
+        return;
+    }
+    if (!mapaCorrida.iniciarNaLargada(borda, celulasAFrente, celulasAoLado))
+    {
+        console.println(">>> corrida automatica: tamanho do labirinto invalido (comandos M e B)");
+        return;
+    }
+    roboFisico.definirOrientacaoInicial(mapaCorrida.orientacaoInicial());
+    iniciarCorrida(); // calibra, zera o yaw e manda o evento 'inicio'
+    if (!emCorrida)
+        return;
+    mostrarLabirinto();
+    referenciasDaLargada();
+    aplicarPwmMaximo();
+    console.printf(">>> PWM maximo %u de 255 (+ e - ajustam)\n", pwmMaximo255);
+    console.println(">>> CORRIDA AUTOMATICA em 1 s: tire a mao do robo (p, a ou BOOT param)");
+    cancelarMovimento = false;
+    automatico = true;
+    for (uint32_t t0 = millis(); millis() - t0 < 1000 && emCorrida;)
+        servicoDuranteMovimento();
+    if (!emCorrida || cancelarMovimento)
+        return;
+    modo.iniciar();
+}
+
+// Uma etapa do modo automático (a calibração ou uma célula). Chamado pelo
+// laço enquanto a corrida automática estiver ativa.
+void passoAutomatico()
+{
+    EstadoRobo antes = modo.estado();
+    EstadoRobo agora = modo.passo();
+    if (!emCorrida || !automatico)
+    {
+        // Parada pelo console, pelo botão ou pela bateria no meio do movimento.
+        Motores::parar();
+        automatico = false;
+        return;
+    }
+    if (agora != antes)
+        console.printf(">>> modo automatico: %s -> %s\n", nomeEstado(antes), nomeEstado(agora));
+    console.printf(">>> (%u,%u) %c %s passos=%u %s\n", mapaCorrida.x(), mapaCorrida.y(), letra(mapaCorrida.orientacao()),
+                   nomeEstado(agora), modo.passos(), nomeMovimento(roboFisico.ultimoResultado()));
+    if (agora == ESTADO_PARADO)
+    {
+        console.printf(">>> OBJETIVO: rota rapida de %u celulas, %u passos no total, %u viagens de exploracao\n",
+                       modo.passosRapido(), modo.passos(), modo.viagens());
+        encerrarCorrida(true);
+    }
+    else if (agora == ESTADO_FALHA)
+    {
+        LogErros::registrar(true, "corrida automatica: %s", nomeFalha(modo.motivo()));
+        encerrarCorrida(false, motivoContrato(modo.motivo()));
+    }
+}
+
+// ---------- movimentos soltos na bancada (CT-SE05 a CT-SE07) ----------
+
+// O robô parado num corredor: o rumo de agora, arredondado para 90°, é o eixo.
+void movimentoBancada(char c)
+{
+    if (emCorrida)
+    {
+        console.println(">>> durante uma corrida, nao");
+        return;
+    }
+    if (!bateria.presente())
+    {
+        console.println(">>> sem bateria, motores bloqueados");
+        return;
+    }
+    cancelarMovimento = false;
+    aplicarPwmMaximo();
+    EntradaMovimento e = hardware.ler();
+    controle.reiniciar(e, e.yawOk ? e.yawGraus : 0);
+    float eixo = roundf(controle.rumo() / 90) * 90;
+    bool ok = true;
+    if (c == 'F' || c == '3')
+        for (int i = 0; i < (c == '3' ? 3 : 1) && ok; i++)
+            ok = roboFisico.andarMm(CELULA_MM, eixo);
+    else
+        ok = roboFisico.girarPara(eixo + (c == '<' ? 90 : c == '>' ? -90 : 180));
+    Motores::parar();
+    console.printf(">>> %s: %s, andou %.0f mm, rumo %.1f graus (%s), erro lateral %.1f mm, recuperacoes %u\n",
+                   c == 'F' ? "1 celula" : c == '3' ? "3 celulas" : c == 'U' ? "meia-volta" : "giro de 90",
+                   ok ? "ok" : nomeMovimento(roboFisico.ultimoResultado()), controle.percorridoMm(), controle.rumo(),
+                   e.yawOk ? "BNO085" : "encoders", controle.lateralMm(), roboFisico.recuperacoes());
+}
+
+void mostrarParametros()
+{
+    aplicarPwmMaximo();
+    const ParametrosMovimento &p = controle.parametros();
+    console.printf("\n>>> PWM MAXIMO %u de 255 (+ e - ajustam)\n", pwmMaximo255);
+    console.printf("\n>>> CONTROLE DE MOVIMENTO (lib/movimento/controle_movimento.h)\n"
+                   "    celula %u mm, %.2f pulsos/mm, largura do eixo %.1f mm (so sem BNO085)\n"
+                   "    andar: potencia %.2f a %.2f, ganhos distancia %.4f rumo %.4f lateral %.2f\n"
+                   "    girar: potencia %.2f a %.2f, ganho %.4f, tolerancia %.1f graus\n"
+                   "    centro da celula (calibracao L): frente %u, esquerda %u, direita %u mm%s\n",
+                   CELULA_MM, p.pulsosPorMm, p.larguraEixoMm, p.potenciaMinima, p.potenciaMaxima, p.ganhoDistancia,
+                   p.ganhoRumo, p.ganhoLateral, p.potenciaGiroMinima, p.potenciaGiroMaxima, p.ganhoGiro,
+                   p.toleranciaGiroGraus, p.frontalCentroMm, p.esquerdaCentroMm, p.direitaCentroMm,
+                   p.frontalCentroMm ? "" : " (NAO calibrado: comando L)");
+    mostrarLabirinto();
 }
 
 void tratarComando(char c)
@@ -585,6 +1237,12 @@ void tratarComando(char c)
         }
         detachInterrupt(PINO_BNO_INT);
         const LeituraSensores &l = sensores.leitura();
+        // Quem responde no I2C nos dois endereços possíveis do BNO085 (AD0).
+        for (uint8_t end : {0x4A, 0x4B})
+        {
+            Wire.beginTransmission(end);
+            console.printf(">>> I2C 0x%02X: %s\n", end, Wire.endTransmission() == 0 ? "responde" : "nada");
+        }
         console.printf(">>> BNO085 em 3 s: INT caiu %lu vezes, %lu leituras I2C, %u resets, imuOk=%d, INT agora=%d\n",
                        (unsigned long)quedas, (unsigned long)(l.imuEventos - a.imuEventos),
                        l.imuReinicios - a.imuReinicios, l.imuOk, digitalRead(PINO_BNO_INT));
@@ -1075,6 +1733,27 @@ void tratarComando(char c)
         break;
     }
     case 'p': Motores::parar(); console.println(">>> motores parados"); break;
+    case 'A': iniciarCorridaAutomatica(); break;
+    case 'M': trocarTamanho(); break;
+    case 'B': trocarBorda(); break;
+    case 'F':
+    case '3':
+    case '<':
+    case '>':
+    case 'U': movimentoBancada(c); break;
+    case 'O':
+        logMovimento = !logMovimento;
+        console.printf(">>> log do controle %s (mov,ms,estado,mm,lateral,parede,rumo,sinal)\n",
+                       logMovimento ? "ligado" : "desligado");
+        break;
+    case 'K': mostrarParametros(); break;
+    case 'Y': calibrarEncoders(); break;
+    case '+': mudarPwmMaximo(5); break;
+    case '-': mudarPwmMaximo(-5); break;
+    case 'L': calibrarLimiares(); break;     // limiares de parede (#279)
+    case 'Q': provocarQueda(5); break;       // queda curta (#282)
+    case 'G': provocarQueda(60); break;      // queda longa
+    case 'H': provocarQueda(12 * 60); break; // enche o buffer: 3200 leituras = 10 min 40 s a 5 Hz
     case 'z': sensores.zerarYaw(); console.println(">>> yaw zerado"); break;
     case 's': mostrarStatus(); break;
     case 'r': TelemetriaWifi::zerarRtt(); console.println(">>> RTT zerado"); break;
@@ -1082,21 +1761,39 @@ void tratarComando(char c)
     }
 }
 
-void verificarBotao()
+// BOOT sem corrida: toque curto inicia uma corrida com o robô parado (só
+// telemetria, como antes); segurado por 1 s, a corrida automática, ao soltar.
+// Com corrida, apertar encerra: concluída na parada, abandonada na automática.
+// Durante um movimento (podeIniciar = false), o botão só para.
+void verificarBotao(bool podeIniciar)
 {
-    // Só reage a uma descida (solto -> apertado). O pino começa como "apertado"
-    // para não disparar se o reset pelo USB deixar o BOOT em nível baixo.
+    // O pino começa como "apertado" para não disparar se o reset pelo USB
+    // deixar o BOOT em nível baixo.
     static bool anterior = false;
     static uint32_t ultimaMudanca = 0;
+    static uint32_t apertouEm = 0; // 0 = não está esperando soltar
     if (millis() < 3000)
         return;
     bool agora = digitalRead(PINO_BOTAO_BOOT);
-    if (agora != anterior && millis() - ultimaMudanca > 50)
+    if (agora == anterior || millis() - ultimaMudanca <= 50)
+        return;
+    ultimaMudanca = millis();
+    anterior = agora;
+    if (!agora) // apertou
     {
-        ultimaMudanca = millis();
-        anterior = agora;
-        if (!agora) // apertou
-            emCorrida ? encerrarCorrida(true) : iniciarCorrida();
+        apertouEm = 0;
+        if (emCorrida)
+            encerrarCorrida(!automatico);
+        else if (podeIniciar)
+            apertouEm = millis() | 1;
+        else
+            cancelarMovimento = true; // movimento da bancada
+    }
+    else if (apertouEm) // soltou
+    {
+        bool longo = millis() - apertouEm >= 1000;
+        apertouEm = 0;
+        longo ? iniciarCorridaAutomatica() : iniciarCorrida();
     }
 }
 
@@ -1136,6 +1833,11 @@ void setup()
 
     preferencias.begin("micromouse", false);
     uint8_t ok = sensores.iniciar();
+    carregarLimiares();
+    carregarLabirinto();
+    pwmMaximo255 = preferencias.getUChar("pwm", 20);
+    // Padrão: o medido com o comando Y em 23/11/2026 (esquerda 1,00, direita 1,60).
+    aplicarPulsosPorMm(preferencias.getFloat("ppmE", 1.00f), preferencias.getFloat("ppmD", 1.60f));
     Encoders::iniciar();
     console.printf("Sensores: %u de 5 responderam\n", ok);
 
@@ -1155,7 +1857,8 @@ void setup()
                        SERVIDOR_HOST, SERVIDOR_PORTA);
     else
         console.println("Wi-Fi: desligado (falta include/credenciais.h)");
-    console.println("Comandos: i f a c l s m e p z r (veja o topo do main.cpp)");
+    console.println("Comandos: i f a c l s m e p z r, corrida automatica A (veja o topo do main.cpp)");
+    mostrarLabirinto();
 }
 
 #ifdef TESTE_AO_LIGAR
@@ -1224,45 +1927,18 @@ void loop()
         agora = millis();
     }
 #endif
+    sensores.permitirReinicioImu(!automatico);
     sensores.atualizar();
     Motores::atualizar(agora);
     Encoders::atualizar(agora);
-    const LeituraSensores &lido = sensores.leitura();
-    Navegacao::atualizarSensores(lido.parede[LADO_FRONTAL], lido.parede[LADO_ESQUERDO], lido.parede[LADO_DIREITO],
-                                 sensores.orientacao());
-
-    if (agora - ultimaBateria >= PERIODO_BATERIA_MS)
-    {
-        ultimaBateria = agora;
-        verificarBateria(agora);
-    }
-    if (emCorrida && agora - ultimaTelemetria >= PERIODO_TELEMETRIA_MS)
-    {
-        // Soma o período em vez de copiar o relógio: o atraso de um laço não
-        // se acumula e a média fica em 5 Hz. Se atrasar muito, recomeça.
-        ultimaTelemetria += PERIODO_TELEMETRIA_MS;
-        if (agora - ultimaTelemetria >= PERIODO_TELEMETRIA_MS)
-            ultimaTelemetria = agora;
-        enviarTelemetria();
-    }
-    if (agora - ultimoStatus >= PERIODO_STATUS_MS)
-    {
-        ultimoStatus = agora;
-        mostrarStatus();
-        digitalWrite(PINO_LED, TelemetriaWifi::estatisticas().servidor); // LED aceso = servidor conectado
-    }
-
+    tarefasPeriodicas(agora);
     for (int c = console.ler(); c >= 0; c = console.ler())
         tratarComando((char)c);
-    verificarBotao();
-
-    if (wifiAtivo && WiFi.status() == WL_CONNECTED)
-    {
-        if (!otaIniciado)
-            iniciarOta();
-        ArduinoOTA.handle();
-        console.atender();
-    }
+    verificarBotao(true);
+    // Corrida automática: uma célula por volta do laço. Durante o movimento,
+    // o HardwareReal mantém a telemetria, a bateria e o console em dia.
+    if (automatico && emCorrida)
+        passoAutomatico();
     // O loop roda no núcleo 0 (defeito no núcleo 1), onde o watchdog vigia a
     // tarefa ociosa: sem ceder a vez, um laço rápido derruba a ESP32.
     vTaskDelay(1);

@@ -5,8 +5,11 @@
 const int PINO_SDA = 21;
 const int PINO_SCL = 22;
 
-const int PINO_XSHUT_ESQUERDO = 17;
-const int PINO_XSHUT_FRONTAL = 16;
+// XSHUT dos VL53L0X. Na placa montada, o do sensor da esquerda está no D16 e
+// o da frente no D17 (bancada, 23/11/2026: robô virado para o corredor lia
+// "frente 61 mm, esquerda aberta" e virou para a parede).
+const int PINO_XSHUT_ESQUERDO = 16;
+const int PINO_XSHUT_FRONTAL = 17;
 const int PINO_XSHUT_DIREITO = 4;
 
 const int PINO_BNO_INT = 19;

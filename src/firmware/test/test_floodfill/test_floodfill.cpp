@@ -267,7 +267,10 @@ void test_carregar_com_borda_a_direita()
     TEST_ASSERT_TRUE(carregar(LAB_4X4, lab, LESTE));
     TEST_ASSERT_EQUAL(LESTE, lab.orientacao());
     TEST_ASSERT_EQUAL(LESTE, lab.orientacaoInicial());
-    TEST_ASSERT_FALSE(carregar(LAB_4X4, lab, SUL));
+    // Virado para a borda também vale (labirinto.h); direção inválida, não.
+    TEST_ASSERT_TRUE(carregar(LAB_4X4, lab, SUL));
+    TEST_ASSERT_EQUAL(SUL, lab.orientacaoInicial());
+    TEST_ASSERT_FALSE(carregar(LAB_4X4, lab, (Direcao)3));
 }
 
 void test_carregar_recusa_tamanho_fora_do_roteiro()
