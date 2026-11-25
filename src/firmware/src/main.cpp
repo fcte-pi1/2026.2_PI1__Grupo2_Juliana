@@ -28,11 +28,18 @@
 //      à frente e à direita / à frente e à esquerda (robô virado para a borda)
 //   F  anda 1 célula      3  anda 3 células       (CT-SE05)
 //   <  gira 90° à esquerda   >  90° à direita   U  meia-volta   (CT-SE06)
+//   #  gira 360° no próprio eixo (4 x 90° à esquerda): volta para onde estava
+//   ( / )  largura do eixo -5 / +5 mm (girou menos que o pedido: aumente)
 //   O  liga/desliga o log do controle (CSV a cada 50 ms, CT-SE07)
 //   K  parâmetros do controle e referências da calibração das paredes
 //   + / -  PWM máximo do movimento (0 a 255, passos de 5; padrão 20)
 //   Y  calibra os encoders: anda ~20 cm para a parede da frente e compara os
 //      pulsos com a distância medida (pulsos por mm e sentido; salva na flash)
+//   J  teste da curva: anda 1 célula, vira à direita e anda 1 (lógica da corrida)
+//   Z  calibra o giro de cada lado: de frente para uma parede, 360 à direita e à esquerda
+//   X  corrida daqui: modo automático de (2,1) virado para o Oeste até a chegada (4x4)
+//   R  calibra o giro sem BNO085: de frente para uma parede, gira ~1,5 volta
+//      e mede a largura efetiva do eixo pelo sensor da frente (salva na flash)
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <Wire.h>
@@ -44,6 +51,7 @@
 
 #include "console.h"
 #include "controle_movimento.h"
+#include "calibracao_giro.h"
 #include "filtro_distancia.h"
 #include "labirinto.h"
 #include "log_erros.h"
@@ -136,6 +144,7 @@ public:
             Motores::frear();
         else
             Motores::definir(s.esquerdo, s.direito);
+        ultimaSaida_ = s;
     }
 
     bool sensoresOk() override
@@ -153,9 +162,16 @@ public:
         if (!logMovimento || millis() - ultimo < 50)
             return;
         ultimo = millis();
-        console.printf("mov,%lu,%s,%.0f,%.1f,%d,%.1f,%.3f\n", (unsigned long)ultimo, nomeMovimento(c.estado()),
-                       c.percorridoMm(), c.erroLateralMm(), c.temReferenciaLateral(), c.rumo(), c.sinalControle());
+        // + pulsos e potência aplicada de cada roda e a frente: mostra roda travada ou robô encostado.
+        const LeituraSensores &l = sensores.leitura();
+        console.printf("mov,%lu,%s,%.0f,%.1f,%d,%.1f,%.3f,%ld,%ld,%.2f,%.2f,%u\n", (unsigned long)ultimo,
+                       nomeMovimento(c.estado()), c.percorridoMm(), c.erroLateralMm(), c.temReferenciaLateral(), c.rumo(),
+                       c.sinalControle(), (long)Encoders::esquerdo(), (long)Encoders::direito(), ultimaSaida_.esquerdo,
+                       ultimaSaida_.direito, l.distancia_mm[LADO_FRONTAL]);
     }
+
+private:
+    SaidaMovimento ultimaSaida_ = {0, 0, false};
 };
 
 HardwareReal hardware;
@@ -276,6 +292,35 @@ void encerrarCorrida(bool concluida, MotivoAbandono motivo = MOTIVO_MANUAL)
     cancelarMovimento = true; // bateria, console ou botão no meio de um movimento: o controle para já
     console.printf("\n>>> corrida %u encerrada (%s)\n", c, concluida ? "concluida" : "abandonada");
 }
+// Corrente da bateria ESTIMADA pelo modelo dos motores: o INA226 da montagem
+// não tem corrente passando pelo shunt (varredura 'n', 24/11/2026: 0 mA com os
+// motores girando), então ele só mede a tensão. Placa (constante) + por motor
+// PWM x (sem carga + (tensão aplicada - tensão contrária da velocidade) / R).
+// Aproximações do N20: ~0,5 A travado a 5 V (R ~10 ohm), ~40 mA girando solto;
+// tensão contrária ~12,5 V por m/s da roda (~0,2 m/s livre com 2,5 V, no robô).
+float correnteEstimadaMa()
+{
+    const float PLACA_MA = 110;          // ESP32 com Wi-Fi e sensores, visto da bateria pelo MP1584
+    const float MOTOR_SEM_CARGA_MA = 40;
+    const float MOTOR_R_OHM = 10;
+    const float MOTOR_KE_V_POR_M_S = 12.5f;
+    float vbat = bateria.tensao() > 5 ? bateria.tensao() : 7.4f;
+    float ppm = controle.parametros().pulsosPorMm;
+    const float pwm[2] = {Motores::pwmEsquerdo(), Motores::pwmDireito()};
+    const float pps[2] = {Encoders::pulsosPorSegundoEsquerda(), Encoders::pulsosPorSegundoDireita()};
+    float total = PLACA_MA;
+    for (int i = 0; i < 2; i++)
+    {
+        float ciclo = fabsf(pwm[i]);
+        if (ciclo < 0.01f || !Motores::habilitado())
+            continue;
+        float velocidade = ppm > 0 ? fabsf(pps[i]) / ppm / 1000 : 0; // m/s
+        float motorMa = MOTOR_SEM_CARGA_MA + fmaxf(0, ciclo * vbat - MOTOR_KE_V_POR_M_S * velocidade) / MOTOR_R_OHM * 1000;
+        total += ciclo * motorMa; // PWM: a bateria fornece a média
+    }
+    return total;
+}
+
 
 void enviarTelemetria()
 {
@@ -287,7 +332,10 @@ void enviarTelemetria()
         uint8_t d = modo.floodFill().valorAtual(mapaCorrida);
         n.x = mapaCorrida.x();
         n.y = mapaCorrida.y();
-        n.orientacao = mapaCorrida.orientacao();
+        // Para onde o robô aponta de verdade (rumo medido), não a direção que o
+        // mapa já registrou antes do giro: o painel mostrava "virado para o
+        // Norte" com o robô ainda girando ou entalado no meio (24/11/2026).
+        n.orientacao = roboFisico.direcao();
         n.paredes = mapaCorrida.paredesDe(n.x, n.y);
         n.valorFlood = d == INFINITO ? -1 : d;
         n.estadoRobo = modo.estado();
@@ -295,6 +343,10 @@ void enviarTelemetria()
     MensagemTelemetria tel = criarTelemetria(
         0, 0, millis() - inicioCorrida, (int8_t)n.x, (int8_t)n.y, letra(n.orientacao), n.paredes,
         fabsf(Encoders::velocidadeMs()), tensaoContrato(), n.valorFlood, estadoContrato(n.estadoRobo));
+    // Corrente do INA226 (média móvel); sem leitura, o campo fica fora do pacote.
+    // O percentual o painel calcula da tensão, com a mesma faixa 6,4-8,4 V do firmware.
+    tel.corrente_ma = sensores.leitura().inaOk ? bateria.corrente() : NAN;
+    tel.corrente_estimada_ma = correnteEstimadaMa();
     TelemetriaWifi::publicar(tel);
 }
 
@@ -556,10 +608,10 @@ void mostrarStatus()
                    l.distancia_mm[LADO_FRONTAL], l.distancia_mm[LADO_DIREITO], sensores.mascaraParedes(),
                    l.yawGraus, letra(sensores.orientacao()), ESP.getFreeHeap());
     float autonomia = bateria.autonomiaMinutos();
-    console.printf("         bateria: %s %.2fV %u%% %.0fmA autonomia=%s%.0fmin %s | motores: %s PWM E=%.0f%% D=%.0f%% "
+    console.printf("         bateria: %s %.2fV %u%% %.0fmA (estimada %.0fmA) autonomia=%s%.0fmin %s | motores: %s PWM E=%.0f%% D=%.0f%% "
                    "(max %.0f%%) | encoders E=%ld D=%ld v=%.3fm/s\n",
                    bateria.presente() ? "sim" : "NAO (USB)", bateria.tensao(), bateria.percentual(),
-                   bateria.corrente(), autonomia < 0 ? "-" : "", autonomia < 0 ? 0 : autonomia,
+                   bateria.corrente(), correnteEstimadaMa(), autonomia < 0 ? "-" : "", autonomia < 0 ? 0 : autonomia,
                    bateria.critica() ? "CRITICA" : "", Motores::habilitado() ? "ligados" : "parados",
                    Motores::pwmEsquerdo() * 100, Motores::pwmDireito() * 100, Motores::pwmMaximo() * 100,
                    (long)Encoders::esquerdo(), (long)Encoders::direito(), Encoders::velocidadeMs());
@@ -599,6 +651,11 @@ void carregarLimiares()
         uint32_t v = preferencias.getUInt(chave, 0); // liga << 16 | desliga
         if (v)
             sensores.configurarLimiares((LadoSensor)i, v >> 16, v & 0xFFFF);
+        // Sem calibração, os lados usam 95/115 mm: parede ao lado lê 58-71 mm no
+        // centro (até ~90 fora dele) e o poste da ponta de uma parede vizinha
+        // leu 112 mm e virava parede falsa com o padrão de 120 (23/11/2026).
+        else if (i != LADO_FRONTAL)
+            sensores.configurarLimiares((LadoSensor)i, 95, 115);
         chave[1] = 'c';
         definirReferencia(i, preferencias.getUShort(chave, 0));
     }
@@ -634,6 +691,16 @@ void calibrarLimiares()
     console.printf("    sem parede: E=%u F=%u D=%u mm\n", sem[0], sem[1], sem[2]);
     for (uint8_t i = 0; i < 3; i++)
     {
+        // O centro da célula vem só da 1ª fase: vale mesmo se a 2ª falhar (no
+        // labirinto, 23/11/2026, não deu tempo de tirar o robô e o centro errado,
+        // aprendido na primeira parede, fazia ele parar 6 cm antes).
+        char chaveCentro[4] = {'p', 'c', (char)('0' + i), 0};
+        if (com[i] > 0 && com[i] < 150)
+        {
+            preferencias.putUShort(chaveCentro, com[i]);
+            definirReferencia(i, com[i]);
+            console.printf("    %-8s centro a %u mm (salvo)\n", NOME_LADO[i], com[i]);
+        }
         LimiaresParede l = calcularLimiares(com[i], sem[i]);
         if (!l.ok)
         {
@@ -644,11 +711,8 @@ void calibrarLimiares()
         sensores.configurarLimiares((LadoSensor)i, l.liga, l.desliga);
         char chave[4] = {'p', 'l', (char)('0' + i), 0};
         preferencias.putUInt(chave, ((uint32_t)l.liga << 16) | l.desliga);
-        chave[1] = 'c';
-        preferencias.putUShort(chave, com[i]);
-        definirReferencia(i, com[i]);
-        console.printf("    %-8s parede abaixo de %u mm, livre acima de %u mm, centro a %u mm (salvo)\n", NOME_LADO[i],
-                       l.liga, l.desliga, com[i]);
+        console.printf("    %-8s parede abaixo de %u mm, livre acima de %u mm (salvo)\n", NOME_LADO[i], l.liga,
+                       l.desliga);
     }
 }
 
@@ -847,6 +911,7 @@ void aplicarPwmMaximo()
     ParametrosMovimento padrao;
     p.potenciaMinima = padrao.potenciaMinima < teto ? padrao.potenciaMinima : teto;
     p.potenciaGiroMinima = padrao.potenciaGiroMinima < teto ? padrao.potenciaGiroMinima : teto;
+    p.potenciaGiroMinimaDireita = padrao.potenciaGiroMinimaDireita < teto ? padrao.potenciaGiroMinimaDireita : teto;
 }
 
 void mudarPwmMaximo(int passo)
@@ -874,7 +939,8 @@ void aplicarPulsosPorMm(float esquerda, float direita)
     Encoders::definirPulsosPorVolta(media * 3.14159265f * Encoders::DIAMETRO_RODA_MM);
 }
 
-// Robô parado num corredor, com a parede do fim dele a 30-90 cm na frente.
+// Robô parado num corredor, com a parede do fim dele a 15-45 cm na frente (de
+// perto: a 50-60 cm o VL53L0X lê ~15% curto e a escala saía errada, 23/11/2026).
 // Anda devagar em linha reta uns 20 cm e compara o quanto a distância da
 // frente diminuiu com os pulsos de cada encoder: dá os pulsos por mm de
 // verdade e mostra se algum encoder ou motor está invertido (bancada,
@@ -888,9 +954,9 @@ void calibrarEncoders()
     }
     uint16_t ini[3], fim[3];
     medirLados(600, ini);
-    if (ini[LADO_FRONTAL] < 300 || ini[LADO_FRONTAL] > 900)
+    if (ini[LADO_FRONTAL] < 150 || ini[LADO_FRONTAL] > 450)
     {
-        console.printf(">>> calibracao dos encoders: precisa de parede a 30-90 cm na frente (agora %u mm)\n",
+        console.printf(">>> calibracao dos encoders: precisa de parede a 15-45 cm na frente (agora %u mm)\n",
                        ini[LADO_FRONTAL]);
         return;
     }
@@ -905,7 +971,7 @@ void calibrarEncoders()
     {
         esperarAtualizando(10);
         const LeituraSensores &l = sensores.leitura();
-        if (l.distancia_mm[LADO_FRONTAL] < ini[LADO_FRONTAL] - 200 || l.distancia_mm[LADO_FRONTAL] < 120)
+        if (l.distancia_mm[LADO_FRONTAL] < 80)
             break;
         if (console.ler() == 'p')
         {
@@ -913,7 +979,8 @@ void calibrarEncoders()
             break;
         }
         // Não saiu do lugar: sobe a potência aos poucos (no máximo 0,65 = ~3 V).
-        bool andou = Encoders::esquerdo() != 0 || Encoders::direito() != 0 ||
+        // Um pulso solto (vibração) não é andar: só conta a partir de 20.
+        bool andou = labs(Encoders::esquerdo()) > 20 || labs(Encoders::direito()) > 20 ||
                      ini[LADO_FRONTAL] - l.distancia_mm[LADO_FRONTAL] > 15;
         if (!andou && millis() - ultimoAumento > 300 && p < 0.65f)
         {
@@ -927,7 +994,10 @@ void calibrarEncoders()
     medirLados(600, fim);
     int32_t pe = Encoders::esquerdo(), pd = Encoders::direito();
     int dF = (int)ini[LADO_FRONTAL] - fim[LADO_FRONTAL];
-    int dE = (int)fim[LADO_ESQUERDO] - ini[LADO_ESQUERDO], dD = (int)fim[LADO_DIREITO] - ini[LADO_DIREITO];
+    // Lado sem parede perto (chão aberto, 23/11/2026: móveis a 40-70 cm) varia à toa: só conta lado com parede.
+    // Parede que some no caminho (corredor abrindo) também não conta.
+    int dE = ini[LADO_ESQUERDO] < 200 && fim[LADO_ESQUERDO] < 200 ? (int)fim[LADO_ESQUERDO] - ini[LADO_ESQUERDO] : 0;
+    int dD = ini[LADO_DIREITO] < 200 && fim[LADO_DIREITO] < 200 ? (int)fim[LADO_DIREITO] - ini[LADO_DIREITO] : 0;
     console.printf(">>> frente %u -> %u mm (andou %d mm), lados E %u->%u D %u->%u, encoders E=%ld D=%ld, potencia %.2f%s\n",
                    ini[LADO_FRONTAL], fim[LADO_FRONTAL], dF, ini[LADO_ESQUERDO], fim[LADO_ESQUERDO], ini[LADO_DIREITO],
                    fim[LADO_DIREITO], (long)pe, (long)pd, p, parou ? " (interrompido)" : "");
@@ -953,6 +1023,96 @@ void calibrarEncoders()
     preferencias.putFloat("ppmE", ppmE);
     preferencias.putFloat("ppmD", ppmD);
     aplicarPulsosPorMm(ppmE, ppmD);
+}
+
+// ---------- calibração do giro sem BNO085 (comando R) ----------
+
+// Robô parado no centro da célula da largada (beco: paredes atrás e dos dois
+// lados). Gira devagar no lugar ~1,5 volta, guardando a diferença dos encoders
+// e as 3 distâncias; o desenho das paredes se repete a cada volta de verdade e
+// dá a largura efetiva do eixo (calibracao_giro.h). Salva na flash.
+void calibrarGiro()
+{
+    if (emCorrida || !bateria.presente())
+    {
+        console.println(emCorrida ? ">>> durante uma corrida, nao" : ">>> sem bateria, motores bloqueados");
+        return;
+    }
+    static float diferenca[1024];
+    static uint16_t dist[1024][3];
+    ParametrosMovimento &par = controle.parametros();
+    const float nominal = par.larguraEixoMm;
+    const float total = giroNecessarioMm(nominal);
+    aplicarPwmMaximo();
+    console.printf("\n>>> CALIBRACAO DO GIRO: 6 giros de 90 graus a esquerda no lugar (largura atual %.1f mm, 'p' "
+                   "para)\n", nominal);
+    cancelarMovimento = false;
+    EntradaMovimento e0 = hardware.ler();
+    controle.reiniciar(e0, 0);
+    uint16_t n = 0;
+    float d = 0;
+    uint32_t t0 = millis();
+    // Gira pelo controle de movimento: ele dá reforço à roda que trava e faz a
+    // outra esperar, senão o robô pivota numa roda e sai do lugar (1ª tentativa
+    // na bancada, 23/11/2026: a esquerda não saiu e o robô pivotou nela).
+    EstadoMovimento fim = MOV_CONCLUIDO;
+    // Algum sensor a menos de 15 mm: para antes de encostar (fios, cantos). Era 30: no beco,
+    // 9 mm fora do centro, a frente passa a ~29 mm da parede do lado sem sair do lugar (24/11/2026).
+    bool pertoDemais = false;
+    for (int quarto = 1; quarto <= 6 && d < total && fim == MOV_CONCLUIDO && !cancelarMovimento && !pertoDemais;
+         quarto++)
+    {
+        controle.girar(quarto * 90.0f);
+        while (!controle.terminou() && n < 1024 && !cancelarMovimento)
+        {
+            EntradaMovimento e = hardware.ler();
+            for (uint8_t i = 0; i < 3; i++)
+                if (e.distancia_mm[i] > 0 && e.distancia_mm[i] < 15 && !pertoDemais)
+                {
+                    pertoDemais = true;
+                    console.printf(">>> PAROU: sensor %s a %u mm de algo\n",
+                                   i == 0 ? "esquerdo" : i == 1 ? "frontal" : "direito", e.distancia_mm[i]);
+                }
+            if (pertoDemais)
+                break;
+            hardware.aplicar(controle.atualizar(e));
+            d = ((e.encoderDireito - e0.encoderDireito) - (e.encoderEsquerdo - e0.encoderEsquerdo)) / par.pulsosPorMm;
+            if (n == 0 || d >= diferenca[n - 1] + total / 1000) // ~1000 amostras no giro todo
+            {
+                diferenca[n] = d;
+                for (uint8_t i = 0; i < 3; i++)
+                    dist[n][i] = e.distancia_mm[i];
+                n++;
+            }
+        }
+        fim = controle.estado();
+    }
+    controle.parar();
+    Motores::frear();
+    esperarAtualizando(300);
+    Motores::parar();
+    if (fim != MOV_CONCLUIDO)
+        console.printf(">>> giro parou: %s (reforco E=%.2f D=%.2f)\n", nomeMovimento(fim), controle.reforcoEsquerdo(),
+                       controle.reforcoDireito());
+    console.printf(">>> encoders E=%ld D=%ld\n", (long)(Encoders::esquerdo()), (long)(Encoders::direito()));
+    float erro = -1;
+    float largura = d >= total ? larguraEixoPeloGiro(diferenca, dist, n, nominal, &erro) : 0;
+    console.printf(">>> girou %.0f mm de diferenca dos encoders (%.0f graus pela largura atual), %u amostras, %.1f s%s\n",
+                   d, d / nominal * 57.2958f, n, (millis() - t0) / 1000.0f, cancelarMovimento ? " (interrompido)" : "");
+    if (largura <= 0)
+    {
+        console.printf(">>> calibracao do giro NAO salva (erro entre as voltas %.1f mm): de frente para uma parede a ~10 cm, "
+                       "celula, o robo precisa girar sem sair do lugar\n", erro);
+        // A curva para analisar no computador: giro,<diferenca mm>,<frente mm>
+        for (uint16_t i = 0; i < n; i++)
+            console.printf("giro,%.1f,%u\n", diferenca[i], dist[i][LADO_FRONTAL]);
+        return;
+    }
+    console.printf(">>> largura efetiva do eixo %.1f mm (era %.1f; erro entre as voltas %.1f mm) -> 90 graus = %.0f mm "
+                   "de diferenca dos encoders (salvo). Reposicione o robo.\n",
+                   largura, nominal, erro, largura * 1.5708f);
+    par.larguraEixoMm = largura;
+    preferencias.putFloat("eixo", largura);
 }
 
 // ---------- corrida automática (#210, RF13-S) ----------
@@ -1025,6 +1185,7 @@ void iniciarCorridaAutomatica()
         servicoDuranteMovimento();
     if (!emCorrida || cancelarMovimento)
         return;
+    modo.pararNoObjetivo(true); // chegou ao centro da chegada: para (a chegada é um beco)
     modo.iniciar();
 }
 
@@ -1061,6 +1222,184 @@ void passoAutomatico()
 // ---------- movimentos soltos na bancada (CT-SE05 a CT-SE07) ----------
 
 // O robô parado num corredor: o rumo de agora, arredondado para 90°, é o eixo.
+// Teste da curva (J): o trecho de corrida que falhava no labirinto novo, com a
+// mesma lógica da corrida (mover: volta ao centro, giro, manobras, confirmação
+// pelos sensores; sentir: paredes e posição). Robô no centro da célula, virado
+// para o corredor: anda 1 célula, vira à direita e anda 1 célula.
+void testeCurva()
+{
+    if (emCorrida || !bateria.presente())
+    {
+        console.println(emCorrida ? ">>> durante uma corrida, nao" : ">>> sem bateria, motores bloqueados");
+        return;
+    }
+    cancelarMovimento = false;
+    aplicarPwmMaximo();
+    static Labirinto mapa;
+    mapa.iniciar(12, 12, NORTE);
+    roboFisico.definirOrientacaoInicial(NORTE); // rumo 0 = para onde o robô olha agora
+    uint32_t t0 = millis();
+    bool ok = roboFisico.calibrar();
+    const Direcao passos[2] = {NORTE, LESTE}; // frente, depois à direita
+    for (uint8_t i = 0; i < 2 && ok && !cancelarMovimento; i++)
+    {
+        roboFisico.sentir(mapa);
+        EntradaMovimento e = hardware.ler();
+        console.printf(">>> J antes do passo %u: E=%u F=%u D=%u mm, rumo %.1f, desvio (%.0f,%.0f) mm\n", i + 1,
+                       e.distancia_mm[0], e.distancia_mm[1], e.distancia_mm[2], controle.rumo(), roboFisico.desvioX(),
+                       roboFisico.desvioY());
+        ok = roboFisico.mover(passos[i]);
+        console.printf(">>> J passo %u (%s): %s, rumo %.1f, recuperacoes %u, rumos corrigidos %u\n", i + 1,
+                       i == 0 ? "frente" : "direita e frente", ok ? "ok" : nomeMovimento(roboFisico.ultimoResultado()),
+                       controle.rumo(), roboFisico.recuperacoes(), roboFisico.rumosCorrigidos());
+    }
+    if (ok)
+        roboFisico.sentir(mapa);
+    Motores::parar();
+    EntradaMovimento e = hardware.ler();
+    console.printf(">>> J %s em %.1f s: E=%u F=%u D=%u mm, rumo %.1f, desvio (%.0f,%.0f) mm\n", ok ? "CONCLUIDO" : "FALHOU",
+                   (millis() - t0) / 1000.0f, e.distancia_mm[0], e.distancia_mm[1], e.distancia_mm[2], controle.rumo(),
+                   roboFisico.desvioX(), roboFisico.desvioY());
+}
+
+// Corrida daqui (X): o modo automático de verdade (Flood Fill, giros com as
+// recuperações, sentir), começando em (2,1) virado para o Oeste no 4x4 com a
+// largada virada para o Leste: o trecho que falhava no labirinto novo, até a
+// chegada (3,3). Sem telemetria (não é uma corrida do painel).
+void corridaDaqui()
+{
+    if (emCorrida || !bateria.presente())
+    {
+        console.println(emCorrida ? ">>> durante uma corrida, nao" : ">>> sem bateria, motores bloqueados");
+        return;
+    }
+    cancelarMovimento = false;
+    aplicarPwmMaximo();
+    static Labirinto mapa;
+    mapa.iniciar(4, 4, LESTE);
+    // Pose (2,1) virado para o Oeste, andando "no papel" desde a largada.
+    mapa.girar(LESTE);
+    mapa.avancar();
+    mapa.avancar();
+    mapa.girar(NORTE);
+    mapa.avancar();
+    mapa.girar(OESTE);
+    roboFisico.definirOrientacaoInicial(OESTE); // rumo 0 = para onde o robô olha agora
+    static ModoAutomatico m(roboFisico, mapa);
+    m.pararNoObjetivo(true);
+    m.iniciar();
+    uint32_t t0 = millis();
+    while (m.estado() != ESTADO_PARADO && m.estado() != ESTADO_FALHA && !cancelarMovimento)
+    {
+        m.passo();
+        console.printf(">>> X (%u,%u) %c %s, rumo %.1f, desvio (%.0f,%.0f) mm, recuperacoes %u, rumos corrigidos %u\n",
+                       mapa.x(), mapa.y(), letra(mapa.orientacao()), nomeEstado(m.estado()), controle.rumo(),
+                       roboFisico.desvioX(), roboFisico.desvioY(), roboFisico.recuperacoes(), roboFisico.rumosCorrigidos());
+    }
+    Motores::parar();
+    console.printf(">>> X %s em %.1f s, em (%u,%u)%s\n", m.estado() == ESTADO_PARADO ? "CHEGOU" : "FALHOU",
+                   (millis() - t0) / 1000.0f, mapa.x(), mapa.y(), m.estado() == ESTADO_FALHA ? nomeFalha(m.motivo()) : "");
+}
+
+// ---------- calibração do giro por sentido, com uma parede de transferidor (Z) ----------
+
+// Varre ±16° em passos de 4° em volta do rumo de agora e devolve o rumo (pelos
+// encoders) em que a frente lê a menor distância: perpendicular à parede.
+// Para nele. NAN se a frente não viu parede.
+float perpendicularNaParede()
+{
+    const int N = 9;
+    float base = controle.rumo(), f[N];
+    for (int k = 0; k < N && !cancelarMovimento; k++)
+    {
+        roboFisico.girarPara(normalizarGraus(base + (k - N / 2) * 4.0f));
+        Motores::parar();
+        esperarAtualizando(250);
+        float soma = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            esperarAtualizando(40);
+            soma += sensores.leitura().distancia_mm[LADO_FRONTAL];
+        }
+        f[k] = soma / 3;
+        console.printf("    varredura %+5.1f graus: frente %.0f mm\n", (k - N / 2) * 4.0f, f[k]);
+    }
+    int m = 0;
+    for (int k = 1; k < N; k++)
+        if (f[k] < f[m])
+            m = k;
+    if (f[m] > 300)
+        return NAN;
+    float desvio = (m - N / 2) * 4.0f;
+    if (m > 0 && m < N - 1)
+    {
+        float den = f[m - 1] - 2 * f[m] + f[m + 1];
+        if (den > 0)
+            desvio += 4.0f * (f[m - 1] - f[m + 1]) / (2 * den);
+    }
+    float alvo = normalizarGraus(base + desvio);
+    roboFisico.girarPara(alvo);
+    Motores::parar();
+    return alvo;
+}
+
+// Robô de frente para uma parede (~5-10 cm), com espaço em volta para girar.
+// Acha a perpendicular, gira 360° à direita (4 x 90), acha de novo: entre as
+// duas perpendiculares o robô girou exatamente 360°; o quanto os encoders
+// contaram dá a largura efetiva do eixo girando à direita. Depois o mesmo à
+// esquerda. Salva as duas na flash (eixoD, eixoE).
+void calibrarGiroPelaParede()
+{
+    if (emCorrida || !bateria.presente())
+    {
+        console.println(emCorrida ? ">>> durante uma corrida, nao" : ">>> sem bateria, motores bloqueados");
+        return;
+    }
+    cancelarMovimento = false;
+    aplicarPwmMaximo();
+    ParametrosMovimento &p = controle.parametros();
+    controle.reiniciar(hardware.ler(), 0);
+    console.println("\n>>> CALIBRACAO DO GIRO PELA PAREDE (Z): de frente para uma parede, 'p' para");
+    float a0 = perpendicularNaParede();
+    if (isnan(a0))
+    {
+        console.println(">>> Z: nao achei parede na frente (ate 30 cm)");
+        return;
+    }
+    const char *nome[2] = {"direita", "esquerda"};
+    float *largura[2] = {&p.larguraEixoDireitaMm, &p.larguraEixoEsquerdaMm};
+    for (int lado = 0; lado < 2 && !cancelarMovimento; lado++)
+    {
+        float sinal = lado == 0 ? -1 : 1;
+        for (int i = 1; i <= 4 && !cancelarMovimento; i++)
+            roboFisico.girarPara(normalizarGraus(a0 + sinal * 90 * i));
+        Motores::parar();
+        float a1 = perpendicularNaParede();
+        if (isnan(a1))
+        {
+            console.printf(">>> Z: depois dos 360 a %s nao achei a parede\n", nome[lado]);
+            return;
+        }
+        // Encoders entre as duas perpendiculares (giro real = 360).
+        float contado = 360 + sinal * normalizarGraus(a1 - a0);
+        float atual = *largura[lado] > 0 ? *largura[lado] : p.larguraEixoMm;
+        float nova = atual * contado / 360;
+        console.printf(">>> Z %s: encoders contaram %.1f graus num giro de 360 -> largura %.1f mm (era %.1f)\n",
+                       nome[lado], contado, nova, atual);
+        if (nova > 50 && nova < 200)
+        {
+            *largura[lado] = nova;
+            preferencias.putFloat(lado == 0 ? "eixoD" : "eixoE", nova);
+        }
+        // O rumo agora é a perpendicular com a largura nova: recomeça dela.
+        controle.reiniciar(hardware.ler(), a1);
+        a0 = a1;
+    }
+    Motores::parar();
+    console.printf(">>> Z pronto: largura direita %.1f, esquerda %.1f mm (salvas)\n", p.larguraEixoDireitaMm,
+                   p.larguraEixoEsquerdaMm);
+}
+
 void movimentoBancada(char c)
 {
     if (emCorrida)
@@ -1082,11 +1421,14 @@ void movimentoBancada(char c)
     if (c == 'F' || c == '3')
         for (int i = 0; i < (c == '3' ? 3 : 1) && ok; i++)
             ok = roboFisico.andarMm(CELULA_MM, eixo);
+    else if (c == '#') // 360°: 4 giros de 90 à esquerda, no próprio eixo
+        for (int k = 1; k <= 4 && ok; k++)
+            ok = roboFisico.girarPara(eixo + k * 90);
     else
         ok = roboFisico.girarPara(eixo + (c == '<' ? 90 : c == '>' ? -90 : 180));
     Motores::parar();
     console.printf(">>> %s: %s, andou %.0f mm, rumo %.1f graus (%s), erro lateral %.1f mm, recuperacoes %u\n",
-                   c == 'F' ? "1 celula" : c == '3' ? "3 celulas" : c == 'U' ? "meia-volta" : "giro de 90",
+                   c == 'F' ? "1 celula" : c == '3' ? "3 celulas" : c == 'U' ? "meia-volta" : c == '#' ? "giro de 360" : "giro de 90",
                    ok ? "ok" : nomeMovimento(roboFisico.ultimoResultado()), controle.percorridoMm(), controle.rumo(),
                    e.yawOk ? "BNO085" : "encoders", controle.lateralMm(), roboFisico.recuperacoes());
 }
@@ -1740,14 +2082,54 @@ void tratarComando(char c)
     case '3':
     case '<':
     case '>':
-    case 'U': movimentoBancada(c); break;
+    case 'U':
+    case '#': movimentoBancada(c); break;
     case 'O':
         logMovimento = !logMovimento;
-        console.printf(">>> log do controle %s (mov,ms,estado,mm,lateral,parede,rumo,sinal)\n",
+        console.printf(">>> log do controle %s (mov,ms,estado,mm,lateral,parede,rumo,sinal,encE,encD,potE,potD,frente)\n",
                        logMovimento ? "ligado" : "desligado");
         break;
     case 'K': mostrarParametros(); break;
     case 'Y': calibrarEncoders(); break;
+    case 'R': calibrarGiro(); break;
+    case 'J': testeCurva(); break; // anda 1, vira à direita, anda 1 (lógica da corrida)
+    case 'Z': calibrarGiroPelaParede(); break; // largura do eixo por sentido, com uma parede
+    case 'X': corridaDaqui(); break; // modo automático de (2,1) virado para o Oeste até a chegada
+    case '[':
+    case ']':
+    {
+        // Ajuste fino da proporção das rodas (1% na direita por toque): o Y feito
+        // com o robô desviando exagera a diferença e o robô pende para um lado.
+        // Pende para a direita: ']' (direita conta mais por mm, o controle vê o desvio).
+        float d = ppmDireita * (c == ']' ? 1.01f : 0.99f);
+        preferencias.putFloat("ppmD", d);
+        aplicarPulsosPorMm(ppmEsquerda, d);
+        console.printf(">>> pulsos por mm: E=%.2f D=%.2f (salvo)\n", ppmEsquerda, d);
+        break;
+    }
+    case '=':
+    {
+        // As duas rodas na mesma escala (a média): mesmo motor e encoder; o Y
+        // feito com o robô desviando separa as duas à toa (23/11/2026: 5,07 e
+        // 6,08 deixavam o rumo dos encoders errado e o robô ia para a esquerda).
+        float media = (ppmEsquerda + ppmDireita) / 2;
+        preferencias.putFloat("ppmE", media);
+        preferencias.putFloat("ppmD", media);
+        aplicarPulsosPorMm(media, media);
+        console.printf(">>> pulsos por mm iguais nas duas rodas: %.2f (salvo)\n", media);
+        break;
+    }
+    case '(':
+    case ')':
+    {
+        // Ajuste à mão da largura do eixo (giro sem BNO085): girou menos que o
+        // pedido, aumente; girou mais, diminua. Fica salvo na flash.
+        float &l = controle.parametros().larguraEixoMm;
+        l = fminf(fmaxf(l + (c == ')' ? 5 : -5), 50), 400);
+        preferencias.putFloat("eixo", l);
+        console.printf(">>> largura do eixo %.0f mm (salvo)\n", l);
+        break;
+    }
     case '+': mudarPwmMaximo(5); break;
     case '-': mudarPwmMaximo(-5); break;
     case 'L': calibrarLimiares(); break;     // limiares de parede (#279)
@@ -1837,7 +2219,15 @@ void setup()
     carregarLabirinto();
     pwmMaximo255 = preferencias.getUChar("pwm", 20);
     // Padrão: o medido com o comando Y em 23/11/2026 (esquerda 1,00, direita 1,60).
-    aplicarPulsosPorMm(preferencias.getFloat("ppmE", 1.00f), preferencias.getFloat("ppmD", 1.60f));
+    // Sem o Y: as duas rodas iguais (no ar a 5 V contam quase o mesmo, 23/11/2026:
+    // 5911 e 5753 pulsos em 2 s), na média dos valores antigos (1,0 e 1,6).
+    aplicarPulsosPorMm(preferencias.getFloat("ppmE", 1.30f), preferencias.getFloat("ppmD", 1.30f));
+    controle.parametros().larguraEixoMm = preferencias.getFloat("eixo", controle.parametros().larguraEixoMm);
+    // O robô montado não cabe girando no centro com parede do lado da varredura
+    // (labirinto novo, (1,1), 24/11/2026): gira 18 mm afastado dela.
+    controle.parametros().afastarNaVarreduraMm = 18;
+    controle.parametros().larguraEixoDireitaMm = preferencias.getFloat("eixoD", 0);
+    controle.parametros().larguraEixoEsquerdaMm = preferencias.getFloat("eixoE", 0);
     Encoders::iniciar();
     console.printf("Sensores: %u de 5 responderam\n", ok);
 

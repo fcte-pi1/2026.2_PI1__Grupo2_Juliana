@@ -19,6 +19,9 @@ struct ParametrosMovimento
 {
     float pulsosPorMm = 3305.0f / (3.14159265f * 34.0f); // encoder (motores.h) / perímetro da roda
     float larguraEixoMm = 95.0f; // MEDIR: centro a centro das rodas. Só vale sem o BNO085.
+    // Larguras efetivas medidas pelo giro (comando Z), por sentido; 0 = larguraEixoMm.
+    float larguraEixoDireitaMm = 0;
+    float larguraEixoEsquerdaMm = 0;
 
     // Andar (potência = fração dos 5 V, como Motores::definir). Máximo pedido
     // pela equipe: PWM 50 de 255 com a bateria em 7,9 V = 1,56 V no motor.
@@ -26,9 +29,9 @@ struct ParametrosMovimento
     float potenciaMinima = 0.22f;     // abaixo disso o N20 pode não sair do lugar
     float ganhoDistancia = 0.005f;    // potência por mm que falta
     float ganhoRumo = 0.015f;         // potência de giro por grau de erro
-    float correcaoMaxima = 0.25f;     // potência de giro máxima andando
+    float correcaoMaxima = 0.5f;      // potência de giro máxima andando (0,25 saturava e o robô batia na parede direita)
     float ganhoLateral = 0.4f;        // graus de correção por mm fora do centro
-    float correcaoLateralMaxima = 12; // graus
+    float correcaoLateralMaxima = 20; // graus (era 12: ~19 mm de correção até a coluna seguinte; depois das manobras de um giro o robô saía 17-32 mm fora e batia nela, labirinto novo 24/11/2026)
     // Sem o BNO085: o rumo medido pelas paredes (variação do erro lateral ao
     // longo de pelo menos baseRumoParedeMm) corrige o rumo dos encoders.
     float baseRumoParedeMm = 50;
@@ -40,15 +43,40 @@ struct ParametrosMovimento
     float estabilizarParedeMm = 40;
     float saltoLateralMm = 8;
     float lateralMaximoMm = 40;
+    // Só uma parede ao lado: anda isso mais longe dela que o centro. 0: com 12, em
+    // (1,3) do labirinto novo o robô foi para o lado da coluna da passagem seguinte e
+    // bateu nela (24/11/2026). Fica o ajuste para labirintos mais folgados.
+    float afastadoUmaParedeMm = 0;
     float pesoRumoParede = 0.5f; // 0 = desliga, 1 = confia só na parede
     float toleranciaDistanciaMm = 5;
 
     // Girar no lugar
     float potenciaGiroMaxima = 0.31f;
-    float potenciaGiroMinima = 0.24f;
+    float potenciaGiroMinima = 0.40f; // 0,24: freando, a esquerda (para trás) travava abaixo de ~0,35 no labirinto (24/11/2026)
+    // Girando à direita a roda direita vai para trás e precisa de mais: com 0,40
+    // ela travava, a outra esperava e o giro saía em trancos (90° em 7,3 s contra
+    // 1,2 s à esquerda; labirinto novo, 24/11/2026).
+    float potenciaGiroMinimaDireita = 0.52f;
+    // Robô maior que o do projeto (o de verdade, ~13 x 14,5 cm): giro de 90° com
+    // parede do lado da varredura é feito isso mais longe dela (RoboFisico::
+    // girarPara). 0 = no centro (robô do simulador). O main.cpp liga.
+    float afastarNaVarreduraMm = 0;
     float ganhoGiro = 0.008f; // potência por grau de erro
     float toleranciaGiroGraus = 2;
     uint16_t assentarGiroMs = 80; // tempo parado dentro da tolerância
+    // No giro as duas rodas andam sempre juntas, em sentidos opostos (no
+    // próprio eixo). A que se adianta perde potência e a outra ganha
+    // ganhoSincronia por mm de diferença. Roda parada: as duas sobem juntas o
+    // reforço até trancoGiro, mesmo acima do teto do PWM, só para vencer o atrito
+    // parado (chão, 23/11/2026: com PWM até 70 nenhuma roda saía do lugar e,
+    // esperando uma pela outra, o robô pivotava numa roda e depois na outra).
+    float ganhoSincronia = 0.01f;
+    float trancoGiro = 0.6f;
+    // As duas rodas travadas há trancoForteAposMs: trancoForte nas duas por
+    // trancoForteMs (emenda do piso, robô encostado). 0,85 = ~4,3 V no N20 (6 V nominal).
+    float trancoForte = 0.85f;
+    uint16_t trancoForteAposMs = 300;
+    uint16_t trancoForteMs = 150;
 
     uint16_t tempoMaximoMs = 4000; // por comando
     uint16_t tempoParadoMs = 800;  // com potência e sem pulsos nas duas rodas: bloqueado (colisão)
@@ -62,15 +90,29 @@ struct ParametrosMovimento
     uint16_t rodaParadaMs = 120;
     float reforcoPorSegundo = 1.2f;
     float potenciaArranqueMaxima = 0.65f;
+    uint16_t esperaMaximaMs = 400; // andando, a roda que anda espera a travada no máximo isso
 
     // Parede da frente mais perto que isso, girando ou andando: para na hora,
     // calibrado ou não (no centro da célula a parede fica a ~4-6 cm).
     uint16_t distanciaMinimaFrenteMm = 25;
+    // Girando: o sensor da frente fica a ~53 mm do eixo das rodas e passa a
+    // ~21-23 mm da parede do lado com o robô 1 cm fora do centro, sem encostar
+    // (beco, 24/11/2026): 25 bloqueava o giro ali. Abaixo de 25 só bloqueia se
+    // o robô saiu do lugar mais que pivoMaximoMm (pivotando numa roda); abaixo
+    // de distanciaMinimaFrenteGiroMm, sempre.
+    uint16_t distanciaMinimaFrenteGiroMm = 15;
+    float pivoMaximoMm = 10; // giros bons no labirinto: até ~8 mm
 
     // Distâncias com o robô no centro da célula e parede do lado, medidas pela
     // calibração 'L' (#279). 0 = sem calibração: o controle usa só os encoders
     // para parar e só as duas paredes juntas para centralizar.
     uint16_t frontalCentroMm = 0;
+    // Andando, parede da frente n células depois do destino corrige a distância
+    // (até alcanceFundoMm: mais longe o VL53L0X lê curto), se discordar dos
+    // encoders em menos de janelaFundoMm.
+    uint16_t alcanceFundoMm = 400;
+    float janelaFundoMm = 80;
+    float alinhadoFundoGraus = 5;
     uint16_t esquerdaCentroMm = 0;
     uint16_t direitaCentroMm = 0;
 };
@@ -141,7 +183,9 @@ public:
     // parando pela parede da frente quando houver. lateralInicialMm é quanto
     // o robô já está fora do eixo (+ = à direita): sem parede dos lados, o
     // controle corrige pela odometria.
-    void andar(float mm, float rumoGraus, float lateralInicialMm = 0);
+    // corrigirPeloFundo: parado há tempo (leitura da frente assentada), uma
+    // parede da frente células adiante corrige a distância (ver comecar()).
+    void andar(float mm, float rumoGraus, float lateralInicialMm = 0, bool corrigirPeloFundo = false);
     // Gira no lugar até o rumo.
     void girar(float rumoGraus);
     void parar() { estado_ = MOV_OCIOSO; }
@@ -164,7 +208,7 @@ public:
     // Potência mínima aprendida de cada roda (0 = ainda não travou).
     float reforcoEsquerdo() const { return reforcoE_; }
     float reforcoDireito() const { return reforcoD_; }
-    bool paradaPelaFrente() const { return usouFrente_; }
+    bool paradaPelaFrente() const { return usouFrente_ || usouFundo_; }
 
 private:
     void odometria(const EntradaMovimento &e);
@@ -188,6 +232,8 @@ private:
     // reforço de arranque de cada roda
     uint32_t ultimoPulsoE_ = 0, ultimoPulsoD_ = 0, ultimoCiclo_ = 0;
     float reforcoE_ = 0, reforcoD_ = 0;
+    uint32_t esperaDesde_ = 0; // uma roda travada e a outra esperando desde
+    uint32_t ambasParadasDesde_ = 0; // as duas rodas travadas desde
     bool yawAnteriorOk_ = false;
     float yawAnterior_ = 0;
     float avancoUltimo_ = 0; // mm andados no último ciclo (média das rodas)
@@ -212,4 +258,6 @@ private:
     bool temLateral_ = false;
     float correcao_ = 0;
     bool usouFrente_ = false;
+    bool usouFundo_ = false; // distância corrigida por uma parede mais adiante
+    bool corrigirPeloFundo_ = false;
 };

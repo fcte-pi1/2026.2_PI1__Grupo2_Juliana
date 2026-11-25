@@ -117,10 +117,15 @@ public:
     float ganhoRodaEsquerda = 1.0f;
     float ganhoRodaDireita = 0.93f;    // uma roda mais fraca: o controle precisa corrigir
     float larguraEixoReal = 95.0f;
+    // Encoder direito contando diferente do que o controle acha (escala do Y
+    // errada): andando reto, o rumo pelos encoders parece virar.
+    float escalaEncoderDireito = 1.0f;
     // Potência mínima para cada roda sair do lugar parada (atrito estático,
     // motor mais duro). Girando, basta ZONA_MORTA.
     float zonaMortaEsquerda = ZONA_MORTA;
     float zonaMortaDireita = ZONA_MORTA;
+    // Rodas presas (robô entalado) até esse instante (ms).
+    uint32_t rodasPresasAte = 0;
     uint32_t abortarEm_ = 0;
     float maiorErroLateralDepois_ = 0; // depois do primeiro segundo de movimento
 
@@ -161,6 +166,8 @@ private:
         rampaD_ = aproximar(rampaD_, cmdD_, RAMPA_POR_S * dt);
         velE_ += (velocidade(rampaE_, ganhoRodaEsquerda, zonaMortaEsquerda, velE_) - velE_) * dt / ATRASO_S;
         velD_ += (velocidade(rampaD_, ganhoRodaDireita, zonaMortaDireita, velD_) - velD_) * dt / ATRASO_S;
+        if (agora_ < rodasPresasAte)
+            velE_ = velD_ = 0;
 
         float v = (velE_ + velD_) / 2;
         float w = (velD_ - velE_) / larguraEixoReal;
@@ -179,7 +186,7 @@ private:
             y_ = ny;
             phi_ = nphi;
             pulsosE_ += velE_ * dt * pulsosPorMm_;
-            pulsosD_ += velD_ * dt * pulsosPorMm_;
+            pulsosD_ += velD_ * dt * pulsosPorMm_ * escalaEncoderDireito;
         }
         if (agora_ - ultimaMedida_ >= 33) // VL53L0X em modo contínuo
         {

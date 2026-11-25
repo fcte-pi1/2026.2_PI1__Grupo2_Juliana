@@ -21,13 +21,16 @@ const size_t CAPACIDADE_BUFFER_PADRAO = 3200;
 struct DadosTelemetriaCompactos {
   int8_t pos_x;
   int8_t pos_y;
-  char orientacao;
-  uint8_t paredes;
+  uint8_t corrente_est_10ma; // corrente estimada em passos de 10 mA; CORRENTE_EST_AUSENTE = omitida
+  uint8_t paredes_estado; // bits 0-3: paredes (0 a 15); 4-5: índice do estado; 6-7: orientação (N, S, L, O)
   uint16_t velocidade_mm_s;
   uint16_t tensao_cv;
   int16_t valor_flood; // -1 = null
-  uint8_t estado;      // índice do estado na tabela do contrato
+  int16_t corrente_dma; // décimos de mA; CORRENTE_AUSENTE = campo omitido
 };
+
+const int16_t CORRENTE_AUSENTE = INT16_MIN;
+const uint8_t CORRENTE_EST_AUSENTE = 0xFF;
 
 struct DadosTensaoCompactos {  // evento 'inicio' e 'bateria_critica'
   uint16_t tensao_cv;

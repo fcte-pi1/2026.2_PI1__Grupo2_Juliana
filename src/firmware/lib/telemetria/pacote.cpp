@@ -131,11 +131,19 @@ size_t serializarJson(const MensagemTelemetria &msg, char *buffer, size_t maxLen
       } else {
         snprintf(flood, sizeof(flood), "null");
       }
+      char corrente[64] = ""; // opcionais: sem valor, o campo não aparece
+      int c = 0;
+      if (!isnan(msg.corrente_ma)) {
+        c += snprintf(corrente, sizeof(corrente), ",\"corrente_ma\":%.1f", msg.corrente_ma);
+      }
+      if (!isnan(msg.corrente_estimada_ma)) {
+        snprintf(corrente + c, sizeof(corrente) - c, ",\"corrente_estimada_ma\":%.0f", msg.corrente_estimada_ma);
+      }
       m = snprintf(resto, espaco,
                    ",\"pos_x\":%d,\"pos_y\":%d,\"orientacao\":\"%c\",\"paredes\":%u,"
-                   "\"velocidade\":%.3f,\"tensao_bateria\":%.2f,\"valor_flood\":%s,\"estado\":\"%s\"}",
+                   "\"velocidade\":%.3f,\"tensao_bateria\":%.2f%s,\"valor_flood\":%s,\"estado\":\"%s\"}",
                    msg.pos_x, msg.pos_y, msg.orientacao, (unsigned)msg.paredes,
-                   msg.velocidade, msg.tensao_bateria, flood, msg.estado);
+                   msg.velocidade, msg.tensao_bateria, corrente, flood, msg.estado);
       break;
     }
     case EVT_INICIO:

@@ -621,6 +621,55 @@ void test_buffer_preserva_variacoes_de_campos() {
   }
 }
 
+// Corrente estimada pelo modelo dos motores (INA226 sem corrente no shunt na
+// montagem, 24/11/2026): campo próprio, opcional, que sobrevive ao buffer em
+// passos de 10 mA; a orientação continua certa depois de mudar de lugar no item.
+void test_tel_corrente_estimada_opcional_e_preservada_no_buffer() {
+  MensagemTelemetria msg = criarTelemetria(7, 42, 8400, 2, 1, 'L', 9, 0.312f, 7.86f, 3, "explorando");
+  char quadro[256];
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NULL(strstr(quadro, "corrente_estimada_ma"));
+
+  msg.corrente_estimada_ma = 154.0f;
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NOT_NULL(strstr(quadro, "\"corrente_estimada_ma\":154"));
+
+  const char orientacoes[] = {'N', 'S', 'L', 'O'};
+  for (int i = 0; i < 4; i++) {
+    MensagemTelemetria m = criarTelemetria(1, (uint32_t)i, 100, 1, 2, orientacoes[i], 15, 0.1f, 7.5f, 4, "rapido");
+    m.corrente_estimada_ma = 1230.0f + i;
+    BufferTelemetria &b = bufferGrande;
+    b.limpar();
+    TEST_ASSERT_TRUE(b.enfileirar(m));
+    MensagemTelemetria volta;
+    bool ehReenvio = true;
+    TEST_ASSERT_TRUE(b.obterProximoEnvio(0, volta, ehReenvio));
+    TEST_ASSERT_EQUAL_CHAR(orientacoes[i], volta.orientacao);
+    TEST_ASSERT_EQUAL_UINT8(15, volta.paredes);
+    TEST_ASSERT_FLOAT_WITHIN(10.0f, 1230.0f, volta.corrente_estimada_ma);
+  }
+}
+
+void test_tel_corrente_opcional_e_preservada_no_buffer() {
+  // Sem leitura do INA226 (NAN) o campo some: o quadro do contrato fica igual (CRC 2917).
+  MensagemTelemetria msg = criarTelemetria(7, 42, 8400, 2, 1, 'L', 9, 0.312f, 7.86f, 3, "explorando");
+  char quadro[256];
+  TEST_ASSERT_GREATER_THAN(0, serializarQuadro(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NULL(strstr(quadro, "corrente_ma"));
+
+  msg.corrente_ma = 152.34f;
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NOT_NULL(strstr(quadro, "\"tensao_bateria\":7.86,\"corrente_ma\":152.3,\"valor_flood\":3"));
+
+  conferirIdaEVolta(msg);
+  msg.corrente_ma = -12.5f; // USB voltando pelo MP1584: corrente negativa
+  conferirIdaEVolta(msg);
+  msg.corrente_ma = 0.0f;   // 0 mA ainda é leitura, não ausência
+  conferirIdaEVolta(msg);
+  // Estado e paredes dividem um byte no buffer: nenhum pode vazar no outro.
+  conferirIdaEVolta(criarTelemetria(1, 3, 600, 0, 0, 'O', 15, 0.0f, 7.4f, 0, "parado"));
+}
+
 void test_buffer_recusa_estado_fora_do_contrato() {
   BufferTelemetria &buf = bufferGrande;
   buf.limpar();
@@ -1020,6 +1069,8 @@ int main() {
   RUN_TEST(test_buffer_corrida_completa_sem_conexao_ct_se17);
   RUN_TEST(test_buffer_preserva_pacotes_do_contrato);
   RUN_TEST(test_buffer_preserva_variacoes_de_campos);
+  RUN_TEST(test_tel_corrente_opcional_e_preservada_no_buffer);
+  RUN_TEST(test_tel_corrente_estimada_opcional_e_preservada_no_buffer);
   RUN_TEST(test_buffer_recusa_estado_fora_do_contrato);
   RUN_TEST(test_buffer_memoria_estatica_cabe_na_ram);
 

@@ -358,3 +358,6 @@ build/
 .eggs/
 .pio/
 *~
+
+# As pastas de evidência dos testes 5.x (ex.: 5.17) casam com *.[1-9][0-9] do LaTeX acima
+!docs/evidencias/integracao/*/
