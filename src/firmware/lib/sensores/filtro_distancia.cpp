@@ -1,0 +1,85 @@
+#include "filtro_distancia.h"
+
+void FiltroDistancia::adicionar(uint16_t mm, bool timeout)
+{
+    if (timeout || mm == 0)
+    {
+        if (falhasSeguidas_ < UINT16_MAX)
+            falhasSeguidas_++;
+        return;
+    }
+    falhasSeguidas_ = 0;
+    if (mm > DIST_MAX_CONFIAVEL)
+        mm = DIST_SEM_ALVO;
+    janela_[proxima_] = mm;
+    proxima_ = (uint8_t)((proxima_ + 1) % JANELA);
+    if (quantidade_ < JANELA)
+        quantidade_++;
+}
+
+void FiltroDistancia::limpar()
+{
+    proxima_ = 0;
+    quantidade_ = 0;
+    falhasSeguidas_ = 0;
+}
+
+uint16_t FiltroDistancia::valor() const
+{
+    if (quantidade_ == 0)
+        return DIST_SEM_ALVO;
+    uint16_t ordenada[JANELA];
+    for (uint8_t i = 0; i < quantidade_; i++)
+        ordenada[i] = janela_[i];
+    // Inserção: no máximo 5 elementos.
+    for (uint8_t i = 1; i < quantidade_; i++)
+    {
+        uint16_t v = ordenada[i];
+        int8_t j = (int8_t)(i - 1);
+        while (j >= 0 && ordenada[j] > v)
+        {
+            ordenada[j + 1] = ordenada[j];
+            j--;
+        }
+        ordenada[j + 1] = v;
+    }
+    return ordenada[quantidade_ / 2];
+}
+
+bool DetectorParede::atualizar(uint16_t mm)
+{
+    if (parede_ && mm > desliga_)
+        parede_ = false;
+    else if (!parede_ && mm < liga_)
+        parede_ = true;
+    return parede_;
+}
+
+void DetectorParede::configurar(uint16_t limiarLiga, uint16_t limiarDesliga)
+{
+    liga_ = limiarLiga;
+    desliga_ = limiarDesliga < limiarLiga ? limiarLiga : limiarDesliga;
+}
+
+LimiaresParede calcularLimiares(uint16_t comParede, uint16_t semParede)
+{
+    LimiaresParede l = {0, 0, false};
+    // Dentro da célula a parede nunca fica a 180 mm ou mais: leitura maior é
+    // parede esquecida na etapa 1/2 (o sensor viu algo mais longe).
+    if (comParede == 0 || comParede >= CELULA_MM)
+        return l; // sem parede na célula atual: não dá para calibrar
+    // Sem alvo, ou mais longe que a célula seguinte: vale a parede seguinte.
+    uint32_t sem = semParede;
+    if (sem > (uint32_t)comParede + CELULA_MM)
+        sem = (uint32_t)comParede + CELULA_MM;
+    if (sem < (uint32_t)comParede + 40)
+        return l; // diferença pequena demais: a parede não foi tirada?
+    uint32_t meio = (comParede + sem) / 2;
+    uint32_t histerese = (sem - comParede) / 8;
+    if (histerese < 10)
+        histerese = 10;
+    l.liga = (uint16_t)(meio - histerese / 2);
+    l.desliga = (uint16_t)(meio + histerese / 2);
+    l.ok = true;
+    return l;
+}

@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>
 
 // Tipos de mensagem conforme o Contrato de Telemetria (docs/4.4.7)
 enum TipoMensagem : uint8_t {
@@ -45,6 +46,10 @@ struct MensagemTelemetria {
   uint8_t paredes = 0;       // Máscara 0 a 15 (Norte=1, Leste=2, Sul=4, Oeste=8)
   float velocidade = 0.0f;   // m/s (3 casas decimais)
   float tensao_bateria = 0.0f; // V (2 casas decimais)
+  float corrente_ma = NAN;    // mA (1 casa, opcional): NAN = campo omitido no JSON
+  // Estimada pelo modelo dos motores (o INA226 da montagem não tem corrente no
+  // shunt, 24/11/2026). Opcional e separada de corrente_ma, que é só a lida.
+  float corrente_estimada_ma = NAN;
   int16_t valor_flood = -1;  // >= 0 ou -1 para valor null
   char estado[16] = "explorando"; // "explorando", "retornando", "rapido", "parado"
 

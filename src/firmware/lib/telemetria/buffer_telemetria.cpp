@@ -56,12 +56,24 @@ bool paraItem(const MensagemTelemetria &msg, ItemBuffer &item) {
       DadosTelemetriaCompactos &d = item.dados.tel;
       d.pos_x = msg.pos_x;
       d.pos_y = msg.pos_y;
-      d.orientacao = msg.orientacao;
-      d.paredes = msg.paredes;
+      // A orientação vai em 2 bits (N, S, L, O) para o byte dela guardar a
+      // corrente estimada sem o item passar de 32 B.
+      const char *orientacoes = "NSLO";
+      const char *o = strchr(orientacoes, msg.orientacao);
+      if (o == nullptr || msg.orientacao == '\0') {
+        return false;
+      }
+      d.paredes_estado = (uint8_t)((msg.paredes & 0x0F) | (estado << 4) | ((o - orientacoes) << 6));
+      d.corrente_est_10ma = isnan(msg.corrente_estimada_ma)
+                                ? CORRENTE_EST_AUSENTE
+                                : (uint8_t)fmaxf(0.0f, fminf(254.0f, roundf(msg.corrente_estimada_ma / 10.0f)));
       d.velocidade_mm_s = (uint16_t)escalarDecimal(msg.velocidade, 3, UINT16_MAX);
       d.tensao_cv = (uint16_t)escalarDecimal(msg.tensao_bateria, 2, UINT16_MAX);
       d.valor_flood = msg.valor_flood;
-      d.estado = estado;
+      // INA226 de 0,1 ohm mede até ±819 mA: cabe em int16 com folga
+      d.corrente_dma = isnan(msg.corrente_ma)
+                           ? CORRENTE_AUSENTE
+                           : (int16_t)fmaxf(-32767.0f, fminf(32767.0f, roundf(msg.corrente_ma * 10.0f)));
       return true;
     }
     case EVT_INICIO:
@@ -96,12 +108,15 @@ MensagemTelemetria paraMensagem(const ItemBuffer &item) {
       const DadosTelemetriaCompactos &d = item.dados.tel;
       msg.pos_x = d.pos_x;
       msg.pos_y = d.pos_y;
-      msg.orientacao = d.orientacao;
-      msg.paredes = d.paredes;
+      msg.orientacao = "NSLO"[d.paredes_estado >> 6];
+      msg.paredes = d.paredes_estado & 0x0F;
+      msg.corrente_estimada_ma = d.corrente_est_10ma == CORRENTE_EST_AUSENTE ? NAN : d.corrente_est_10ma * 10.0f;
       msg.velocidade = (float)d.velocidade_mm_s / 1000.0f;
       msg.tensao_bateria = (float)d.tensao_cv / 100.0f;
       msg.valor_flood = d.valor_flood;
-      strncpy(msg.estado, NOMES_ESTADO[d.estado < TOTAL_ESTADOS ? d.estado : 0],
+      msg.corrente_ma = d.corrente_dma == CORRENTE_AUSENTE ? NAN : (float)d.corrente_dma / 10.0f;
+      const uint8_t estado = (d.paredes_estado >> 4) & 0x03;
+      strncpy(msg.estado, NOMES_ESTADO[estado < TOTAL_ESTADOS ? estado : 0],
               sizeof(msg.estado) - 1);
       msg.estado[sizeof(msg.estado) - 1] = '\0';
       break;

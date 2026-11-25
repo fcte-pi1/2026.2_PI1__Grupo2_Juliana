@@ -474,6 +474,10 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
     })
     expect(screen.getByTestId('status-bateria-normal').textContent).toContain('Nível normal')
 
+    // Pacote sem corrente_ma (campo opcional): o painel não inventa leitura
+    expect(screen.queryByTestId('corrente-bateria')).toBeNull()
+    expect(screen.queryByTestId('corrente-estimada-bateria')).toBeNull()
+
     // Passo 2: queda abaixo de 7,0 V (6,98 V) -> Dispara alerta visual de bateria crítica
     act(() => {
       ws.emitirMensagem('{"v":1,"t":"evt","corrida":7,"seq":97,"tempo_ms":19350,"evento":"bateria_critica","tensao_bateria":6.98}|8E50')
@@ -496,18 +500,24 @@ describe('Painel de Corrida em Tempo Real (Issue #218)', () => {
           paredes: 5,
           velocidade: 0.22,
           tensao_bateria: 7.1,
+          corrente_ma: 148.6,
+          corrente_estimada_ma: 154,
           valor_flood: 4,
           estado: 'retornando',
         }),
       )
     })
     expect(screen.getByTestId('alerta-bateria-critica').textContent).toContain('7,10 V')
+    expect(screen.getByTestId('corrente-bateria').textContent).toBe('148,6 mA')
+    // Corrente estimada pelo modelo dos motores: separada da lida, marcada como estimada
+    expect(screen.getByTestId('corrente-estimada-bateria').textContent).toBe('≈ 154 mA (estimada)')
     expect(screen.queryByTestId('status-bateria-normal')).toBeNull()
 
     // Verifica que na aba Dashboard (Visão Geral) o card de bateria também fica destacado em estado crítico
     fireEvent.click(screen.getByRole('button', { name: /Dashboard/i }))
     expect(screen.getByTestId('card-bateria-visao-geral').className).toContain('card-bateria-critica')
     expect(screen.getByTestId('tensao-bateria-visao-geral').textContent).toBe('7,10 V')
+    expect(screen.getByTestId('corrente-bateria-visao-geral').textContent).toBe('148,6 mA')
     expect(screen.getByTestId('alerta-bateria-critica-visao-geral').textContent).toContain('7,10 V')
     fireEvent.click(screen.getByRole('button', { name: /Monitoramento/i }))
 

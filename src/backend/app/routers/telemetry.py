@@ -7,6 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.websocket_manager import manager
 from app.db.session import session_scope
 from app.services.telemetry_service import ContextoConexao, telemetry_service
+from app.services import console_robo
 from app.services.logs import registrar_desconexao
 
 logger = logging.getLogger("telemetry_router")
@@ -18,6 +19,7 @@ router = APIRouter(tags=["telemetria"])
 async def websocket_telemetria(websocket: WebSocket) -> None:
     """Endpoint WebSocket para recepção de pacotes do robô e envio de ACKs."""
     await websocket.accept()
+    console_robo.registrar_ip(websocket.client.host if websocket.client else None)
     contexto = ContextoConexao()
     logger.info("Conexão WebSocket estabelecida em /ws/telemetria")
     try:

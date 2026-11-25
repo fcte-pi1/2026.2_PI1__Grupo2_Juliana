@@ -621,6 +621,55 @@ void test_buffer_preserva_variacoes_de_campos() {
   }
 }
 
+// Corrente estimada pelo modelo dos motores (INA226 sem corrente no shunt na
+// montagem, 24/11/2026): campo próprio, opcional, que sobrevive ao buffer em
+// passos de 10 mA; a orientação continua certa depois de mudar de lugar no item.
+void test_tel_corrente_estimada_opcional_e_preservada_no_buffer() {
+  MensagemTelemetria msg = criarTelemetria(7, 42, 8400, 2, 1, 'L', 9, 0.312f, 7.86f, 3, "explorando");
+  char quadro[256];
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NULL(strstr(quadro, "corrente_estimada_ma"));
+
+  msg.corrente_estimada_ma = 154.0f;
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NOT_NULL(strstr(quadro, "\"corrente_estimada_ma\":154"));
+
+  const char orientacoes[] = {'N', 'S', 'L', 'O'};
+  for (int i = 0; i < 4; i++) {
+    MensagemTelemetria m = criarTelemetria(1, (uint32_t)i, 100, 1, 2, orientacoes[i], 15, 0.1f, 7.5f, 4, "rapido");
+    m.corrente_estimada_ma = 1230.0f + i;
+    BufferTelemetria &b = bufferGrande;
+    b.limpar();
+    TEST_ASSERT_TRUE(b.enfileirar(m));
+    MensagemTelemetria volta;
+    bool ehReenvio = true;
+    TEST_ASSERT_TRUE(b.obterProximoEnvio(0, volta, ehReenvio));
+    TEST_ASSERT_EQUAL_CHAR(orientacoes[i], volta.orientacao);
+    TEST_ASSERT_EQUAL_UINT8(15, volta.paredes);
+    TEST_ASSERT_FLOAT_WITHIN(10.0f, 1230.0f, volta.corrente_estimada_ma);
+  }
+}
+
+void test_tel_corrente_opcional_e_preservada_no_buffer() {
+  // Sem leitura do INA226 (NAN) o campo some: o quadro do contrato fica igual (CRC 2917).
+  MensagemTelemetria msg = criarTelemetria(7, 42, 8400, 2, 1, 'L', 9, 0.312f, 7.86f, 3, "explorando");
+  char quadro[256];
+  TEST_ASSERT_GREATER_THAN(0, serializarQuadro(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NULL(strstr(quadro, "corrente_ma"));
+
+  msg.corrente_ma = 152.34f;
+  TEST_ASSERT_GREATER_THAN(0, serializarJson(msg, quadro, sizeof(quadro)));
+  TEST_ASSERT_NOT_NULL(strstr(quadro, "\"tensao_bateria\":7.86,\"corrente_ma\":152.3,\"valor_flood\":3"));
+
+  conferirIdaEVolta(msg);
+  msg.corrente_ma = -12.5f; // USB voltando pelo MP1584: corrente negativa
+  conferirIdaEVolta(msg);
+  msg.corrente_ma = 0.0f;   // 0 mA ainda é leitura, não ausência
+  conferirIdaEVolta(msg);
+  // Estado e paredes dividem um byte no buffer: nenhum pode vazar no outro.
+  conferirIdaEVolta(criarTelemetria(1, 3, 600, 0, 0, 'O', 15, 0.0f, 7.4f, 0, "parado"));
+}
+
 void test_buffer_recusa_estado_fora_do_contrato() {
   BufferTelemetria &buf = bufferGrande;
   buf.limpar();
@@ -867,8 +916,114 @@ void test_reconexao_reporta_apenas_pendentes_retidos_apos_overflow() {
   TEST_ASSERT_FALSE(buf.confirmarAck(1, 1));
 }
 
+// ==============================================================================
+// #282: os 3 cenários de queda da issue (telemetria a 5 Hz, ack imediato online)
+// ==============================================================================
+struct ResultadoQueda {
+  uint32_t enviadosOffline; // leituras geradas durante a queda
+  uint32_t pendentesEvento; // campo "pendentes" do evento reconexao
+  uint32_t recebidos;       // leituras que chegaram ao servidor depois da volta
+  uint32_t descartes;       // descartadas por buffer cheio (contabilizadas)
+  uint32_t primeiroSeq;     // seq da primeira leitura recebida depois da volta
+  uint32_t foraDeOrdem;     // tempo_ms que não aumenta (fora de ordem ou duplicada)
+  uint32_t lacunas;         // saltos maiores que 200 ms entre leituras recebidas
+  bool reconexaoPrimeiro;   // o evento reconexao saiu antes dos pendentes
+};
+
+static ResultadoQueda simularQueda(uint32_t segundosOffline) {
+  BufferTelemetria &buf = bufferGrande;
+  buf.limpar();
+  const uint32_t corrida = 9;
+  uint32_t seq = 0, t = 0;
+  MensagemTelemetria msg;
+  bool reenvio;
+  // 10 s online: cada leitura sai e recebe ack
+  for (int i = 0; i < 50; i++, t += 200) {
+    buf.enfileirar(criarTelemetria(corrida, seq++, t, 0, 0, 'N', 0, 0.3f, 7.4f, 1, "explorando"));
+    TEST_ASSERT_TRUE(buf.obterProximoEnvio(t, msg, reenvio));
+    buf.registrarEnvio(msg.corrida, msg.seq, t);
+    TEST_ASSERT_TRUE(buf.confirmarAck(msg.corrida, msg.seq));
+  }
+  // queda: o robô segue navegando e gerando leituras a 5 Hz
+  buf.registrarQuedaConexao(t);
+  ResultadoQueda r = {};
+  r.enviadosOffline = segundosOffline * 5;
+  for (uint32_t i = 0; i < r.enviadosOffline; i++, t += 200)
+    buf.enfileirar(criarTelemetria(corrida, seq++, t, 0, 0, 'N', 0, 0.3f, 7.4f, 1, "explorando"));
+  // volta: reconexao e depois os pendentes, confirmados na ordem em que chegam
+  TEST_ASSERT_TRUE(buf.gerarEventoReconexao(t, t, corrida, seq++, msg));
+  r.pendentesEvento = msg.pendentes;
+  bool primeiraMensagem = true, primeiraLeitura = true;
+  uint32_t ultimoTempo = 0;
+  while (buf.obterProximoEnvio(t, msg, reenvio)) {
+    buf.registrarEnvio(msg.corrida, msg.seq, t);
+    buf.confirmarAck(msg.corrida, msg.seq);
+    if (primeiraMensagem)
+      r.reconexaoPrimeiro = msg.tipo == EVT_RECONEXAO;
+    primeiraMensagem = false;
+    if (msg.tipo != TIPO_TEL)
+      continue;
+    if (primeiraLeitura)
+      r.primeiroSeq = msg.seq;
+    else if (msg.tempo_ms <= ultimoTempo)
+      r.foraDeOrdem++;
+    else if (msg.tempo_ms - ultimoTempo > 200)
+      r.lacunas++;
+    primeiraLeitura = false;
+    ultimoTempo = msg.tempo_ms;
+    r.recebidos++;
+  }
+  r.descartes = buf.totalDescartesOverflow();
+  TEST_ASSERT_TRUE(buf.vazio());
+  return r;
+}
+
+void test_queda_curta_5s_entrega_tudo_em_ordem() {
+  ResultadoQueda r = simularQueda(5);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_EQUAL_UINT32(25, r.pendentesEvento);
+  TEST_ASSERT_EQUAL_UINT32(25, r.recebidos);
+  TEST_ASSERT_EQUAL_UINT32(0, r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(50, r.primeiroSeq); // a primeira leitura da queda
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_queda_longa_60s_entrega_tudo_em_ordem() {
+  ResultadoQueda r = simularQueda(60);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_EQUAL_UINT32(300, r.pendentesEvento);
+  TEST_ASSERT_EQUAL_UINT32(300, r.recebidos);
+  TEST_ASSERT_EQUAL_UINT32(0, r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(50, r.primeiroSeq);
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_queda_com_buffer_cheio_descarta_as_mais_antigas() {
+  // 12 min offline = 3600 leituras, mais que as 3200 do buffer
+  ResultadoQueda r = simularQueda(12 * 60);
+  TEST_ASSERT_TRUE(r.reconexaoPrimeiro);
+  TEST_ASSERT_TRUE(r.descartes > 0);
+  // o que não chegou foi descartado e contado; o resto chega inteiro
+  TEST_ASSERT_EQUAL_UINT32(r.enviadosOffline, r.recebidos + r.descartes);
+  TEST_ASSERT_EQUAL_UINT32(r.recebidos, r.pendentesEvento);
+  // as descartadas são as mais antigas: chega a partir da primeira que sobrou
+  TEST_ASSERT_EQUAL_UINT32(50 + r.descartes, r.primeiroSeq);
+  TEST_ASSERT_EQUAL_UINT32(0, r.foraDeOrdem);
+  TEST_ASSERT_EQUAL_UINT32(0, r.lacunas);
+}
+
+void test_buffer_guarda_10_minutos_a_5hz() {
+  TEST_ASSERT_TRUE(CAPACIDADE_BUFFER_PADRAO >= 10u * 60u * 5u);
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_queda_curta_5s_entrega_tudo_em_ordem);
+  RUN_TEST(test_queda_longa_60s_entrega_tudo_em_ordem);
+  RUN_TEST(test_queda_com_buffer_cheio_descarta_as_mais_antigas);
+  RUN_TEST(test_buffer_guarda_10_minutos_a_5hz);
   RUN_TEST(test_ack_recusa_json_e_numeros_invalidos_com_crc_correto);
   RUN_TEST(test_ack_aceita_espacos_ordem_e_limites);
   RUN_TEST(test_fim_preserva_consumo_acima_de_uint16_escalado);
@@ -914,6 +1069,8 @@ int main() {
   RUN_TEST(test_buffer_corrida_completa_sem_conexao_ct_se17);
   RUN_TEST(test_buffer_preserva_pacotes_do_contrato);
   RUN_TEST(test_buffer_preserva_variacoes_de_campos);
+  RUN_TEST(test_tel_corrente_opcional_e_preservada_no_buffer);
+  RUN_TEST(test_tel_corrente_estimada_opcional_e_preservada_no_buffer);
   RUN_TEST(test_buffer_recusa_estado_fora_do_contrato);
   RUN_TEST(test_buffer_memoria_estatica_cabe_na_ram);
 

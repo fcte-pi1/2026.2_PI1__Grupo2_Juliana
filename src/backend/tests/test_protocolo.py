@@ -131,6 +131,25 @@ def test_validacao_passo_6_fora_do_intervalo():
     tel["tensao_bateria"] = -0.5
     assert validate_frame(format_frame(tel)).error == "fora do intervalo: tensao_bateria=-0.5"
 
+    # corrente_ma é opcional: ausente ou dentro de ±1000 mA passa, fora ou texto não
+    tel["tensao_bateria"] = 7.4
+    assert validate_frame(format_frame(tel)).valid
+    tel["corrente_ma"] = -12.5
+    assert validate_frame(format_frame(tel)).valid
+    tel["corrente_ma"] = 1000.1
+    assert validate_frame(format_frame(tel)).error == "fora do intervalo: corrente_ma=1000.1"
+    tel["corrente_ma"] = "150"
+    assert validate_frame(format_frame(tel)).error == "tipo invalido: corrente_ma"
+
+    # corrente_estimada_ma (modelo dos motores, opcional): 0 a 3000 mA, número
+    del tel["corrente_ma"]
+    tel["corrente_estimada_ma"] = 154
+    assert validate_frame(format_frame(tel)).valid
+    tel["corrente_estimada_ma"] = 3000.5
+    assert validate_frame(format_frame(tel)).error == "fora do intervalo: corrente_estimada_ma=3000.5"
+    tel["corrente_estimada_ma"] = True
+    assert validate_frame(format_frame(tel)).error == "tipo invalido: corrente_estimada_ma"
+
 
 def test_validacao_evento_inicio_com_seq_invalido():
     evt = {"v": 1, "t": "evt", "corrida": 7, "seq": 1, "tempo_ms": 0, "evento": "inicio", "tensao_bateria": 8.2}

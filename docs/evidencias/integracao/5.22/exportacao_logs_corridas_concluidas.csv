@@ -1,0 +1,9 @@
+id,id_corrida,tipo,origem,mensagem,ocorrido_em
+2127,528,info,backend,evento inicio: tensao=7.56V,2026-11-24T16:32:06.200902+00:00
+2128,528,info,backend,"evento fim: resultado=concluida, tempo=14.3s",2026-11-24T16:32:20.480497+00:00
+2165,547,info,backend,evento inicio: tensao=7.15V,2026-11-24T19:12:15.669503+00:00
+2166,547,info,backend,"evento fim: resultado=concluida, tempo=83.9s",2026-11-24T19:13:39.538066+00:00
+2179,554,info,backend,evento inicio: tensao=7.09V,2026-11-24T19:52:18.995196+00:00
+2180,554,info,backend,"evento fim: resultado=concluida, tempo=98.46s",2026-11-24T19:53:57.445543+00:00
+2244,623,info,backend,evento inicio: tensao=7.07V,2026-11-24T20:09:31.294343+00:00
+2245,623,info,backend,"evento fim: resultado=concluida, tempo=65.78s",2026-11-24T20:10:37.035343+00:00

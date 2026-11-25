@@ -7,11 +7,13 @@
 const uint8_t MAX_LARG = 16;
 const uint8_t MAX_ALT = 16;
 
-// De que lado do robô fica a borda do labirinto na largada. A equipe informa.
+// Onde ficam as duas bordas do canto da largada, vistas pelo robô. A equipe informa.
 enum LadoBorda : uint8_t
 {
-    BORDA_ESQUERDA,
-    BORDA_DIREITA
+    BORDA_ESQUERDA,        // borda atrás e à esquerda (convenção do Tema PI1)
+    BORDA_DIREITA,         // borda atrás e à direita (convenção do Tema PI1)
+    BORDA_FRENTE_DIREITA,  // robô virado para a borda: borda à frente e à direita
+    BORDA_FRENTE_ESQUERDA  // robô virado para a borda: borda à frente e à esquerda
 };
 
 // Mapa do labirinto em memória fixa (RNF03).
@@ -23,7 +25,10 @@ enum LadoBorda : uint8_t
 // robô aponta:
 //   - borda atrás e à esquerda: larga virado para o Norte;
 //   - borda atrás e à direita: larga virado para o Leste.
-// Assim a borda de trás e a lateral são sempre o Sul e o Oeste de (0,0), e o
+// Também aceita o robô posto virado para a borda (bancada, 23/11/2026):
+//   - borda à frente e à direita: larga virado para o Sul;
+//   - borda à frente e à esquerda: larga virado para o Oeste.
+// Assim as duas bordas do canto são sempre o Sul e o Oeste de (0,0), e o
 // objetivo fica em (largura-1, altura-1), como no frontend e na telemetria.
 // Se a frente estiver fechada, a saída do beco fica do lado oposto à borda.
 // Todas as bordas são fechadas.
@@ -31,8 +36,8 @@ class Labirinto
 {
 public:
     // Zera tudo e fecha as bordas. Só aceita os labirintos do TAP (4x4, 8x4 e
-    // 12x4, ou 4x8 e 4x12 se girados em relação ao robô) e orientação inicial
-    // NORTE ou LESTE; senão devolve false e não altera nada.
+    // 12x4, ou 4x8 e 4x12 se girados em relação ao robô) e uma das quatro
+    // direções como orientação inicial; senão devolve false e não altera nada.
     bool iniciar(uint8_t largura, uint8_t altura, Direcao orientacaoInicial = NORTE);
     // O mesmo, a partir do que a equipe informa olhando o robô na largada:
     // o lado da borda e quantas células há à frente e ao lado dele.
