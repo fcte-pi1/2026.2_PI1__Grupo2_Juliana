@@ -144,6 +144,25 @@ void test_sequencia_de_estados_da_corrida()
         TEST_ASSERT_TRUE(trocas[i] == ESTADO_EXPLORANDO || trocas[i] == ESTADO_RETORNANDO);
 }
 
+// Pedido da equipe (24/11/2026): no robô físico, chegou ao centro da célula de
+// destino, para. A chegada do labirinto é um beco e o robô não cabe girando
+// nele: a volta à largada terminava em "não conseguiu andar".
+void test_parar_no_objetivo_termina_na_chegada()
+{
+    Labirinto gabarito, mapa;
+    carregarFixture(LABIRINTOS_TESTE[0], gabarito, NORTE);
+    prepararMapa(gabarito, mapa);
+    RoboTeste robo(gabarito);
+    ModoAutomatico modo(robo, mapa);
+    modo.pararNoObjetivo(true);
+    modo.iniciar();
+    TEST_ASSERT_EQUAL(ESTADO_PARADO, modo.executar());
+    TEST_ASSERT_EQUAL(SEM_FALHA, modo.motivo());
+    TEST_ASSERT_TRUE(mapa.noObjetivo());
+    TEST_ASSERT_EQUAL_UINT8(1, modo.viagens());
+    TEST_ASSERT_EQUAL_UINT8(0, modo.passosRapido()); // sem volta nem corrida rápida
+}
+
 void test_corrida_rapida_comeca_na_largada()
 {
     Labirinto gabarito, mapa;
@@ -265,6 +284,7 @@ int main()
     RUN_TEST(test_corrida_completa_em_todos_os_desenhos_sem_intervencao);
     RUN_TEST(test_corrida_rapida_usa_a_rota_mais_curta_conferida);
     RUN_TEST(test_sequencia_de_estados_da_corrida);
+    RUN_TEST(test_parar_no_objetivo_termina_na_chegada);
     RUN_TEST(test_corrida_rapida_comeca_na_largada);
     RUN_TEST(test_falha_na_calibracao_nao_sai_do_lugar);
     RUN_TEST(test_motor_que_nao_anda_vira_falha_depois_das_tentativas);

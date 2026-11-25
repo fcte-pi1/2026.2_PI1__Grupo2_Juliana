@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.session import session_scope
-from app.services import corridas
+from app.services import console_robo, corridas
 
 router = APIRouter(tags=["corridas"])
 
@@ -95,20 +95,25 @@ def obter_corrida(id_corrida: int) -> dict:
 def criar_corrida(nova: NovaCorrida) -> dict:
     with session_scope() as db:
         try:
-            return _detalhe(corridas.criar_corrida(db, nova.id_labirinto))
+            detalhe = _detalhe(corridas.criar_corrida(db, nova.id_labirinto))
         except corridas.LabirintoNaoEncontrado:
             raise HTTPException(404, "labirinto não encontrado")
         except corridas.CorridaEmAndamento:
             raise HTTPException(409, "já existe uma corrida em andamento")
+    # O robô conectado começa a corrida automática; o 'inicio' dele se associa a esta corrida.
+    console_robo.enviar("A")
+    return detalhe
 
 
 @router.post("/corridas/{id_corrida}/encerrar", response_model=CorridaDetalhe)
 def encerrar_corrida(id_corrida: int) -> dict:
     with session_scope() as db:
         try:
-            return _detalhe(corridas.encerrar_corrida(db, id_corrida))
+            detalhe = _detalhe(corridas.encerrar_corrida(db, id_corrida))
         except corridas.CorridaNaoEncontrada:
             raise HTTPException(404, "corrida não encontrada")
         except corridas.CorridaJaEncerrada:
             raise HTTPException(409, "a corrida já foi encerrada")
+    console_robo.enviar("a")  # o robô para os motores e encerra como abandonada
+    return detalhe
 
