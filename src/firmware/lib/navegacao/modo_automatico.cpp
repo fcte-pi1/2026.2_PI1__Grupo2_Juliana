@@ -141,7 +141,7 @@ NUCLEO1 bool ModoAutomatico::andar(Direcao d)
 NUCLEO1 void ModoAutomatico::chegouAoObjetivo()
 {
     viagens_++;
-    estado_ = ESTADO_RETORNANDO;
+    estado_ = pararNoObjetivo_ ? ESTADO_PARADO : ESTADO_RETORNANDO;
 }
 
 // Na largada: se nenhum lado desconhecido puder encurtar a rota, corre pela

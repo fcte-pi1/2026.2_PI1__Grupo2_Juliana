@@ -109,9 +109,10 @@ void ControleMovimento::reiniciar(const EntradaMovimento &e, float rumoGraus)
     estado_ = MOV_OCIOSO;
 }
 
-void ControleMovimento::andar(float mm, float rumoGraus, float lateralInicialMm)
+void ControleMovimento::andar(float mm, float rumoGraus, float lateralInicialMm, bool corrigirPeloFundo)
 {
     alvoMm_ = mm;
+    corrigirPeloFundo_ = corrigirPeloFundo;
     lateral_ = lateralInicialMm;
     rumoAlvo_ = normalizarGraus(rumoGraus);
     estado_ = MOV_ANDANDO;
@@ -152,7 +153,12 @@ void ControleMovimento::odometria(const EntradaMovimento &e)
     if (e.yawOk && yawAnteriorOk_ && fabsf(variacaoYaw) < SALTO_YAW_GRAUS)
         rumo_ = normalizarGraus(rumo_ + variacaoYaw);
     else
-        rumo_ = normalizarGraus(rumo_ + (dD - dE) / p_.larguraEixoMm * RAD_GRAUS);
+    {
+        // Largura efetiva por sentido (calibração Z): girando à direita a roda
+        // direita vai para trás e patina diferente da esquerda.
+        float largura = dD - dE < 0 ? p_.larguraEixoDireitaMm : p_.larguraEixoEsquerdaMm;
+        rumo_ = normalizarGraus(rumo_ + (dD - dE) / (largura > 0 ? largura : p_.larguraEixoMm) * RAD_GRAUS);
+    }
     yawAnteriorOk_ = e.yawOk;
     yawAnterior_ = e.yawGraus;
 }
@@ -161,6 +167,7 @@ void ControleMovimento::comecar(const EntradaMovimento &e)
 {
     comecou_ = true;
     ultimoPulsoE_ = ultimoPulsoD_ = ultimoCiclo_ = e.agora_ms;
+    ambasParadasDesde_ = 0;
     inicioE_ = e.encoderEsquerdo;
     inicioD_ = e.encoderDireito;
     inicio_ = e.agora_ms;
@@ -179,6 +186,28 @@ void ControleMovimento::comecar(const EntradaMovimento &e)
     trocaFonte_ = -p_.estabilizarParedeMm;
     if (estado_ == MOV_GIRANDO)
         lateral_ = 0;
+    // Andando para a frente, parede n células depois do destino (até
+    // alcanceFundoMm): o centro do destino fica a (frente - centro - n
+    // células). Num corredor sem parede logo à frente só os encoders contavam
+    // e o erro de uma manobra ficava (labirinto, 24/11/2026: parou ~9 cm além e
+    // a borda do fim virou parede da própria célula, "sem caminho"). Medido
+    // uma vez, parado (quem chama diz se está: corrigirPeloFundo): andando, a
+    // mediana do VL53L0X atrasa ~10 mm. Só corrige
+    // alinhado (torto, o cone pega a parede do lado) e se discordar dos
+    // encoders em menos de janelaFundoMm (abaixo de meia célula, sem dúvida de n).
+    usouFundo_ = false;
+    if (corrigirPeloFundo_ && estado_ == MOV_ANDANDO && alvoMm_ > 0 && p_.frontalCentroMm > 0 && leituraValida(e.distancia_mm[FRENTE]) &&
+        e.distancia_mm[FRENTE] <= p_.alcanceFundoMm && fabsf(normalizarGraus(rumoAlvo_ - rumo_)) < p_.alinhadoFundoGraus)
+    {
+        float pelaFrente = (float)e.distancia_mm[FRENTE] - p_.frontalCentroMm;
+        float n = roundf((pelaFrente - alvoMm_) / CELULA_MM);
+        float pelaParede = pelaFrente - n * CELULA_MM;
+        if (n >= 1 && fabsf(pelaParede - alvoMm_) < p_.janelaFundoMm)
+        {
+            alvoMm_ = pelaParede;
+            usouFundo_ = true;
+        }
+    }
 }
 
 SaidaMovimento ControleMovimento::atualizar(const EntradaMovimento &e)
@@ -204,13 +233,76 @@ SaidaMovimento ControleMovimento::atualizar(const EntradaMovimento &e)
 void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMovimento &s)
 {
     float passo = p_.reforcoPorSegundo * (e.agora_ms - ultimoCiclo_) / 1000.0f;
-    const float limite = p_.potenciaArranqueMaxima;
+    const bool girando = estado_ == MOV_GIRANDO;
+    // Arrancar do zero (girando ou andando) pode passar do teto do PWM até trancoGiro: no
+    // chão, com PWM 80, o robô às vezes não saía do lugar andando reto (23/11/2026).
+    const float limite = p_.trancoGiro > p_.potenciaArranqueMaxima ? p_.trancoGiro : p_.potenciaArranqueMaxima;
     bool paradaE = s.esquerdo != 0 && e.agora_ms - ultimoPulsoE_ > p_.rodaParadaMs;
     bool paradaD = s.direito != 0 && e.agora_ms - ultimoPulsoD_ > p_.rodaParadaMs;
+    // As duas rodas travadas juntas (robô engatado numa emenda do piso ou
+    // encostado): depois de 300 ms, um tranco curto forte nas duas, acima do
+    // reforço. Labirinto novo, 24/11/2026: em (2,0), reto e centrado, as duas
+    // a 0,6 não davam um pulso e o robô desistia.
+    if (paradaE && paradaD)
+    {
+        if (ambasParadasDesde_ == 0)
+            ambasParadasDesde_ = e.agora_ms;
+        uint32_t t = e.agora_ms - ambasParadasDesde_;
+        if (t >= p_.trancoForteAposMs && t < (uint32_t)p_.trancoForteAposMs + p_.trancoForteMs)
+        {
+            s.esquerdo = sinal(s.esquerdo) * p_.trancoForte;
+            s.direito = sinal(s.direito) * p_.trancoForte;
+            return;
+        }
+    }
+    else
+        ambasParadasDesde_ = 0;
     if (paradaE)
         reforcoE_ = fminf((reforcoE_ > fabsf(s.esquerdo) ? reforcoE_ : fabsf(s.esquerdo)) + passo, limite);
     if (paradaD)
         reforcoD_ = fminf((reforcoD_ > fabsf(s.direito) ? reforcoD_ : fabsf(s.direito)) + passo, limite);
+    // Acima do teto o reforço é só o tranco para sair do lugar: com a roda já
+    // girando, ele desce de volta ao teto (o robô não fica rápido depois de arrancar).
+    if (!paradaE && reforcoE_ > p_.potenciaArranqueMaxima)
+        reforcoE_ = fmaxf(reforcoE_ - 2 * passo, p_.potenciaArranqueMaxima);
+    if (!paradaD && reforcoD_ > p_.potenciaArranqueMaxima)
+        reforcoD_ = fmaxf(reforcoD_ - 2 * passo, p_.potenciaArranqueMaxima);
+
+    // Uma parada e a outra andando: a que anda espera. Contar a espera como
+    // pulso evita que ela também pareça travada; o bloqueio continua vindo do
+    // tempo sem pulso nenhum (vigiar). Espera só até esperaMaximaMs: no chão a
+    // roda esquerda (mais dura) sozinha não arrasta o robô, nem com 0,6
+    // (23 e 24/11/2026: "bloqueado" e recuo); passado isso, as duas vão juntas.
+    if (!(paradaE ^ paradaD))
+        esperaDesde_ = 0;
+    else if (esperaDesde_ == 0)
+        esperaDesde_ = e.agora_ms;
+    const bool esperar = !(esperaDesde_ && e.agora_ms - esperaDesde_ > p_.esperaMaximaMs);
+
+    // Girando, o reforço vai só para a roda travada e a outra espera parada:
+    // somado nas duas, empurrava a que anda e o robô pivotava na travada até a
+    // parede (labirinto, 24/11/2026: a esquerda parou freando e a direita seguiu
+    // ~14 mm sozinha). As duas travadas, ou a espera esgotada: cada uma com o seu reforço.
+    if (girando)
+    {
+        if (paradaE || !esperar)
+            s.esquerdo = sinal(s.esquerdo) * fmaxf(fabsf(s.esquerdo), reforcoE_);
+        if (paradaD || !esperar)
+            s.direito = sinal(s.direito) * fmaxf(fabsf(s.direito), reforcoD_);
+        if (!esperar)
+            return;
+        if (paradaE && !paradaD && s.direito != 0)
+        {
+            s.direito = 0;
+            ultimoPulsoD_ = e.agora_ms; // esperando de propósito, não travada
+        }
+        else if (paradaD && !paradaE && s.esquerdo != 0)
+        {
+            s.esquerdo = 0;
+            ultimoPulsoE_ = e.agora_ms;
+        }
+        return;
+    }
 
     float falta = 0;
     if (s.esquerdo != 0 && reforcoE_ - fabsf(s.esquerdo) > falta)
@@ -230,9 +322,16 @@ void ControleMovimento::reforcarRodasParadas(const EntradaMovimento &e, SaidaMov
         s.esquerdo = sinal(s.esquerdo) * e2 * (s.esquerdo != 0);
         s.direito = sinal(s.direito) * d2 * (s.direito != 0);
     }
-    // Uma parada e a outra andando: a que anda espera. Contar a espera como
-    // pulso evita que ela também pareça travada; o bloqueio continua vindo do
-    // tempo sem pulso nenhum (vigiar).
+    // A roda travada recebe pelo menos o próprio reforço, mesmo que a diferença
+    // da correção de rumo encolha: com a outra no teto, subir as duas juntas a
+    // deixava presa abaixo do que precisa para sair (labirinto novo, 24/11/2026,
+    // (1,2): esquerda em 0,40 e direita em 0,60 por 10 s, sem um pulso na esquerda).
+    if (paradaE)
+        s.esquerdo = sinal(s.esquerdo) * fmaxf(fabsf(s.esquerdo), reforcoE_);
+    if (paradaD)
+        s.direito = sinal(s.direito) * fmaxf(fabsf(s.direito), reforcoD_);
+    if (!esperar)
+        return;
     if (paradaE && !paradaD && s.direito != 0)
     {
         s.direito = 0;
@@ -342,6 +441,14 @@ SaidaMovimento ControleMovimento::andando(const EntradaMovimento &e)
     // Erro lateral (+ = robô à direita do centro) pelas paredes dos lados.
     float medida = 0;
     uint8_t fonte = medirLateral(e, p_, medida);
+    // Parede de um lado só: anda afastadoUmaParedeMm mais longe dela que o
+    // centro. O canto traseiro do robô passa a ~9-10 cm do eixo no meio de um
+    // giro e a parede fica a ~8,4 cm do centro: chegando colado nela, o giro
+    // seguinte travava (labirinto novo, 24/11/2026, (1,1) só com a parede Sul).
+    if (fonte == 2)
+        medida -= p_.afastadoUmaParedeMm; // parede à esquerda: alvo à direita
+    else if (fonte == 3)
+        medida += p_.afastadoUmaParedeMm; // parede à direita: alvo à esquerda
     if (fonte != fonteAtual_ || fabsf(medida - medidaAnterior_) > p_.saltoLateralMm)
     {
         fonteAtual_ = fonte;
@@ -393,13 +500,23 @@ SaidaMovimento ControleMovimento::girando(const EntradaMovimento &e)
     dentro_ = false;
     // Girando no lugar a frente não deveria se aproximar da parede: se chegar
     // perto demais, o robô está pivotando (uma roda não anda) e vai bater.
-    if (frenteMuitoPerto(e))
+    // Mas no próprio eixo a frente passa perto da parede do lado (só geometria):
+    // entre distanciaMinimaFrenteGiroMm e distanciaMinimaFrenteMm, bloqueia só
+    // se o robô já saiu do lugar (avanço médio das rodas) mais que pivoMaximoMm.
+    float saiu = fabsf((float)(e.encoderEsquerdo - inicioE_ + e.encoderDireito - inicioD_)) / 2 / p_.pulsosPorMm;
+    if (frenteMuitoPerto(e) && (saiu > p_.pivoMaximoMm || e.distancia_mm[FRENTE] < p_.distanciaMinimaFrenteGiroMm))
         return terminar(MOV_BLOQUEADO);
     if (!vigiar(e))
         return {0, 0, true};
     float p = fabsf(erro) * p_.ganhoGiro;
-    p = p > p_.potenciaGiroMaxima ? p_.potenciaGiroMaxima : (p < p_.potenciaGiroMinima ? p_.potenciaGiroMinima : p);
+    const float minima = erro < 0 ? p_.potenciaGiroMinimaDireita : p_.potenciaGiroMinima;
+    p = p < minima ? minima : p;
+    p = p > p_.potenciaGiroMaxima ? p_.potenciaGiroMaxima : p;
     correcao_ = sinal(erro) * p;
+    // As duas rodas o mesmo tanto: a adiantada perde potência, a atrasada ganha.
+    float aE = fabsf((float)(e.encoderEsquerdo - inicioE_)) / p_.pulsosPorMm;
+    float aD = fabsf((float)(e.encoderDireito - inicioD_)) / p_.pulsosPorMm;
+    float sinc = limitar(p_.ganhoSincronia * (aE - aD), p);
     // Erro positivo = girar à esquerda: esquerda para trás, direita para frente.
-    return {-correcao_, correcao_, false};
+    return {-sinal(erro) * (p - sinc), sinal(erro) * (p + sinc), false};
 }
