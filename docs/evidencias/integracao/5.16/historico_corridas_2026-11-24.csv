@@ -1,0 +1,5 @@
+id_banco,num_corrida_robo,labirinto,status,iniciado_em,duracao_s,tempo_conc_s,velocidade_media,total_leituras
+528,40,4x4,concluida,2026-11-24T16:32:06.064272Z,14.3,14.3,0.069,72
+547,59,4x4,concluida,2026-11-24T19:12:15.470587Z,83.9,83.9,0.035,420
+554,66,4x4,concluida,2026-11-24T19:52:18.347912Z,98.46,98.46,0.03,492
+623,67,4x4,concluida,2026-11-24T20:09:31.074761Z,65.78,65.78,0.052,329
