@@ -13,8 +13,10 @@
 //  - INVERTE_*: um motor é montado espelhado; troque se a roda girar para trás
 //    com potência positiva, ou se o encoder contar negativo andando para frente.
 //  - PULSOS_POR_VOLTA: pulsos do encoder (duas bordas do canal A) em uma volta
-//    da RODA. Medido em 11/11/2026 girando a roda 1 volta à mão (3305); marque a
-//    roda, gire uma volta à mão e confira com o comando 'e'.
+//    da RODA. Os 3305 medidos à mão em 11/11/2026 estavam ~24x acima: em
+//    23/11/2026 o comando Y (anda para a parede e compara com o sensor da
+//    frente) mediu 107 na esquerda e 171 na direita. O controle usa o valor de
+//    cada roda salvo pelo Y; este é só o padrão para as contas de RPM.
 namespace Motores
 {
 const float TENSAO_MAX_MOTOR_V = 5.0f;  // teto no motor (Eletrônica)
@@ -53,7 +55,7 @@ namespace Encoders
 {
 const bool INVERTE_ESQUERDO = true;
 const bool INVERTE_DIREITO = false;
-const float PULSOS_POR_VOLTA = 3305.0f; // medido: 1 volta da roda à mão (11/11/2026)
+const float PULSOS_POR_VOLTA = 138.0f; // média das duas rodas, comando Y (23/11/2026)
 const float DIAMETRO_RODA_MM = 34.0f;   // roda N20 de 34 mm (docs/4.1)
 
 void iniciar();
@@ -65,4 +67,6 @@ void atualizar(uint32_t agora_ms);
 float pulsosPorSegundoEsquerda();
 float pulsosPorSegundoDireita();
 float velocidadeMs(); // média das duas rodas, m/s
+// Pulsos por volta medidos no robô (comando Y); 0 volta ao PULSOS_POR_VOLTA.
+void definirPulsosPorVolta(float pulsos);
 } // namespace Encoders
